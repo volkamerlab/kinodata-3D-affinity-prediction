@@ -2,8 +2,9 @@ name: kinodata
 channels:
   - conda-forge
 dependencies:
-  - numpy
   - pip
+  - requests
+  - numpy
   - python=3.10.8
   - pytorch::pytorch
   - pyg::pyg
