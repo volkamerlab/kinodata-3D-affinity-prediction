@@ -1,0 +1,14 @@
+name: kinodata
+channels:
+  - conda-forge
+dependencies:
+  - numpy
+  - pip
+  - python=3.10.8
+  - pytorch::pytorch
+  - pyg::pyg
+  - pandas
+  - scipy
+  - tqdm
+  - rdkit
+  - matplotlib
