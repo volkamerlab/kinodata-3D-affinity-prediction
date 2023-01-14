@@ -5,6 +5,7 @@ from torch import FloatTensor, LongTensor
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.data import Data, HeteroData
 from torch_cluster import radius
+from itertools import product
 
 
 def interactions_and_distances(
@@ -20,16 +21,16 @@ class AddDistancesAndInteractions(BaseTransform):
         super().__init__()
         self.radius = radius
 
-    def __call__(self, data: Data | HeteroData):
+    def __call__(self, data: Data | HeteroData) -> Data | HeteroData:
         if isinstance(data, HeteroData):
-            _, edge_types = data.metadata()
-            for nt_a, rel, nt_b in edge_types:
+            node_types, _ = data.metadata()
+            for nt_a, nt_b in product(node_types, node_types):
                 edge_index, dist = interactions_and_distances(
                     data[nt_a].pos, data[nt_b].pos, self.radius
                 )
-                data[nt_a, rel, nt_b].edge_index = edge_index
-                data[nt_a, rel, nt_b].dist = dist
-                return data
+                data[nt_a, "interacts", nt_b].edge_index = edge_index
+                data[nt_a, "interacts", nt_b].dist = dist
+            return data
         else:
             raise NotImplementedError
             ...
