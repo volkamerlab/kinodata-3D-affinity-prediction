@@ -29,7 +29,7 @@ class AddDistancesAndInteractions(BaseTransform):
                     data[nt_a].pos, data[nt_b].pos, self.radius
                 )
                 data[nt_a, "interacts", nt_b].edge_index = edge_index
-                data[nt_a, "interacts", nt_b].dist = dist
+                data[nt_a, "interacts", nt_b].dist = dist.view(-1, 1).to(torch.float32)
             return data
         else:
             raise NotImplementedError

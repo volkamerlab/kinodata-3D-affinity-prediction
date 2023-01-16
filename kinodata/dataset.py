@@ -5,13 +5,14 @@ import pandas as pd
 import rdkit.Chem as Chem
 from torch_geometric.data import InMemoryDataset, HeteroData
 from tqdm import tqdm
+from kinodata.transform.add_distances import AddDistancesAndInteractions
 
 _DATA = Path(__file__).parents[1] / "data"
 
 class KinodataDocked(InMemoryDataset):
     def __init__(
         self,
-        root: str | None = None,
+        root: str | None = _DATA,
         transform: Callable | None = None,
         pre_transform: Callable | None = None,
         pre_filter: Callable | None = None,
