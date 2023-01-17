@@ -37,11 +37,14 @@ class Model(pl.LightningModule):
     def training_step(self, batch, *args):
         pred = self.egnn(batch).flatten()
         loss = smooth_l1_loss(pred, batch.y)
+        self.log("train_loss", loss)
         return loss
 
     def validation_step(self, batch, *args):
         pred = self.egnn(batch).flatten()
-        return {"val_mae": (pred - batch.y).abs().mean()}
+        val_mae = (pred - batch.y).abs().mean()
+        self.log("val_mae", val_mae)
+        return {"val_mae": val_mae}
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.egnn.parameters(), lr=1e-3)
