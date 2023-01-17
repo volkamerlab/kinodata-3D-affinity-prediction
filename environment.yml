@@ -1,4 +1,4 @@
-name: kinodata
+name: kinodata-docked-rescore
 channels:
   - conda-forge
 dependencies:
