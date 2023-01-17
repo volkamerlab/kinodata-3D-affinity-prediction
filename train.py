@@ -38,13 +38,13 @@ class Model(pl.LightningModule):
     def training_step(self, batch, *args):
         pred = self.egnn(batch).flatten()
         loss = smooth_l1_loss(pred, batch.y)
-        self.log("train_loss", loss)
+        self.log("train_loss", loss, batch_size=32)
         return loss
 
     def validation_step(self, batch, *args):
         pred = self.egnn(batch).flatten()
         val_mae = (pred - batch.y).abs().mean()
-        self.log("val_mae", val_mae)
+        self.log("val_mae", val_mae, batch_size=32)
         return {"val_mae": val_mae}
 
     def configure_optimizers(self):
