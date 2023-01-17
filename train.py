@@ -60,7 +60,7 @@ class Model(pl.LightningModule):
         return DataLoader(self.train_dataset, batch_size=32, shuffle=True)
 
     def val_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=32)
+        return DataLoader(self.val_dataset, batch_size=32)
 
 if __name__ == "__main__":
     dataset = KinodataDocked(transform=AddDistancesAndInteractions(radius=2.0))
@@ -78,7 +78,7 @@ if __name__ == "__main__":
         logger=logger,
         auto_select_gpus=True,
         max_epochs=100,
-        accelerator="cpu",
+        accelerator="gpu",
     )
 
     trainer.fit(model)
