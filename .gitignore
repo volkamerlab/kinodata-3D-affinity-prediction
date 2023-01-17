@@ -1,6 +1,9 @@
 # raw kinodata
 data/
 
+# wandb api key
+wandb_api_key
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
