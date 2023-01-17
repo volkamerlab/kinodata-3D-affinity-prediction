@@ -10,17 +10,17 @@ from torch_scatter import scatter
 NodeType = str
 EdgeType = Tuple[NodeType, str, NodeType]
 
+_act = {
+        "relu": nn.ReLU(),
+        "elu": nn.ELU(),
+        "none": nn.Identity(),
+    }
 
 def resolve_act(act: str) -> nn.Module:
-    match act.lower():
-        case "relu":
-            return nn.ReLU()
-        case "elu":
-            return nn.ELU()
-        case "none":
-            return nn.Identity()
-        case _:
-            raise ValueError(act)
+    try:
+        return _act[act]
+    except KeyError:
+        raise ValueError(act)
 
 
 class EGNNMessageLayer(nn.Module):
@@ -98,7 +98,7 @@ class EGNN(nn.Module):
         self,
         edge_attr_size: int,
         hidden_channels: int,
-        final_embedding_size: int | None = None,
+        final_embedding_size: int = None,
         target_size: int = 1,
         num_mp_layers: int = 2,
         # mp_type: Callable[..., EGNNMessageLayer] = EGNNMessageLayer,

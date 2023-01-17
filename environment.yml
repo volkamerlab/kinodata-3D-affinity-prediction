@@ -5,12 +5,13 @@ dependencies:
   - pip
   - requests
   - numpy
-  - python=3.10.8
-  - pytorch::pytorch
+  - python=3.9.13
+  - pytorch::pytorch=1.12.1
   - pyg::pyg
   - pandas
   - scipy
   - tqdm
   - rdkit
   - matplotlib
+  - pytorch-lightning
   - wandb

@@ -12,10 +12,10 @@ _DATA = Path(__file__).parents[1] / "data"
 class KinodataDocked(InMemoryDataset):
     def __init__(
         self,
-        root: str | None = _DATA,
-        transform: Callable | None = None,
-        pre_transform: Callable | None = None,
-        pre_filter: Callable | None = None,
+        root: str = _DATA,
+        transform: Callable = None,
+        pre_transform: Callable = None,
+        pre_filter: Callable = None,
         log: bool = True,
     ):
         super().__init__(root, transform, pre_transform, pre_filter, log)

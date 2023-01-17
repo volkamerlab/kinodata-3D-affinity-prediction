@@ -1,14 +1,13 @@
 name: base
 channels:
-  - conda-forge
   - pytorch
+  - conda-forge
   - nvidia
 dependencies:
-  - cudatoolkit=11.6
+  - cudatoolkit=11.3.1
   - pip
-  - python=3.10.8
-  - pytorch::pytorch=1.13.0
-  - pytorch-cuda=11.6
+  - python=3.9.13
+  - pytorch::pytorch=1.12.1
   - pyg::pyg
   - scipy=1.9.3
   - tqdm=4.64.1

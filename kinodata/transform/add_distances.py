@@ -21,7 +21,7 @@ class AddDistancesAndInteractions(BaseTransform):
         super().__init__()
         self.radius = radius
 
-    def __call__(self, data: Data | HeteroData) -> Data | HeteroData:
+    def __call__(self, data: HeteroData) -> HeteroData:
         if isinstance(data, HeteroData):
             node_types, _ = data.metadata()
             for nt_a, nt_b in product(node_types, node_types):
