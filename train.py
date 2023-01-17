@@ -4,6 +4,7 @@ import os
 sys.path.append(".")
 
 from torch_geometric.loader import DataLoader
+from torch_geometric.data.lightning_datamodule import LightningDataset
 import pytorch_lightning as pl
 
 from kinodata.dataset import KinodataDocked
@@ -49,19 +50,6 @@ class Model(pl.LightningModule):
     def configure_optimizers(self):
         return torch.optim.Adam(self.egnn.parameters(), lr=1e-3)
 
-    def prepare_data(self):
-        dataset = KinodataDocked(transform=AddDistancesAndInteractions(radius=2.0))
-        train_data, val_data = random_split(dataset, [train_size, val_size])
-        
-        self.train_dataset = train_data
-        self.val_dataset = val_data
-
-    def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=32, shuffle=True)
-
-    def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=32)
-
 if __name__ == "__main__":
     dataset = KinodataDocked(transform=AddDistancesAndInteractions(radius=2.0))
     node_types, edge_types = dataset[0].metadata()
@@ -69,6 +57,11 @@ if __name__ == "__main__":
 
     train_size = int(0.8 * len(dataset))
     val_size = len(dataset) - train_size
+    train_data, val_data = random_split(dataset, [train_size, val_size])
+    
+    data_module = LightningDataset(
+        train_data, val_data, batch_size=32, num_workers=16
+    )
 
     key = os.environ["WANDB_API_KEY"]
     wandb.login(key=key)
@@ -81,4 +74,4 @@ if __name__ == "__main__":
         accelerator="gpu",
     )
 
-    trainer.fit(model)
+    trainer.fit(model, datamodule=data_module)
