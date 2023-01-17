@@ -72,7 +72,7 @@ if __name__ == "__main__":
         logger=logger,
         auto_select_gpus=True,
         max_epochs=100,
-        accelerator="gpu",
+        accelerator="cpu",
     )
 
     trainer.fit(model, train_loader, val_loader)

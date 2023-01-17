@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Callable, List
 import torch
-import pandas as pd
+#import pandas as pd
 import rdkit.Chem as Chem
 from torch_geometric.data import InMemoryDataset, HeteroData
 from tqdm import tqdm
@@ -16,14 +16,15 @@ class KinodataDocked(InMemoryDataset):
         transform: Callable = None,
         pre_transform: Callable = None,
         pre_filter: Callable = None,
-        log: bool = True,
     ):
-        super().__init__(root, transform, pre_transform, pre_filter, log)
+        super().__init__(root, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
+    @property
     def raw_file_names(self) -> List[str]:
         return ["data_clean.csv"]  # TODO add pdb and mol2 files as zip at some point
 
+    @property
     def processed_file_names(self) -> List[str]:
         return ["kinodata_docked.pt"]
     
