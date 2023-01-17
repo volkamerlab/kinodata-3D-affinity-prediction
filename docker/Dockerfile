@@ -35,7 +35,7 @@ RUN mkdir $HOME/.cache $HOME/.config \
 # Set up the Conda environment (using Miniforge)
 ENV PATH=$HOME/mambaforge/bin:$PATH
 COPY environment.yml /main/environment.yml
-RUN curl -sLo ~/mambaforge.sh https://github.com/conda-forge/miniforge/releases/download/22.9.0-3/Mambaforge-22.9.0-3-Linux-x86_64.sh \
+RUN curl -sLo ~/mambaforge.sh https://github.com/conda-forge/miniforge/releases/download/4.12.0-2/Mambaforge-4.12.0-2-Linux-x86_64.sh \
     && chmod +x ~/mambaforge.sh \
     && ~/mambaforge.sh -b -p ~/mambaforge \
     && rm ~/mambaforge.sh \
