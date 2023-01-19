@@ -1,13 +1,16 @@
 from pathlib import Path
 from typing import Callable, List
 import torch
-#import pandas as pd
+
+import pandas as pd
+import requests
 import rdkit.Chem as Chem
 from torch_geometric.data import InMemoryDataset, HeteroData
 from tqdm import tqdm
 from kinodata.transform.add_distances import AddDistancesAndInteractions
 
-_DATA = Path(__file__).parents[1] / "data"
+_DATA = Path(__file__).parents[2] / "data"
+
 
 class KinodataDocked(InMemoryDataset):
     def __init__(
@@ -27,16 +30,18 @@ class KinodataDocked(InMemoryDataset):
     @property
     def processed_file_names(self) -> List[str]:
         return ["kinodata_docked.pt"]
-    
+
     def download(self):
         # TODO at some point set up public download?
         pass
 
     def process(self):
 
+        print("Reading data frame..")
         df = pd.read_csv(self.raw_paths[0], index_col="ident")
         df.columns
 
+        print("Gathering paths to ligand pdb files..")
         ligand_pdb_files = {
             int(fp.stem.split("_")[0]): fp
             for fp in (Path(self.raw_dir) / "pdbs" / "ligand").iterdir()
@@ -47,9 +52,34 @@ class KinodataDocked(InMemoryDataset):
         ]
 
         # sanity check
-        assert df["ligand_pdb_file"].notna().all()
+        missing_ligands = df["ligand_pdb_file"].isna()
+        if missing_ligands.any():
+            print(df[missing_ligands].head())
+            raise RuntimeError
+
+    
+       
+        print("Downloading pocket mol2 files...") 
+        # for some reason pandas reads structure ID as a float
+        # we drop those
         df = df[df["structure_ID"].notna()]
         df["structure_ID"] = df["structure_ID"].astype(int)
+        # get pocket mol2 files
+        pocket_dir = Path(self.raw_dir) / "mol2" / "pocket"
+        if not pocket_dir.exists():
+            pocket_dir.mkdir(parents=True)
+            
+        pbar = tqdm(df.iterrows(), total=len(df))
+        for ident, row in pbar:
+            structure_id = row["structure_ID"]
+            fp = pocket_dir / f"{structure_id}_pocket.mol2"
+            if fp.exists():
+                continue
+            resp = requests.get(
+                "https://klifs.net/api/structure_get_pocket", params={"structure_ID": structure_id}
+            )
+            if resp.ok:
+                fp.write_bytes(resp.content)
 
         pocket_mol2_files = {
             int(fp.stem.split("_")[0]): fp
@@ -75,10 +105,11 @@ class KinodataDocked(InMemoryDataset):
             data[key].pos = coordinates(mol)
             assert data[key].z.size(0) == data[key].pos.size(0)
             return data
-
+        
         data_list = []
         removeHs = False
         skipped = []
+        print("Creating PyG data objects..")
         for ident, row in tqdm(df.iterrows(), total=len(df)):
             data = HeteroData()
 
@@ -101,14 +132,11 @@ class KinodataDocked(InMemoryDataset):
             data.y = torch.tensor(row["activities.standard_value"]).view(1)
 
             data_list.append(data)
-        
+
         if len(skipped) > 0:
             print(f"Skipped {len(skipped)} unprocessable entries.")
-            (Path(self.root) / "skipped_idents.log").write_text(
-                "\n".join(skipped)
-            )
-            
-            
+            (Path(self.root) / "skipped_idents.log").write_text("\n".join(skipped))
+
         if self.pre_filter is not None:
             data_list = [data for data in data_list if self.pre_filter(data)]
 
@@ -118,7 +146,7 @@ class KinodataDocked(InMemoryDataset):
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
 
+
 if __name__ == "__main__":
     dataset = KinodataDocked(_DATA)
     dataset.process()
-    

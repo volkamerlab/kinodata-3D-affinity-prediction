@@ -15,3 +15,4 @@ dependencies:
   - matplotlib
   - pytorch-lightning
   - wandb
+  - black

@@ -1,0 +1,33 @@
+program: train.py
+method: bayes
+metric:
+  name: val_mae
+  goal: minimize
+parameters:
+  lr:
+    distribution: uniform
+    min: 1e-5
+    max: 1e-2
+  num_mp_layers:
+    distribution: int_uniform
+    min: 2
+    max: 6
+  hidden_channels:
+    distribution: categorical
+    values:
+      - 16
+      - 32
+      - 64
+      - 128
+  epochs:
+    distirbution: int_uniform
+    min: 10
+    max: 200
+  weight_decay:
+    distribution: uniform
+    min: 1e-8
+    max: 1e-3
+  interaction-radius:
+    distirbution: uniform
+    min: 1.0
+    max: 5.0

@@ -1,77 +1,75 @@
+from pathlib import Path
 import sys
 import os
 
 sys.path.append(".")
 
-from torch_geometric.loader import DataLoader
-from torch_geometric.data.lightning_datamodule import LightningDataset
-import pytorch_lightning as pl
-
-from kinodata.dataset import KinodataDocked
-from kinodata.transform import AddDistancesAndInteractions
-from kinodata.model.egnn import EGNN
 import wandb
-import torch
-from torch.utils.data import random_split
+import pytorch_lightning as pl
 from pytorch_lightning.loggers.wandb import WandbLogger
 
-from torch.nn.functional import smooth_l1_loss
+from kinodata.data.dataset import KinodataDocked
+from kinodata.data.data_module import make_data_module
+from kinodata.transform import AddDistancesAndInteractions
+from kinodata.model.model import Model
+
+import yaml
 
 
-class Model(pl.LightningModule):
-    def __init__(
-        self, node_types, edge_types, hidden_channels: int, num_mp_layers: int, act: str
-    ) -> None:
-        super().__init__()
-        self.save_hyperparameters("hidden_channels", "num_mp_layers", "act")
-        self.egnn = EGNN(
-            edge_attr_size=0,
-            hidden_channels=hidden_channels,
-            final_embedding_size=hidden_channels,
-            target_size=1,
-            num_mp_layers=num_mp_layers,
-            act=act,
-            node_types=node_types,
-            edge_types=edge_types,
-        )
+def train(config):
+    logger = WandbLogger(log_model=True)
 
-    def training_step(self, batch, *args):
-        pred = self.egnn(batch).flatten()
-        loss = smooth_l1_loss(pred, batch.y)
-        self.log("train_loss", loss, batch_size=32)
-        return loss
-
-    def validation_step(self, batch, *args):
-        pred = self.egnn(batch).flatten()
-        val_mae = (pred - batch.y).abs().mean()
-        self.log("val_mae", val_mae, batch_size=32)
-        return {"val_mae": val_mae}
-
-    def configure_optimizers(self):
-        return torch.optim.Adam(self.egnn.parameters(), lr=1e-3)
-
-if __name__ == "__main__":
-    dataset = KinodataDocked(transform=AddDistancesAndInteractions(radius=2.0))
+    dataset = KinodataDocked(
+        transform=AddDistancesAndInteractions(radius=config.interaction_radius)
+    )
     node_types, edge_types = dataset[0].metadata()
-    model = Model(node_types, edge_types, 64, 3, "elu")
-
-    train_size = int(0.8 * len(dataset))
-    val_size = len(dataset) - train_size
-    train_data, val_data = random_split(dataset, [train_size, val_size])
-    
-    data_module = LightningDataset(
-        train_data, val_data, batch_size=32, num_workers=16
+    model = Model(
+        node_types=node_types,
+        edge_types=edge_types,
+        hidden_channels=config.hidden_channels,
+        num_mp_layers=config.num_mp_layers,
+        act=config.act,
+        lr=config.lr,
+        batch_size=config.batch_size,
+        weight_decay=config.weight_decay,
     )
 
-    key = os.environ["WANDB_API_KEY"]
-    wandb.login(key=key)
-    logger = WandbLogger(project="Kinodata", log_model=True)
+    data_module = make_data_module(
+        dataset=dataset,
+        batch_size=config.batch_size,
+        num_workers=config.num_workers,
+        train_size=0.8,
+        val_size=0.1,
+        test_size=0.1,
+        seed=420,
+        log_seed=True,
+    )
+
+    # logger.watch(model)
 
     trainer = pl.Trainer(
         logger=logger,
         auto_select_gpus=True,
-        max_epochs=100,
+        max_epochs=config.epochs,
         accelerator="gpu",
     )
 
     trainer.fit(model, datamodule=data_module)
+
+
+default_hyperparameters = dict(
+    batch_size=4,
+    num_mp_layers=3,
+    hidden_channels=64,
+    lr=1e-3,
+    act="elu",
+    weight_decay=0.001,
+    interaction_radius=5.0,
+    epochs=100,
+    num_workers=1,
+)
+
+
+if __name__ == "__main__":
+    wandb.init(config=default_hyperparameters, project="Kinodata")
+    train(wandb.config)

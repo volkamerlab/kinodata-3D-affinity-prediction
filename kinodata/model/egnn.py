@@ -10,11 +10,27 @@ from torch_scatter import scatter
 NodeType = str
 EdgeType = Tuple[NodeType, str, NodeType]
 
+
+class ScaledSigmoid(nn.Module):
+    def __init__(self, alpha: float, beta: float, requires_grad=False) -> None:
+        super().__init__()
+        self.alpha = nn.parameter.Parameter(
+            torch.ones(1) * alpha, requires_grad=requires_grad
+        )
+        self.beta = nn.parameter.Parameter(
+            torch.ones(1) * beta, requires_grad=requires_grad
+        )
+
+    def forward(self, x):
+        return torch.sigmoid(x) * (self.beta - self.alpha) + self.alpha
+
+
 _act = {
-        "relu": nn.ReLU(),
-        "elu": nn.ELU(),
-        "none": nn.Identity(),
-    }
+    "relu": nn.ReLU(),
+    "elu": nn.ELU(),
+    "none": nn.Identity(),
+}
+
 
 def resolve_act(act: str) -> nn.Module:
     try:
@@ -148,7 +164,7 @@ class EGNN(nn.Module):
             nn.Linear(final_embedding_size, final_embedding_size),
             resolve_act(act),
             nn.Linear(final_embedding_size, target_size),
-            nn.Sigmoid(),
+            nn.Softplus(),
         )
 
     def encode(self, data: HeteroData) -> Dict[NodeType, Tensor]:
@@ -193,7 +209,7 @@ class EGNN(nn.Module):
 
 
 if __name__ == "__main__":
-    from kinodata.dataset import KinodataDocked
+    from kinodata.data.dataset import KinodataDocked
     from kinodata.transform import AddDistancesAndInteractions
 
     dataset = KinodataDocked(transform=AddDistancesAndInteractions(radius=2.0))[:128]
