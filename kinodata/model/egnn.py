@@ -1,11 +1,13 @@
-from typing import Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Tuple
 import torch
-from torch import Tensor
+from torch import Tensor, LongTensor
 import torch.nn as nn
 from torch_geometric.data import HeteroData
 from torch_geometric.nn import MeanAggregation
 from torch_geometric.loader import DataLoader
 from torch_scatter import scatter
+
+from torch_geometric.nn.norm import GraphNorm
 
 NodeType = str
 EdgeType = Tuple[NodeType, str, NodeType]
@@ -28,6 +30,7 @@ class ScaledSigmoid(nn.Module):
 _act = {
     "relu": nn.ReLU(),
     "elu": nn.ELU(),
+    "silu": nn.SiLU(),
     "none": nn.Identity(),
 }
 
@@ -51,6 +54,7 @@ class EGNNMessageLayer(nn.Module):
         act: str,
         final_act: str = "none",
         reduce: str = "mean",
+        **kwargs,
     ) -> None:
         super().__init__()
 
@@ -58,21 +62,34 @@ class EGNNMessageLayer(nn.Module):
         self.final_act = resolve_act(final_act)
         self.reduce = reduce
 
-        self.input_size = self.combine_message_inputs(
-            torch.empty(1, source_node_size),
-            torch.empty(1, target_node_size),
-            torch.empty(1, edge_attr_size),
-            torch.empty(1, distance_size),
-        ).size(1)
-
+        message_repr_size = self.compute_message_repr_size(
+            source_node_size,
+            target_node_size,
+            edge_attr_size,
+            distance_size,
+            hidden_channels,
+        )
         self.fn_message = nn.Sequential(
-            nn.Linear(self.input_size, hidden_channels), act
+            nn.Linear(message_repr_size, hidden_channels),
+            act,
+            nn.Linear(hidden_channels, hidden_channels),
+            act,
         )
         self.residual_proj = nn.Linear(target_node_size, output_channels, bias=False)
         self.fn_combine = nn.Linear(target_node_size + hidden_channels, output_channels)
-        self.ln = nn.LayerNorm(output_channels)
+        self.norm = GraphNorm(output_channels)
 
-    def combine_message_inputs(
+    def compute_message_repr_size(
+        self,
+        source_node_size: int,
+        target_node_size: int,
+        edge_attr_size: int,
+        distance_size: int,
+        hidden_channels: int,
+    ) -> int:
+        return source_node_size + target_node_size + edge_attr_size + distance_size
+
+    def create_message_repr(
         self,
         source_node: Tensor,
         target_node: Tensor,
@@ -88,25 +105,122 @@ class EGNNMessageLayer(nn.Module):
         edge_index: Tensor,
         edge_attr: Tensor,
         distance: Tensor,
+        target_batch: LongTensor,
     ):
         i_source, i_target = edge_index
         messages = self.fn_message(
-            self.combine_message_inputs(
+            self.create_message_repr(
                 source_node[i_source], target_node[i_target], edge_attr, distance
             )
         )
         aggr_messages = torch.zeros_like(target_node)
         scatter(messages, i_target, 0, reduce=self.reduce, out=aggr_messages)
-        return self.ln(
+        return self.norm(
             self.final_act(
                 self.residual_proj(target_node)
                 + self.fn_combine(torch.cat((target_node, aggr_messages), dim=1))
-            )
+            ),
+            target_batch,
         )
 
 
+class ExpnormRBFEmbedding(nn.Module):
+    def __init__(self, size: int, d_cut: float, trainable: bool = True) -> None:
+        super().__init__()
+        self.size = size
+        self.d_cut = nn.parameter.Parameter(
+            torch.tensor([d_cut], dtype=torch.float32), requires_grad=False
+        )
+
+        means, betas = self._initial_params()
+        if trainable:
+            self.register_parameter("means", nn.Parameter(means))
+            self.register_parameter("betas", nn.Parameter(betas))
+        else:
+            self.register_buffer("means", means)
+            self.register_buffer("betas", betas)
+
+    # taken from torchmd-net
+    def _initial_params(self):
+        # initialize means and betas according to the default values in PhysNet
+        # https://pubs.acs.org/doi/10.1021/acs.jctc.9b00181
+        start_value = torch.exp(-self.d_cut.squeeze())
+        means = torch.linspace(start_value, 1, self.size)
+        betas = torch.tensor([(2 / self.size * (1 - start_value)) ** -2] * self.size)
+        return means, betas
+
+    def cosine_cutoff(self, d: Tensor) -> Tensor:
+        d = d.clamp_max(self.d_cut)
+        return 0.5 * (torch.cos(d * torch.pi / self.d_cut) + 1)
+
+    def forward(self, d: Tensor) -> Tensor:
+        cutoff = self.cosine_cutoff(d)
+        rbf = torch.exp(-self.betas * (torch.exp(-d) - self.means).pow(2))
+        return cutoff * rbf
+
+
 class RBFLayer(EGNNMessageLayer):
-    ...
+    def __init__(
+        self,
+        source_node_size: int,
+        target_node_size: int,
+        edge_attr_size: int,
+        distance_size: int,
+        hidden_channels: int,
+        output_channels: int,
+        act: str,
+        final_act: str = "none",
+        reduce: str = "mean",
+        interaction_radius: float = 5.0,
+        rbf_size: int = None,
+        **kwargs,
+    ) -> None:
+        super().__init__(
+            source_node_size,
+            target_node_size,
+            edge_attr_size,
+            distance_size,
+            hidden_channels,
+            output_channels,
+            act,
+            final_act,
+            reduce,
+        )
+        if rbf_size is None:
+            rbf_size = hidden_channels
+        self.rbf = ExpnormRBFEmbedding(rbf_size, interaction_radius)
+        self.w_dist = nn.Linear(rbf_size, hidden_channels, bias=False)
+        self.w_node = nn.Linear(
+            source_node_size + target_node_size, hidden_channels, bias=False
+        )
+
+    def compute_message_repr_size(
+        self,
+        source_node_size: int,
+        target_node_size: int,
+        edge_attr_size: int,
+        distance_size: int,
+        hidden_channels: int,
+    ) -> int:
+        return hidden_channels
+
+    def create_message_repr(
+        self,
+        source_node: Tensor,
+        target_node: Tensor,
+        edge_attr: Tensor,  # unused
+        distance: Tensor,
+    ) -> Tensor:
+        dist_emb = self.w_dist(self.rbf(distance))
+        node_emb = self.w_node(torch.cat([source_node, target_node], dim=1))
+        return dist_emb * node_emb
+
+
+def resolve_mp_type(mp_type: str) -> EGNNMessageLayer:
+    if mp_type == "egnn":
+        return EGNNMessageLayer
+    if mp_type == "rbf":
+        return RBFLayer
 
 
 class EGNN(nn.Module):
@@ -117,14 +231,20 @@ class EGNN(nn.Module):
         final_embedding_size: int = None,
         target_size: int = 1,
         num_mp_layers: int = 2,
-        # mp_type: Callable[..., EGNNMessageLayer] = EGNNMessageLayer,
+        mp_type: str = "rbf",
         node_types: List[NodeType] = [],
         edge_types: List[EdgeType] = [],
         act: str = "elu",
+        message_layer_kwargs: Dict[str, Any] = None,
     ) -> None:
         super().__init__()
         self.node_types = node_types
         self.edge_types = edge_types
+
+        mp_class = resolve_mp_type(mp_type)
+
+        if message_layer_kwargs is None:
+            message_layer_kwargs = dict()
 
         if final_embedding_size is None:
             final_embedding_size = hidden_channels
@@ -141,7 +261,7 @@ class EGNN(nn.Module):
             self.message_passing_layers.append(
                 nn.ModuleDict(
                     {
-                        "_".join(edge_type): EGNNMessageLayer(
+                        "_".join(edge_type): mp_class(
                             source_node_size=d_in,
                             target_node_size=d_in,
                             edge_attr_size=edge_attr_size,
@@ -150,6 +270,7 @@ class EGNN(nn.Module):
                             output_channels=d_out,
                             act=act,
                             final_act=act,
+                            **message_layer_kwargs,
                         )
                         for edge_type in edge_types
                     }
@@ -192,6 +313,7 @@ class EGNN(nn.Module):
                     data[edge_type].edge_index,
                     edge_attr,
                     dist,
+                    data[target_nt].batch,
                 )
             node_embed = new_node_embed
 
@@ -200,7 +322,7 @@ class EGNN(nn.Module):
     def _predict(self, node_embed: Dict[NodeType, Tensor], data: HeteroData) -> Tensor:
         aggr = {nt: self.aggregation(x, data[nt].batch) for nt, x in node_embed.items()}
         aggr = aggr["ligand"]
-        return self.f_predict(aggr) * 14
+        return self.f_predict(aggr)
 
     def forward(self, data: HeteroData) -> Tensor:
         node_embed = self.encode(data)

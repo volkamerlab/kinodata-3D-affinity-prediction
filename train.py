@@ -23,6 +23,7 @@ def train(config):
         transform=AddDistancesAndInteractions(radius=config.interaction_radius)
     )
     node_types, edge_types = dataset[0].metadata()
+    mp_kwargs = {"rbf_size": config.rbf_size, "interaction_radius": config.rbf_size}
     model = Model(
         node_types=node_types,
         edge_types=edge_types,
@@ -32,6 +33,8 @@ def train(config):
         lr=config.lr,
         batch_size=config.batch_size,
         weight_decay=config.weight_decay,
+        mp_type=config.mp_type,
+        mp_kwargs=mp_kwargs,
     )
 
     data_module = make_data_module(
@@ -51,25 +54,28 @@ def train(config):
         logger=logger,
         auto_select_gpus=True,
         max_epochs=config.epochs,
-        accelerator="gpu",
+        accelerator=config.accelerator,
     )
 
     trainer.fit(model, datamodule=data_module)
 
 
-default_hyperparameters = dict(
-    batch_size=4,
+default_config = dict(
+    batch_size=64,
     num_mp_layers=3,
     hidden_channels=64,
-    lr=1e-3,
-    act="elu",
-    weight_decay=0.001,
+    lr=3e-4,
+    act="silu",
+    weight_decay=1e-4,
     interaction_radius=5.0,
     epochs=100,
     num_workers=1,
+    mp_type="rbf",
+    rbf_size=32,
+    accelerator="gpu",
 )
 
 
 if __name__ == "__main__":
-    wandb.init(config=default_hyperparameters, project="Kinodata")
+    wandb.init(config=default_config, project="test")
     train(wandb.config)

@@ -1,5 +1,5 @@
 # raw kinodata
-data/
+/data
 
 # wandb api key
 wandb_api_key
