@@ -20,7 +20,7 @@ def train(config):
     logger = WandbLogger(log_model=True)
 
     dataset = KinodataDocked(
-        transform=AddDistancesAndInteractions(radius=config.interaction_radius)
+        pre_transform=AddDistancesAndInteractions(radius=config.interaction_radius)
     )
     node_types, edge_types = dataset[0].metadata()
     mp_kwargs = {"rbf_size": config.rbf_size, "interaction_radius": config.rbf_size}
@@ -34,6 +34,7 @@ def train(config):
         batch_size=config.batch_size,
         weight_decay=config.weight_decay,
         mp_type=config.mp_type,
+        loss_type=config.loss_type,
         mp_kwargs=mp_kwargs,
     )
 
@@ -73,6 +74,7 @@ default_config = dict(
     mp_type="rbf",
     rbf_size=32,
     accelerator="gpu",
+    loss_type="mse",
 )
 
 

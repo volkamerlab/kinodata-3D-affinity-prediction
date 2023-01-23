@@ -1,4 +1,5 @@
 from typing import Any, Dict
+import torch.nn as nn
 import pytorch_lightning as pl
 from kinodata.model.egnn import EGNN
 import torch
@@ -6,6 +7,12 @@ from torch.nn.functional import smooth_l1_loss
 import matplotlib.pyplot as plt
 import numpy as np
 import wandb
+
+
+def resolve_loss(self, loss_type: str) -> nn.Module:
+    if loss_type == "mse":
+        return nn.MSELoss()
+    raise ValueError(loss_type)
 
 
 class Model(pl.LightningModule):
@@ -20,6 +27,7 @@ class Model(pl.LightningModule):
         batch_size: int,
         weight_decay: float,
         mp_type: str,
+        loss_type: str,
         mp_kwargs: Dict[str, Any] = None,
     ) -> None:
         super().__init__()
@@ -31,8 +39,10 @@ class Model(pl.LightningModule):
             "batch_size",
             "weight_decay",
             "mp_type",
+            "loss_type",
         ]
         self.save_hyperparameters(*hparams)
+        self.criterion = resolve_loss(loss_type)
         self.egnn = EGNN(
             edge_attr_size=0,
             hidden_channels=hidden_channels,
@@ -45,8 +55,8 @@ class Model(pl.LightningModule):
         )
 
     def training_step(self, batch, *args):
-        pred = self.egnn(batch).flatten()
-        loss = smooth_l1_loss(pred, batch.y)
+        pred = self.egnn(batch).view(-1, 1)
+        loss = self.criterion(pred, batch.y.view(-1, 1))
         self.log("train_loss", loss, batch_size=self.hparams.batch_size)
         return loss
 
