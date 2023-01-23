@@ -73,8 +73,12 @@ class Model(pl.LightningModule):
         corr = ((pred - pred.mean()) * (target - target.mean())).mean() / (
             pred.std() * target.std()
         ).cpu().item()
+        y_min = min(pred.min().cpu().item(), target.min().cpu().item())
+        y_max = max(pred.max().cpu().item(), target.max().cpu().item())
         fig, ax = plt.subplots()
         ax.scatter(target.cpu().numpy(), pred.cpu().numpy(), s=0.7)
+        ax.set_xlim(y_min, y_max)
+        ax.set_ylim(y_min, y_max)
         ax.set_ylabel("Pred")
         ax.set_xlabel("Target")
         ax.set_title(f"corr={corr}")
