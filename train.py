@@ -20,7 +20,7 @@ def train(config):
     logger = WandbLogger(log_model=True)
 
     dataset = KinodataDocked(
-        pre_transform=AddDistancesAndInteractions(radius=config.interaction_radius)
+        transform=AddDistancesAndInteractions(radius=config.interaction_radius)
     )
     node_types, edge_types = dataset[0].metadata()
     mp_kwargs = {"rbf_size": config.rbf_size, "interaction_radius": config.rbf_size}
@@ -63,11 +63,11 @@ def train(config):
 
 
 default_config = dict(
-    batch_size=16,
-    accumulate_grad_batches=4,
-    num_mp_layers=4,
-    hidden_channels=128,
-    lr=3e-4,
+    batch_size=32,
+    accumulate_grad_batches=2,
+    num_mp_layers=6,
+    hidden_channels=64,
+    lr=1e-4,
     act="silu",
     weight_decay=1e-5,
     interaction_radius=5.0,
@@ -81,5 +81,5 @@ default_config = dict(
 
 
 if __name__ == "__main__":
-    wandb.init(config=default_config, project="test")
+    wandb.init(config=default_config, project="kinodata-docked-rescore")
     train(wandb.config)
