@@ -44,7 +44,7 @@ class Model(pl.LightningModule):
         self.save_hyperparameters(*hparams)
         self.criterion = resolve_loss(loss_type)
         self.egnn = EGNN(
-            edge_attr_size=0,
+            edge_attr_size={("ligand", "interacts", "ligand"): 4},
             hidden_channels=hidden_channels,
             final_embedding_size=hidden_channels,
             target_size=1,

@@ -23,7 +23,11 @@ def train(config):
         pre_transform=AddDistancesAndInteractions(radius=config.interaction_radius)
     )
     node_types, edge_types = dataset[0].metadata()
-    mp_kwargs = {"rbf_size": config.rbf_size, "interaction_radius": config.rbf_size}
+    mp_kwargs = {
+        "rbf_size": config.rbf_size,
+        "interaction_radius": config.rbf_size,
+        "reduce": config.mp_reduce,
+    }
     model = Model(
         node_types=node_types,
         edge_types=edge_types,
@@ -56,7 +60,7 @@ def train(config):
         auto_select_gpus=True,
         max_epochs=config.epochs,
         accelerator=config.accelerator,
-        accumulate_grad_batches=config.accumulate_grad_batches
+        accumulate_grad_batches=config.accumulate_grad_batches,
     )
 
     trainer.fit(model, datamodule=data_module)
@@ -66,7 +70,7 @@ default_config = dict(
     batch_size=16,
     accumulate_grad_batches=4,
     num_mp_layers=4,
-    hidden_channels=128,
+    hidden_channels=4,
     lr=3e-4,
     act="silu",
     weight_decay=1e-5,
@@ -74,8 +78,9 @@ default_config = dict(
     epochs=100,
     num_workers=16,
     mp_type="rbf",
+    mp_reduce="sum",
     rbf_size=64,
-    accelerator="gpu",
+    accelerator="cpu",
     loss_type="mse",
 )
 
