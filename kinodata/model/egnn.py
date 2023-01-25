@@ -9,6 +9,8 @@ from torch_scatter import scatter
 
 from torch_geometric.nn.norm import GraphNorm
 
+from collections import defaultdict
+
 NodeType = str
 EdgeType = Tuple[NodeType, str, NodeType]
 
@@ -53,12 +55,12 @@ class EGNNMessageLayer(nn.Module):
         output_channels: int,
         act: str,
         final_act: str = "none",
-        reduce: str = "mean",
+        reduce: str = "sum",
         **kwargs,
     ) -> None:
         super().__init__()
 
-        act = resolve_act(act)
+        self.act = resolve_act(act)
         self.final_act = resolve_act(final_act)
         self.reduce = reduce
 
@@ -71,9 +73,9 @@ class EGNNMessageLayer(nn.Module):
         )
         self.fn_message = nn.Sequential(
             nn.Linear(message_repr_size, hidden_channels),
-            act,
+            self.act,
             nn.Linear(hidden_channels, hidden_channels),
-            act,
+            self.act,
         )
         self.residual_proj = nn.Linear(target_node_size, output_channels, bias=False)
         self.fn_combine = nn.Linear(target_node_size + hidden_channels, output_channels)
@@ -170,7 +172,7 @@ class RBFLayer(EGNNMessageLayer):
         output_channels: int,
         act: str,
         final_act: str = "none",
-        reduce: str = "mean",
+        reduce: str = "sum",
         interaction_radius: float = 5.0,
         rbf_size: int = None,
         **kwargs,
@@ -190,8 +192,12 @@ class RBFLayer(EGNNMessageLayer):
             rbf_size = hidden_channels
         self.rbf = ExpnormRBFEmbedding(rbf_size, interaction_radius)
         self.w_dist = nn.Linear(rbf_size, hidden_channels, bias=False)
-        self.w_node = nn.Linear(
-            source_node_size + target_node_size, hidden_channels, bias=False
+        self.w_edge = (
+            nn.Linear(
+                source_node_size + target_node_size + edge_attr_size,
+                hidden_channels,
+                bias=False,
+            ),
         )
 
     def compute_message_repr_size(
@@ -208,12 +214,16 @@ class RBFLayer(EGNNMessageLayer):
         self,
         source_node: Tensor,
         target_node: Tensor,
-        edge_attr: Tensor,  # unused
+        edge_attr: Tensor,
         distance: Tensor,
     ) -> Tensor:
-        dist_emb = self.w_dist(self.rbf(distance))
-        node_emb = self.w_node(torch.cat([source_node, target_node], dim=1))
-        return dist_emb * node_emb
+        dist_emb = self.w_dist(self.rbf(distance)).tanh()
+        if edge_attr is not None:
+            edge_repr = torch.cat([source_node, target_node, edge_attr], dim=1)
+        else:
+            edge_repr = torch.cat([source_node, target_node], dim=1)
+        edge_emb = self.w_edge(edge_repr)
+        return dist_emb * edge_emb
 
 
 def resolve_mp_type(mp_type: str) -> EGNNMessageLayer:
@@ -226,9 +236,9 @@ def resolve_mp_type(mp_type: str) -> EGNNMessageLayer:
 class EGNN(nn.Module):
     def __init__(
         self,
-        edge_attr_size: int,
         hidden_channels: int,
         final_embedding_size: int = None,
+        edge_attr_size: Dict[Any, int] = None,
         target_size: int = 1,
         num_mp_layers: int = 2,
         mp_type: str = "rbf",
@@ -242,6 +252,11 @@ class EGNN(nn.Module):
         self.edge_types = edge_types
 
         mp_class = resolve_mp_type(mp_type)
+
+        _edge_attr_size = defaultdict(int)
+        for key, value in edge_attr_size.items():
+            _edge_attr_size[key] = value
+        edge_attr_size = _edge_attr_size
 
         if message_layer_kwargs is None:
             message_layer_kwargs = dict()
@@ -264,7 +279,7 @@ class EGNN(nn.Module):
                         "_".join(edge_type): mp_class(
                             source_node_size=d_in,
                             target_node_size=d_in,
-                            edge_attr_size=edge_attr_size,
+                            edge_attr_size=edge_attr_size[edge_type],
                             distance_size=1,
                             hidden_channels=d_out,
                             output_channels=d_out,
@@ -273,6 +288,7 @@ class EGNN(nn.Module):
                             **message_layer_kwargs,
                         )
                         for edge_type in edge_types
+                        if edge_type[1] == "interacts"
                     }
                 )
             )
