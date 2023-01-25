@@ -9,7 +9,7 @@ import numpy as np
 import wandb
 
 
-def resolve_loss(self, loss_type: str) -> nn.Module:
+def resolve_loss(loss_type: str) -> nn.Module:
     if loss_type == "mse":
         return nn.MSELoss()
     raise ValueError(loss_type)
