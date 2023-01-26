@@ -192,12 +192,10 @@ class RBFLayer(EGNNMessageLayer):
             rbf_size = hidden_channels
         self.rbf = ExpnormRBFEmbedding(rbf_size, interaction_radius)
         self.w_dist = nn.Linear(rbf_size, hidden_channels, bias=False)
-        self.w_edge = (
-            nn.Linear(
-                source_node_size + target_node_size + edge_attr_size,
-                hidden_channels,
-                bias=False,
-            ),
+        self.w_edge = nn.Linear(
+            source_node_size + target_node_size + edge_attr_size,
+            hidden_channels,
+            bias=False,
         )
 
     def compute_message_repr_size(

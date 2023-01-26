@@ -3,17 +3,22 @@ from typing import Callable, List
 import torch
 
 import pandas as pd
+import numpy as np
 import requests
+from rdkit import RDLogger
 import rdkit.Chem as Chem
+import rdkit.Chem.Draw as Draw
 import rdkit.Chem.AllChem as AllChem
 from torch_geometric.data import InMemoryDataset, HeteroData
 from tqdm import tqdm
 from kinodata.transform.add_distances import AddDistancesAndInteractions
 from rdkit.Chem.rdchem import BondType as BT
+from rdkit.Chem.rdmolops import AddHs
 from collections import defaultdict
 import torch.nn.functional as F
 from torch_geometric.utils import to_undirected
 import logging
+
 
 BOND_TYPE_TO_IDX = defaultdict(int)  # other bonds will map to 0
 BOND_TYPE_TO_IDX[BT.SINGLE] = 1
@@ -50,9 +55,9 @@ class KinodataDocked(InMemoryDataset):
 
     def process(self):
 
+        RDLogger.DisableLog("rdApp.*")
         print("Reading data frame..")
         df = pd.read_csv(self.raw_paths[0], index_col="ident")
-        df.columns
 
         print("Gathering paths to ligand pdb files..")
         ligand_pdb_files = {
@@ -143,27 +148,33 @@ class KinodataDocked(InMemoryDataset):
             return data
 
         data_list = []
-        removeHs = False
+        removeHs = True
         skipped = []
         print("Creating PyG data objects..")
-        for ident, row in tqdm(df.sample(100).iterrows(), total=len(df)):
+        pbar = tqdm(df.sample(100).iterrows(), total=len(df))
+        for i, (ident, row) in enumerate(pbar):
+            pbar.update(1)
+            pbar.set_description(f"Skipped ratio: {len(skipped) / max(1, i):.3f}")
             data = HeteroData()
 
-            ligand = Chem.MolFromPDBFile(
-                str(row["ligand_pdb_file"]), removeHs=removeHs, sanitize=True
-            )
+            ligand = Chem.MolFromPDBFile(str(row["ligand_pdb_file"]), removeHs=removeHs)
             data = add_atoms(ligand, data, "ligand")
 
             if ligand is None:
                 skipped.append(str(ident))
                 continue
-            ligand_template = Chem.MolFromSmiles(
-                row["compound_structures.canonical_smiles"]
-            )
             try:
+                template_smiles = row["compound_structures.canonical_smiles"].split(".")
+                template_smiles.sort(key=len)
+                ligand_template = Chem.MolFromSmiles(template_smiles[-1])
+                if not removeHs:
+                    ligand_template = AddHs(ligand_template)
                 ligand = AllChem.AssignBondOrdersFromTemplate(ligand_template, ligand)
                 data = add_bonds(ligand, data, "ligand")
-            except (Chem.rdchem.AtomValenceException, ValueError):
+            except (Chem.rdchem.AtomValenceException, ValueError) as e:
+                print(ident, e)
+                Draw.MolToFile(ligand, f"images/{ident}_ligand.png")
+                Draw.MolToFile(ligand_template, f"images/{ident}_ligand_template.png")
                 skipped.append(str(ident))
                 continue
 
@@ -176,6 +187,7 @@ class KinodataDocked(InMemoryDataset):
             data = add_atoms(pocket, data, "pocket")
 
             data.y = torch.tensor(row["activities.standard_value"]).view(1)
+            data.ident = ident
 
             data_list.append(data)
 
@@ -202,7 +214,19 @@ if __name__ == "__main__":
 
     print(len(dataset))
     data = dataset[0]
-    _, et = data.metadata()
-    for a, e, b in et:
-        if e == "interacts":
-            print((a,e,b), data[a, e, b].dist.max())
+    node_types, edge_types = data.metadata()
+    densities = {et: [] for et in edge_types}
+    for i in range(len(dataset)):
+        data = dataset[i]
+        for (na, e, nb) in edge_types:
+            c = 1 if (na == nb) else 2
+            num_edges = data[na, e, nb].edge_index.size(1)
+            Na = data[na].num_nodes
+            Nb = data[nb].num_nodes
+
+            density = (c * num_edges) / (Na * Nb)
+
+            densities[na, e, nb].append(density)
+
+    for et, d in densities.items():
+        print(et, np.mean(d), np.min(d), np.max(d), np.std(d))

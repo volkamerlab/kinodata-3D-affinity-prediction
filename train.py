@@ -7,10 +7,11 @@ sys.path.append(".")
 import wandb
 import pytorch_lightning as pl
 from pytorch_lightning.loggers.wandb import WandbLogger
+from torch_geometric.transforms import Compose
 
 from kinodata.data.dataset import KinodataDocked
 from kinodata.data.data_module import make_data_module
-from kinodata.transform import AddDistancesAndInteractions
+from kinodata.transform import AddDistancesAndInteractions, ForceSymmetricInteraction
 from kinodata.model.model import Model
 
 import yaml
@@ -20,7 +21,12 @@ def train(config):
     logger = WandbLogger(log_model=True)
 
     dataset = KinodataDocked(
-        transform=AddDistancesAndInteractions(radius=config.interaction_radius)
+        transform=Compose(
+            [
+                AddDistancesAndInteractions(radius=config.interaction_radius),
+                ForceSymmetricInteraction(("pocket", "interacts", "ligand")),
+            ]
+        )
     )
     node_types, edge_types = dataset[0].metadata()
     mp_kwargs = {
@@ -76,7 +82,7 @@ default_config = dict(
     weight_decay=1e-5,
     interaction_radius=5.0,
     epochs=100,
-    num_workers=16,
+    num_workers=0,
     mp_type="rbf",
     mp_reduce="sum",
     rbf_size=64,

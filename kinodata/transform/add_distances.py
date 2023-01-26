@@ -4,7 +4,12 @@ from torch import FloatTensor, LongTensor
 
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.data import Data, HeteroData
-from torch_geometric.utils import remove_self_loops, to_dense_adj, to_undirected
+from torch_geometric.utils import (
+    remove_self_loops,
+    to_dense_adj,
+    to_undirected,
+    coalesce,
+)
 from torch_cluster import radius
 from itertools import product
 
@@ -18,8 +23,6 @@ def interactions_and_distances(
         pos2 = pos1
     y_ind, x_ind = radius(pos1, pos2, r)
     dist = (pos1[x_ind] - pos2[y_ind]).pow(2).sum(dim=1).sqrt()
-    if dist.numel() > 0:
-        print(dist.max().item())
     edge_index = torch.stack((x_ind, y_ind))
     return edge_index, dist
 
@@ -62,6 +65,42 @@ class AddDistancesAndInteractions(BaseTransform):
         else:
             raise NotImplementedError
             ...
+
+
+class ForceSymmetricInteraction(BaseTransform):
+    def __init__(self, edge_type: Tuple[str, str, str]) -> None:
+        super().__init__()
+        self.edge_type = edge_type
+        nt_a, relation, nt_b = self.edge_type
+        assert nt_a != nt_b
+        assert relation == "interacts"
+
+    def _reverse_direction(self, edge_index):
+        row, col = edge_index
+        return torch.stack((col, row))
+
+    def __call__(self, data: HeteroData) -> HeteroData:
+
+        nt_a, relation, nt_b = self.edge_type
+
+        for source, target in ([nt_a, nt_b], [nt_b, nt_a]):
+            edge_index_1 = data[source, relation, target].edge_index
+            dist_1 = data[source, relation, target].dist
+            edge_index_2 = data[target, relation, source].edge_index
+            dist_2 = data[target, relation, source].dist
+
+            merged_edge_index = torch.cat(
+                (edge_index_1, self._reverse_direction(edge_index_2)), dim=1
+            )
+            merged_dist = torch.cat((dist_1, dist_2))
+            merged_edge_index, merged_dist = coalesce(
+                merged_edge_index, merged_dist, reduce="mean"
+            )
+
+            data[source, relation, target].edge_index = merged_edge_index
+            data[source, relation, target].dist = merged_dist
+
+        return data
 
 
 if __name__ == "__main__":

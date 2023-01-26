@@ -1,1 +1,1 @@
-from .add_distances import AddDistancesAndInteractions
+from .add_distances import AddDistancesAndInteractions, ForceSymmetricInteraction
