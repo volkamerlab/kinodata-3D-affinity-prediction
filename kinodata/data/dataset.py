@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Callable, List
+from warnings import warn
 import torch
 
 import pandas as pd
@@ -49,13 +50,15 @@ class KinodataDocked(InMemoryDataset):
     def processed_file_names(self) -> List[str]:
         return ["kinodata_docked.pt"]
 
+    @property
+    def pocket_dir(self) -> Path:
+        return Path(self.raw_dir) / "mol2" / "pocket"
+
     def download(self):
         # TODO at some point set up public download?
         pass
 
-    def process(self):
-
-        RDLogger.DisableLog("rdApp.*")
+    def _prepare_df(self) -> pd.DataFrame:
         print("Reading data frame..")
         df = pd.read_csv(self.raw_paths[0], index_col="ident")
 
@@ -81,14 +84,13 @@ class KinodataDocked(InMemoryDataset):
         df = df[df["structure_ID"].notna()]
         df["structure_ID"] = df["structure_ID"].astype(int)
         # get pocket mol2 files
-        pocket_dir = Path(self.raw_dir) / "mol2" / "pocket"
-        if not pocket_dir.exists():
-            pocket_dir.mkdir(parents=True)
+        if not self.pocket_dir.exists():
+            self.pocket_dir.mkdir(parents=True)
 
         pbar = tqdm(df.iterrows(), total=len(df))
         for ident, row in pbar:
             structure_id = row["structure_ID"]
-            fp = pocket_dir / f"{structure_id}_pocket.mol2"
+            fp = self.pocket_dir / f"{structure_id}_pocket.mol2"
             if fp.exists():
                 continue
             resp = requests.get(
@@ -99,12 +101,25 @@ class KinodataDocked(InMemoryDataset):
                 fp.write_bytes(resp.content)
 
         pocket_mol2_files = {
-            int(fp.stem.split("_")[0]): fp
-            for fp in (Path(self.raw_dir) / "mol2" / "pocket").iterdir()
+            int(fp.stem.split("_")[0]): fp for fp in (self.pocket_dir).iterdir()
         }
         df["pocket_mol2_file"] = [
             pocket_mol2_files[row["structure_ID"]] for _, row in df.iterrows()
         ]
+
+        return df
+
+    def process(self, removeHs: bool = True, add_bond_info: bool = True):
+
+        if add_bond_info and not removeHs:
+            warn(
+                "Adding explicit and implicit hydrogen when using template bond info is not supported.\n \
+                Setting removeHs to True."
+            )
+            removeHs = True
+
+        RDLogger.DisableLog("rdApp.*")
+        df = self._prepare_df()
 
         def atomic_numbers(mol) -> torch.LongTensor:
             z = torch.empty(mol.GetNumAtoms(), dtype=torch.long)
@@ -148,7 +163,6 @@ class KinodataDocked(InMemoryDataset):
             return data
 
         data_list = []
-        removeHs = True
         skipped = []
         print("Creating PyG data objects..")
         pbar = tqdm(df.sample(100).iterrows(), total=len(df))
@@ -163,20 +177,30 @@ class KinodataDocked(InMemoryDataset):
             if ligand is None:
                 skipped.append(str(ident))
                 continue
-            try:
-                template_smiles = row["compound_structures.canonical_smiles"].split(".")
-                template_smiles.sort(key=len)
-                ligand_template = Chem.MolFromSmiles(template_smiles[-1])
-                if not removeHs:
-                    ligand_template = AddHs(ligand_template)
-                ligand = AllChem.AssignBondOrdersFromTemplate(ligand_template, ligand)
-                data = add_bonds(ligand, data, "ligand")
-            except (Chem.rdchem.AtomValenceException, ValueError) as e:
-                print(ident, e)
-                Draw.MolToFile(ligand, f"images/{ident}_ligand.png")
-                Draw.MolToFile(ligand_template, f"images/{ident}_ligand_template.png")
-                skipped.append(str(ident))
-                continue
+
+            if add_bond_info:
+                try:
+                    template_smiles = row["compound_structures.canonical_smiles"].split(
+                        "."
+                    )
+                    template_smiles.sort(key=len)
+                    ligand_template = Chem.MolFromSmiles(template_smiles[-1])
+                    if not removeHs:
+                        ligand_template = AddHs(ligand_template)
+                    ligand = AllChem.AssignBondOrdersFromTemplate(
+                        ligand_template, ligand
+                    )
+                    data = add_bonds(ligand, data, "ligand")
+                except (Chem.rdchem.AtomValenceException, ValueError) as e:
+                    print(
+                        f"Unable to add bonds from template for entry ident={ident}: {e}"
+                    )
+                    Draw.MolToFile(ligand, f"images/{ident}_ligand.png")
+                    Draw.MolToFile(
+                        ligand_template, f"images/{ident}_ligand_template.png"
+                    )
+                    skipped.append(str(ident))
+                    continue
 
             pocket = Chem.rdmolfiles.MolFromMol2File(
                 str(row["pocket_mol2_file"]), removeHs=removeHs, sanitize=False
@@ -205,6 +229,15 @@ class KinodataDocked(InMemoryDataset):
 
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
+
+
+class KinodataDockedNoBonds(KinodataDocked):
+    @property
+    def processed_file_names(self) -> List[str]:
+        return ["kinodata_docked_no_bonds.pt"]
+
+    def process(self, removeHs: bool = False):
+        return super().process(removeHs=removeHs, add_bond_info=False)
 
 
 if __name__ == "__main__":
