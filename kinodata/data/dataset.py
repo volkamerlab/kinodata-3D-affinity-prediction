@@ -165,18 +165,18 @@ class KinodataDocked(InMemoryDataset):
         data_list = []
         skipped = []
         print("Creating PyG data objects..")
-        pbar = tqdm(df.sample(100).iterrows(), total=len(df))
+        pbar = tqdm(df.iterrows(), total=len(df))
         for i, (ident, row) in enumerate(pbar):
             pbar.update(1)
             pbar.set_description(f"Skipped ratio: {len(skipped) / max(1, i):.3f}")
             data = HeteroData()
 
             ligand = Chem.MolFromPDBFile(str(row["ligand_pdb_file"]), removeHs=removeHs)
-            data = add_atoms(ligand, data, "ligand")
 
             if ligand is None:
                 skipped.append(str(ident))
                 continue
+            data = add_atoms(ligand, data, "ligand")
 
             if add_bond_info:
                 try:
@@ -195,10 +195,10 @@ class KinodataDocked(InMemoryDataset):
                     print(
                         f"Unable to add bonds from template for entry ident={ident}: {e}"
                     )
-                    Draw.MolToFile(ligand, f"images/{ident}_ligand.png")
-                    Draw.MolToFile(
-                        ligand_template, f"images/{ident}_ligand_template.png"
-                    )
+                    # Draw.MolToFile(ligand, f"images/{ident}_ligand.png")
+                    # Draw.MolToFile(
+                    #     ligand_template, f"images/{ident}_ligand_template.png"
+                    # )
                     skipped.append(str(ident))
                     continue
 

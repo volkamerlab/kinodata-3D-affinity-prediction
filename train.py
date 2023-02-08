@@ -73,10 +73,10 @@ def train(config):
 
 
 default_config = dict(
-    batch_size=16,
-    accumulate_grad_batches=4,
+    batch_size=32,
+    accumulate_grad_batches=2,
     num_mp_layers=4,
-    hidden_channels=4,
+    hidden_channels=64,
     lr=3e-4,
     act="silu",
     weight_decay=1e-5,
@@ -86,7 +86,7 @@ default_config = dict(
     mp_type="rbf",
     mp_reduce="sum",
     rbf_size=64,
-    accelerator="cpu",
+    accelerator="gpu",
     loss_type="mse",
 )
 
