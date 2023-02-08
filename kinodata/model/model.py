@@ -54,16 +54,18 @@ class Model(pl.LightningModule):
             edge_types=edge_types,
         )
 
+        wandb.define_metric("val_mae", summary="min")
+
     def training_step(self, batch, *args):
         pred = self.egnn(batch).view(-1, 1)
         loss = self.criterion(pred, batch.y.view(-1, 1))
-        self.log("train_loss", loss, batch_size=self.hparams.batch_size)
+        self.log("train_loss", loss, batch_size=self.hparams.batch_size, on_epoch=True)
         return loss
 
     def validation_step(self, batch, *args):
         pred = self.egnn(batch).flatten()
         val_mae = (pred - batch.y).abs().mean()
-        self.log("val_mae", val_mae, batch_size=self.hparams.batch_size)
+        self.log("val_mae", val_mae, batch_size=self.hparams.batch_size, on_epoch=True)
         return {"val_mae": val_mae, "pred": pred, "target": batch.y}
 
     def validation_epoch_end(self, outputs, *args, **kwargs) -> None:
@@ -82,9 +84,9 @@ class Model(pl.LightningModule):
         ax.set_ylabel("Pred")
         ax.set_xlabel("Target")
         ax.set_title(f"corr={corr}")
-        wandb.log({"scatter_test": wandb.Image(fig)})
+        wandb.log({"scatter_val": wandb.Image(fig)})
         plt.close(fig)
-        self.log("test_corr", corr)
+        self.log("val_corr", corr)
 
     def predict_step(self, batch, *args):
         return {"pred": self.egnn(batch).flatten(), "target": batch.y}
