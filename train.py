@@ -7,6 +7,7 @@ sys.path.append(".")
 import wandb
 import pytorch_lightning as pl
 from pytorch_lightning.loggers.wandb import WandbLogger
+from pytorch_lightning.callbacks import ModelCheckpoint
 from torch_geometric.transforms import Compose
 
 from kinodata.data.dataset import KinodataDocked
@@ -18,15 +19,10 @@ import yaml
 
 
 def train(config):
-    logger = WandbLogger(log_model=True)
+    logger = WandbLogger(log_model="all")
 
     dataset = KinodataDocked(
-        transform=Compose(
-            [
-                AddDistancesAndInteractions(radius=config.interaction_radius),
-                ForceSymmetricInteraction(("pocket", "interacts", "ligand")),
-            ]
-        )
+        transform=AddDistancesAndInteractions(radius=config.interaction_radius)
     )
     node_types, edge_types = dataset[0].metadata()
     mp_kwargs = {
@@ -61,12 +57,15 @@ def train(config):
 
     # logger.watch(model)
 
+    val_checkpoint_callback = ModelCheckpoint(monitor="val_mae", mode="min")
+
     trainer = pl.Trainer(
         logger=logger,
         auto_select_gpus=True,
         max_epochs=config.epochs,
         accelerator=config.accelerator,
         accumulate_grad_batches=config.accumulate_grad_batches,
+        callbacks=[val_checkpoint_callback],
     )
 
     trainer.fit(model, datamodule=data_module)
@@ -82,7 +81,7 @@ default_config = dict(
     weight_decay=1e-5,
     interaction_radius=5.0,
     epochs=100,
-    num_workers=0,
+    num_workers=32,
     mp_type="rbf",
     mp_reduce="sum",
     rbf_size=64,
