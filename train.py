@@ -24,7 +24,12 @@ def train(config):
     dataset = KinodataDocked(
         transform=AddDistancesAndInteractions(radius=config.interaction_radius)
     )
+
     node_types, edge_types = dataset[0].metadata()
+    if config.ligand_only:
+        node_types = ["ligand"]
+        edge_types = [("ligand", "interacts", "ligand")]
+
     mp_kwargs = {
         "rbf_size": config.rbf_size,
         "interaction_radius": config.rbf_size,
@@ -87,6 +92,7 @@ default_config = dict(
     rbf_size=64,
     accelerator="gpu",
     loss_type="mse",
+    ligand_only=False,
 )
 
 

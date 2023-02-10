@@ -335,7 +335,7 @@ class EGNN(nn.Module):
 
     def _predict(self, node_embed: Dict[NodeType, Tensor], data: HeteroData) -> Tensor:
         aggr = {nt: self.aggregation(x, data[nt].batch) for nt, x in node_embed.items()}
-        aggr = aggr["ligand"]
+        aggr = sum(aggr.values())
         return self.f_predict(aggr)
 
     def forward(self, data: HeteroData) -> Tensor:
