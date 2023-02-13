@@ -56,6 +56,11 @@ class RandomSplit:
         if self.test_size is not None:
             split_sizes["test"] = self.test_size
 
+        for key, value in split_sizes.items():
+            split_sizes[key] = int(value * len(dataset))
+
+        split_sizes["train"] -= (sum(split_sizes.values()) - len(dataset))
+
         data_subsets = random_split(
             dataset,
             list(split_sizes.values()),
