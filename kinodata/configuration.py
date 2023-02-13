@@ -58,7 +58,7 @@ register(
     val_size=0.1,
     test_size=0.1,
     use_bonds=True,
-    add_artifical_decoys=False,
+    add_artificial_decoys=True,
     cold_split=False,
 )
 

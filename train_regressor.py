@@ -51,10 +51,10 @@ def make_data(config) -> Tuple[KinodataDocked, LightningDataset]:
 
     transforms = [AddDistancesAndInteractions(radius=config.interaction_radius)]
 
-    if config.add_artifical_decoys:
-        dataset = KinodataDocked(transform=Compose(transforms))
-    else:
+    if config.add_artificial_decoys:
         dataset = KinodataDockedWithDecoys(transform=Compose(transforms))
+    else:
+        dataset = KinodataDocked(transform=Compose(transforms))
 
     if config.cold_split:
         raise NotImplementedError()
