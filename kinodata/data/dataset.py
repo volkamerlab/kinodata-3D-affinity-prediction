@@ -33,10 +33,20 @@ class KinodataDocked(InMemoryDataset):
     def __init__(
         self,
         root: str = str(_DATA),
+        add_bond_info: bool = True,
+        remove_hydrogen: bool = True,
         transform: Callable = None,
         pre_transform: Callable = None,
         pre_filter: Callable = None,
     ):
+        self.add_bond_info = add_bond_info
+        self.remove_hydrogen = remove_hydrogen
+        if self.add_bond_info and not self.remove_hydrogen:
+            warn(
+                "Adding explicit and implicit hydrogen when using template bond info is not supported.\n \
+                Setting removeHs to True."
+            )
+            self.remove_hydrogen = True
         super().__init__(root, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
@@ -46,7 +56,14 @@ class KinodataDocked(InMemoryDataset):
 
     @property
     def processed_file_names(self) -> List[str]:
-        return ["kinodata_docked.pt"]
+        fn = "kinodata_docked"
+        if (self.add_bond_info, self.remove_hydrogen) != (True, True):
+            poss_preposition = lambda b: "with" if b else "without"
+            fn = (
+                f"kinodata_docked_{poss_preposition(self.add_bond_info)}_bonds"
+                + f"_{poss_preposition(self.remove_hydrogen)}_hydrogen"
+            )
+        return [f"{fn}.pt"]
 
     @property
     def pocket_dir(self) -> Path:
@@ -107,14 +124,7 @@ class KinodataDocked(InMemoryDataset):
 
         return df
 
-    def process(self, removeHs: bool = True, add_bond_info: bool = True):
-
-        if add_bond_info and not removeHs:
-            warn(
-                "Adding explicit and implicit hydrogen when using template bond info is not supported.\n \
-                Setting removeHs to True."
-            )
-            removeHs = True
+    def process(self):
 
         RDLogger.DisableLog("rdApp.*")
         df = self._prepare_df()
@@ -169,21 +179,23 @@ class KinodataDocked(InMemoryDataset):
             pbar.set_description(f"Skipped ratio: {len(skipped) / max(1, i):.3f}")
             data = HeteroData()
 
-            ligand = Chem.MolFromPDBFile(str(row["ligand_pdb_file"]), removeHs=removeHs)
+            ligand = Chem.MolFromPDBFile(
+                str(row["ligand_pdb_file"]), removeHs=self.remove_hydrogen
+            )
 
             if ligand is None:
                 skipped.append(str(ident))
                 continue
             data = add_atoms(ligand, data, "ligand")
 
-            if add_bond_info:
+            if self.add_bond_info:
                 try:
                     template_smiles = row["compound_structures.canonical_smiles"].split(
                         "."
                     )
                     template_smiles.sort(key=len)
                     ligand_template = Chem.MolFromSmiles(template_smiles[-1])
-                    if not removeHs:
+                    if not self.remove_hydrogen:
                         ligand_template = AddHs(ligand_template)
                     ligand = AllChem.AssignBondOrdersFromTemplate(
                         ligand_template, ligand
@@ -201,7 +213,9 @@ class KinodataDocked(InMemoryDataset):
                     continue
 
             pocket = Chem.rdmolfiles.MolFromMol2File(
-                str(row["pocket_mol2_file"]), removeHs=removeHs, sanitize=False
+                str(row["pocket_mol2_file"]),
+                removeHs=self.remove_hydrogen,
+                sanitize=False,
             )
             if pocket is None:
                 skipped.append(str(ident))
@@ -227,15 +241,6 @@ class KinodataDocked(InMemoryDataset):
 
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
-
-
-class KinodataDockedNoBonds(KinodataDocked):
-    @property
-    def processed_file_names(self) -> List[str]:
-        return ["kinodata_docked_no_bonds.pt"]
-
-    def process(self, removeHs: bool = False, add_bond_info: bool = False):
-        return super().process(removeHs=removeHs, add_bond_info=False)
 
 
 if __name__ == "__main__":

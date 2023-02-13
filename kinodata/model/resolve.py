@@ -2,9 +2,9 @@ import torch.nn as nn
 from torch_geometric.nn import aggr
 
 
-
 _act = {
     "sigmoid": nn.Sigmoid(),
+    "softplus": nn.Softplus(),
     "relu": nn.ReLU(),
     "elu": nn.ELU(),
     "silu": nn.SiLU(),
@@ -23,6 +23,7 @@ def resolve_loss(loss_type: str) -> nn.Module:
     if loss_type == "mse":
         return nn.MSELoss()
     raise ValueError(loss_type)
+
 
 def resolve_aggregation(aggr_type: str) -> aggr.Aggregation:
     if aggr_type == "sum":

@@ -14,20 +14,6 @@ from kinodata.typing import NodeType, NodeEmbedding, EdgeType
 from kinodata.model.resolve import resolve_act
 
 
-class ScaledSigmoid(nn.Module):
-    def __init__(self, alpha: float, beta: float, requires_grad=False) -> None:
-        super().__init__()
-        self.alpha = nn.parameter.Parameter(
-            torch.ones(1) * alpha, requires_grad=requires_grad
-        )
-        self.beta = nn.parameter.Parameter(
-            torch.ones(1) * beta, requires_grad=requires_grad
-        )
-
-    def forward(self, x):
-        return torch.sigmoid(x) * (self.beta - self.alpha) + self.alpha
-
-
 class EGNNMessageLayer(nn.Module):
     def __init__(
         self,

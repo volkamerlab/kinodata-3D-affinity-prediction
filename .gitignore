@@ -7,6 +7,9 @@ wandb
 artifacts
 notebooks
 
+# local config files
+*_local.yaml
+
 # wandb api key
 wandb_api_key
 
