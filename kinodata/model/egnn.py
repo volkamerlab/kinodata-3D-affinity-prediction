@@ -1,18 +1,17 @@
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import torch
 from torch import Tensor, LongTensor
 import torch.nn as nn
 from torch_geometric.data import HeteroData
 from torch_geometric.nn import MeanAggregation
-from torch_geometric.loader import DataLoader
 from torch_scatter import scatter
 
 from torch_geometric.nn.norm import GraphNorm
 
 from collections import defaultdict
 
-NodeType = str
-EdgeType = Tuple[NodeType, str, NodeType]
+from kinodata.typing import NodeType, NodeEmbedding, EdgeType
+from kinodata.model.resolve import resolve_act
 
 
 class ScaledSigmoid(nn.Module):
@@ -27,21 +26,6 @@ class ScaledSigmoid(nn.Module):
 
     def forward(self, x):
         return torch.sigmoid(x) * (self.beta - self.alpha) + self.alpha
-
-
-_act = {
-    "relu": nn.ReLU(),
-    "elu": nn.ELU(),
-    "silu": nn.SiLU(),
-    "none": nn.Identity(),
-}
-
-
-def resolve_act(act: str) -> nn.Module:
-    try:
-        return _act[act]
-    except KeyError:
-        raise ValueError(act)
 
 
 class EGNNMessageLayer(nn.Module):
@@ -224,11 +208,12 @@ class RBFLayer(EGNNMessageLayer):
         return dist_emb * edge_emb
 
 
-def resolve_mp_type(mp_type: str) -> EGNNMessageLayer:
+def resolve_mp_type(mp_type: str) -> type[EGNNMessageLayer]:
     if mp_type == "egnn":
         return EGNNMessageLayer
     if mp_type == "rbf":
         return RBFLayer
+    raise ValueError(f"Unknown message passing type: {mp_type}", mp_type)
 
 
 class EGNN(nn.Module):
@@ -236,14 +221,14 @@ class EGNN(nn.Module):
         self,
         hidden_channels: int,
         final_embedding_size: int = None,
-        edge_attr_size: Dict[Any, int] = None,
+        edge_attr_size: Optional[Dict[Any, int]] = None,
         target_size: int = 1,
         num_mp_layers: int = 2,
         mp_type: str = "rbf",
         node_types: List[NodeType] = [],
         edge_types: List[EdgeType] = [],
         act: str = "elu",
-        message_layer_kwargs: Dict[str, Any] = None,
+        message_layer_kwargs: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__()
         self.node_types = node_types
@@ -251,6 +236,8 @@ class EGNN(nn.Module):
 
         mp_class = resolve_mp_type(mp_type)
 
+        if edge_attr_size is None:
+            edge_attr_size = dict()
         _edge_attr_size = defaultdict(int)
         for key, value in edge_attr_size.items():
             _edge_attr_size[key] = value
@@ -291,18 +278,7 @@ class EGNN(nn.Module):
                 )
             )
 
-        # modules required for readout of a graph-level
-        # representation and graph-level property prediction
-        self.aggregation = MeanAggregation()
-        self.f_predict = nn.Sequential(
-            nn.LayerNorm(final_embedding_size),
-            nn.Linear(final_embedding_size, final_embedding_size),
-            resolve_act(act),
-            nn.Linear(final_embedding_size, target_size),
-            nn.Softplus(),
-        )
-
-    def encode(self, data: HeteroData) -> Dict[NodeType, Tensor]:
+    def encode(self, data: HeteroData) -> NodeEmbedding:
         node_embed = dict()
         for node_type in self.node_types:
             node_embed[node_type] = self.f_initial_embed[node_type](data[node_type].z)
@@ -333,45 +309,5 @@ class EGNN(nn.Module):
 
         return node_embed
 
-    def _predict(self, node_embed: Dict[NodeType, Tensor], data: HeteroData) -> Tensor:
-        aggr = {nt: self.aggregation(x, data[nt].batch) for nt, x in node_embed.items()}
-        aggr = aggr["ligand"]
-        return self.f_predict(aggr)
-
-    def forward(self, data: HeteroData) -> Tensor:
-        node_embed = self.encode(data)
-        pred = self._predict(node_embed, data)
-        return pred
-
-
-if __name__ == "__main__":
-    from kinodata.data.dataset import KinodataDocked
-    from kinodata.transform import AddDistancesAndInteractions
-
-    dataset = KinodataDocked(transform=AddDistancesAndInteractions(radius=2.0))[:128]
-    loader = DataLoader(dataset, batch_size=16, shuffle=True)
-    node_types, edge_types = dataset[0].metadata()
-    node_types, edge_types
-    model = EGNN(0, 64, 64, 1, node_types=node_types, edge_types=edge_types)
-    print("Num parameters", sum(p.numel() for p in model.parameters()))
-
-    optim = torch.optim.Adam(model.parameters(), lr=1e-3)
-    best = float("inf")
-    for epoch in range(100):
-        total_loss = 0
-        for data in loader:
-            y = model(data).flatten()
-            loss = (y - data.y).abs().mean()
-
-            optim.zero_grad()
-            loss.backward()
-            optim.step()
-            total_loss += loss.item() * data.y.size(0)
-
-        best = min([best, total_loss / 128])
-        print(
-            f"{epoch+1}/{100} | MAE {total_loss / 128}, BEST {best}",
-            end="\r",
-            flush=False,
-        )
-    print(best)
+    def forward(self, data: HeteroData) -> NodeEmbedding:
+        return self.encode(data)

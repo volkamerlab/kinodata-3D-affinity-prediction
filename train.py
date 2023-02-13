@@ -1,21 +1,17 @@
-from pathlib import Path
 import sys
-import os
 
+# dirty
 sys.path.append(".")
 
 import wandb
 import pytorch_lightning as pl
 from pytorch_lightning.loggers.wandb import WandbLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
-from torch_geometric.transforms import Compose
 
 from kinodata.data.dataset import KinodataDocked
 from kinodata.data.data_module import make_data_module
-from kinodata.transform import AddDistancesAndInteractions, ForceSymmetricInteraction
+from kinodata.transform import AddDistancesAndInteractions
 from kinodata.model.model import Model
-
-import yaml
 
 
 def train(config):
@@ -25,6 +21,8 @@ def train(config):
         transform=AddDistancesAndInteractions(radius=config.interaction_radius)
     )
     node_types, edge_types = dataset[0].metadata()
+
+    # keyword arguments for the message passing class
     mp_kwargs = {
         "rbf_size": config.rbf_size,
         "interaction_radius": config.rbf_size,
@@ -42,21 +40,23 @@ def train(config):
         mp_type=config.mp_type,
         loss_type=config.loss_type,
         mp_kwargs=mp_kwargs,
+        use_bonds=config.use_bonds,
+        readout_aggregation_type=config.readout_type,
     )
 
     data_module = make_data_module(
         dataset=dataset,
         batch_size=config.batch_size,
         num_workers=config.num_workers,
-        train_size=0.8,
-        val_size=0.1,
-        test_size=0.1,
-        seed=420,
-        log_seed=True,
+        train_size=config.train_size,
+        val_size=config.val_size,
+        test_size=config.test_size,
+        seed=config.splitting_seed,
     )
 
     # logger.watch(model)
 
+    # save model with best validation mean absolute error
     val_checkpoint_callback = ModelCheckpoint(monitor="val_mae", mode="min")
 
     trainer = pl.Trainer(
@@ -71,23 +71,38 @@ def train(config):
     trainer.fit(model, datamodule=data_module)
 
 
-default_config = dict(
-    batch_size=32,
-    accumulate_grad_batches=2,
+config_data = dict(
+    interaction_radius=5.0,
+    splitting_seed=420,
+    train_size=0.8,
+    val_size=0.1,
+    test_size=0.1,
+    use_bonds=True,
+)
+
+config_model = dict(
     num_mp_layers=4,
     hidden_channels=64,
-    lr=3e-4,
     act="silu",
-    weight_decay=1e-5,
-    interaction_radius=5.0,
-    epochs=100,
-    num_workers=32,
     mp_type="rbf",
     mp_reduce="sum",
     rbf_size=64,
+    readout_type="sum",
+)
+
+config_training = dict(
+    lr=3e-4,
+    weight_decay=1e-5,
+    batch_size=32,
+    accumulate_grad_batches=2,
+    epochs=100,
+    num_workers=32,
     accelerator="gpu",
     loss_type="mse",
 )
+
+
+default_config = config_data | config_model | config_training
 
 
 if __name__ == "__main__":

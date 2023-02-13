@@ -1,6 +1,12 @@
 # raw kinodata
 /data
 
+# wandb / pl logs and artifacts
+lightning_logs
+wandb
+artifacts
+notebooks
+
 # wandb api key
 wandb_api_key
 

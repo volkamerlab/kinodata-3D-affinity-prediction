@@ -1,25 +1,23 @@
+from collections import defaultdict
 from pathlib import Path
 from typing import Callable, List
 from warnings import warn
-import torch
 
-import pandas as pd
 import numpy as np
-import requests
-from rdkit import RDLogger
+import pandas as pd
 import rdkit.Chem as Chem
-import rdkit.Chem.Draw as Draw
 import rdkit.Chem.AllChem as AllChem
-from torch_geometric.data import InMemoryDataset, HeteroData
-from tqdm import tqdm
+import requests
+import torch
+import torch.nn.functional as F
 from kinodata.transform.add_distances import AddDistancesAndInteractions
+from rdkit import RDLogger
 from rdkit.Chem.rdchem import BondType as BT
 from rdkit.Chem.rdmolops import AddHs
-from collections import defaultdict
-import torch.nn.functional as F
+from torch import Tensor
+from torch_geometric.data import HeteroData, InMemoryDataset
 from torch_geometric.utils import to_undirected
-import logging
-
+from tqdm import tqdm
 
 BOND_TYPE_TO_IDX = defaultdict(int)  # other bonds will map to 0
 BOND_TYPE_TO_IDX[BT.SINGLE] = 1
@@ -34,7 +32,7 @@ _DATA = Path(__file__).parents[2] / "data"
 class KinodataDocked(InMemoryDataset):
     def __init__(
         self,
-        root: str = _DATA,
+        root: str = str(_DATA),
         transform: Callable = None,
         pre_transform: Callable = None,
         pre_filter: Callable = None,
@@ -121,13 +119,13 @@ class KinodataDocked(InMemoryDataset):
         RDLogger.DisableLog("rdApp.*")
         df = self._prepare_df()
 
-        def atomic_numbers(mol) -> torch.LongTensor:
+        def atomic_numbers(mol) -> Tensor:
             z = torch.empty(mol.GetNumAtoms(), dtype=torch.long)
             for i, atom in enumerate(mol.GetAtoms()):
                 z[i] = atom.GetAtomicNum()
             return z
 
-        def coordinates(mol) -> torch.FloatTensor:
+        def coordinates(mol) -> Tensor:
             conf = mol.GetConformer()
             pos = conf.GetPositions()
             return torch.from_numpy(pos)
@@ -163,9 +161,9 @@ class KinodataDocked(InMemoryDataset):
             return data
 
         data_list = []
-        skipped = []
+        skipped: List[str] = []
         print("Creating PyG data objects..")
-        pbar = tqdm(df.iterrows(), total=len(df))
+        pbar = tqdm(df.sample(100).iterrows(), total=len(df))
         for i, (ident, row) in enumerate(pbar):
             pbar.update(1)
             pbar.set_description(f"Skipped ratio: {len(skipped) / max(1, i):.3f}")
@@ -236,30 +234,11 @@ class KinodataDockedNoBonds(KinodataDocked):
     def processed_file_names(self) -> List[str]:
         return ["kinodata_docked_no_bonds.pt"]
 
-    def process(self, removeHs: bool = False):
+    def process(self, removeHs: bool = False, add_bond_info: bool = False):
         return super().process(removeHs=removeHs, add_bond_info=False)
 
 
 if __name__ == "__main__":
-    dataset = KinodataDocked(_DATA)
+    dataset = KinodataDocked(str(_DATA))
     dataset.process()
     dataset = KinodataDocked(transform=AddDistancesAndInteractions(radius=5.0))
-
-    print(len(dataset))
-    data = dataset[0]
-    node_types, edge_types = data.metadata()
-    densities = {et: [] for et in edge_types}
-    for i in range(len(dataset)):
-        data = dataset[i]
-        for (na, e, nb) in edge_types:
-            c = 1 if (na == nb) else 2
-            num_edges = data[na, e, nb].edge_index.size(1)
-            Na = data[na].num_nodes
-            Nb = data[nb].num_nodes
-
-            density = (c * num_edges) / (Na * Nb)
-
-            densities[na, e, nb].append(density)
-
-    for et, d in densities.items():
-        print(et, np.mean(d), np.min(d), np.max(d), np.std(d))

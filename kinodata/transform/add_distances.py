@@ -1,6 +1,6 @@
 from typing import Optional, Tuple
 import torch
-from torch import FloatTensor, LongTensor
+from torch import Tensor 
 
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.data import Data, HeteroData
@@ -15,10 +15,10 @@ from itertools import product
 
 
 def interactions_and_distances(
-    pos1: FloatTensor,
-    pos2: Optional[FloatTensor] = None,
+    pos1: Tensor,
+    pos2: Optional[Tensor] = None,
     r: float = 1.0,
-) -> Tuple[LongTensor, FloatTensor]:
+) -> Tuple[Tensor, Tensor]:
     if pos2 is None:
         pos2 = pos1
     y_ind, x_ind = radius(pos1, pos2, r)
