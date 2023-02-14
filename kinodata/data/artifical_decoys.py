@@ -10,7 +10,8 @@ from kinodata.data.dataset import KinodataDocked, _DATA
 
 def replace_ligand(original: HeteroData, replacement: HeteroData) -> HeteroData:
     modified = copy.copy(original)
-    # this ensures E(3)-invariance of the contrastive loss
+    
+    # this ensures E(3)-invariance of the 'contrastive' / pretraining loss
     aligned_replacement_pos = pseudo_kabsch_alignment(replacement["ligand"].pos, original["ligand"].pos)
     
     modified["ligand"].z = replacement["ligand"].z

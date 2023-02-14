@@ -59,7 +59,8 @@ class RandomSplit:
         for key, value in split_sizes.items():
             split_sizes[key] = int(value * len(dataset))
 
-        split_sizes["train"] -= (sum(split_sizes.values()) - len(dataset))
+        # make sure split is congruent
+        split_sizes["train"] -= sum(split_sizes.values()) - len(dataset)
 
         data_subsets = random_split(
             dataset,
@@ -76,3 +77,9 @@ class RandomSplit:
             val=split["val"] if "val" in split else None,
             test=split["test"] if "test" in split else None,
         )
+
+
+class ColdSplit:
+    def __call__(self, dataset: Dataset, seed: int = 0) -> DataSplit:
+        # TODO
+        ...

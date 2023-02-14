@@ -97,7 +97,7 @@ class EGNNMessageLayer(nn.Module):
 
 
 class ExpnormRBFEmbedding(nn.Module):
-    def __init__(self, size: int, d_cut: float, trainable: bool = True) -> None:
+    def __init__(self, size: int, d_cut: float, trainable: bool = False) -> None:
         super().__init__()
         self.size = size
         self.d_cut = nn.parameter.Parameter(
