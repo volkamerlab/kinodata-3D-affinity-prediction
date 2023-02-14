@@ -73,7 +73,7 @@ class KinodataDocked(InMemoryDataset):
         # TODO at some point set up public download?
         pass
 
-    def _prepare_df(self) -> pd.DataFrame:
+    def make_df_from_raw(self) -> pd.DataFrame:
         print("Reading data frame..")
         df = pd.read_csv(self.raw_paths[0], index_col="ident")
 
@@ -127,7 +127,7 @@ class KinodataDocked(InMemoryDataset):
     def process(self):
 
         RDLogger.DisableLog("rdApp.*")
-        df = self._prepare_df()
+        df = self.make_df_from_raw()
 
         def atomic_numbers(mol) -> Tensor:
             z = torch.empty(mol.GetNumAtoms(), dtype=torch.long)
