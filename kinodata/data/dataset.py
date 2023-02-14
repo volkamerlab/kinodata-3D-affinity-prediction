@@ -23,7 +23,7 @@ BOND_TYPE_TO_IDX = defaultdict(int)  # other bonds will map to 0
 BOND_TYPE_TO_IDX[BT.SINGLE] = 1
 BOND_TYPE_TO_IDX[BT.DOUBLE] = 2
 BOND_TYPE_TO_IDX[BT.TRIPLE] = 3
-NUM_BOND_TYPES = 4
+NUM_BOND_TYPES = len(BOND_TYPE_TO_IDX) + 1
 
 
 _DATA = Path(__file__).parents[2] / "data"
