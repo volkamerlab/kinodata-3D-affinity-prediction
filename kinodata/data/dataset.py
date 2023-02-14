@@ -3,14 +3,12 @@ from pathlib import Path
 from typing import Callable, List
 from warnings import warn
 
-import numpy as np
 import pandas as pd
 import rdkit.Chem as Chem
 import rdkit.Chem.AllChem as AllChem
 import requests
 import torch
 import torch.nn.functional as F
-from kinodata.transform.add_distances import AddDistancesAndInteractions
 from rdkit import RDLogger
 from rdkit.Chem.rdchem import BondType as BT
 from rdkit.Chem.rdmolops import AddHs
@@ -18,6 +16,8 @@ from torch import Tensor
 from torch_geometric.data import HeteroData, InMemoryDataset
 from torch_geometric.utils import to_undirected
 from tqdm import tqdm
+
+from kinodata.transform.add_distances import AddDistancesAndInteractions
 
 BOND_TYPE_TO_IDX = defaultdict(int)  # other bonds will map to 0
 BOND_TYPE_TO_IDX[BT.SINGLE] = 1
