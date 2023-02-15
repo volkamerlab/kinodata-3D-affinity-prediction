@@ -1,5 +1,6 @@
 # raw kinodata
 /data
+/surface_data
 
 # wandb / pl logs and artifacts
 lightning_logs

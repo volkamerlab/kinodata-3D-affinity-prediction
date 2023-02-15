@@ -18,6 +18,7 @@ from torch_geometric.utils import to_undirected
 from tqdm import tqdm
 
 from kinodata.transform.add_distances import AddDistancesAndInteractions
+from kinodata.transform.filter_activity import FilterActivityType
 
 BOND_TYPE_TO_IDX = defaultdict(int)  # other bonds will map to 0
 BOND_TYPE_TO_IDX[BT.SINGLE] = 1
@@ -37,7 +38,7 @@ class KinodataDocked(InMemoryDataset):
         remove_hydrogen: bool = True,
         transform: Callable = None,
         pre_transform: Callable = None,
-        pre_filter: Callable = None,
+        pre_filter: Callable = FilterActivityType(["pIC50"]),
     ):
         self.add_bond_info = add_bond_info
         self.remove_hydrogen = remove_hydrogen
@@ -47,6 +48,7 @@ class KinodataDocked(InMemoryDataset):
                 Setting removeHs to True."
             )
             self.remove_hydrogen = True
+
         super().__init__(root, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
@@ -76,6 +78,13 @@ class KinodataDocked(InMemoryDataset):
     def make_df_from_raw(self) -> pd.DataFrame:
         print("Reading data frame..")
         df = pd.read_csv(self.raw_paths[0], index_col="ident")
+
+        df = df.drop_duplicates(
+            subset=[
+                "target_dictionary.uniprot_id",
+                "compound_structures.canonical_smiles",
+            ]
+        )
 
         print("Gathering paths to ligand pdb files..")
         ligand_pdb_files = {
@@ -135,14 +144,14 @@ class KinodataDocked(InMemoryDataset):
                 z[i] = atom.GetAtomicNum()
             return z
 
-        def coordinates(mol) -> Tensor:
+        def atom_positions(mol) -> Tensor:
             conf = mol.GetConformer()
             pos = conf.GetPositions()
             return torch.from_numpy(pos)
 
         def add_atoms(mol, data, key):
             data[key].z = atomic_numbers(mol)
-            data[key].pos = coordinates(mol)
+            data[key].pos = atom_positions(mol)
             assert data[key].z.size(0) == data[key].pos.size(0)
             return data
 
@@ -223,6 +232,7 @@ class KinodataDocked(InMemoryDataset):
             data = add_atoms(pocket, data, "pocket")
 
             data.y = torch.tensor(row["activities.standard_value"]).view(1)
+            data.activity_type = row["activities.standard_type"]
             data.ident = ident
 
             data_list.append(data)
