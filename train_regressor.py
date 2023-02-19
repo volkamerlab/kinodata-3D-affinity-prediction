@@ -51,14 +51,18 @@ def make_model(node_types, edge_types, config) -> RegressionModel:
     return model
 
 
-def make_data(config) -> Tuple[KinodataDocked, LightningDataset]:
+def make_data(config, transforms=None) -> Tuple[KinodataDocked, LightningDataset]:
+    if transforms is None:
+        transforms = []
+    transform = None if len(transforms) == 0 else Compose(transforms)
 
     transforms = [AddDistancesAndInteractions(radius=config.interaction_radius)]
 
     if config.add_artificial_decoys:
-        dataset = KinodataDockedWithDecoys(transform=Compose(transforms))
+        # cannot implement "ligand substitution" as a standard transform
+        dataset = KinodataDockedWithDecoys(transform=transform)
     else:
-        dataset = KinodataDocked(transform=Compose(transforms))
+        dataset = KinodataDocked(transform=transform)
 
     if config.cold_split:
         raise NotImplementedError()
@@ -79,7 +83,10 @@ def make_data(config) -> Tuple[KinodataDocked, LightningDataset]:
 def train_regressor(config):
     logger = WandbLogger(log_model="all")
 
-    dataset, data_module = make_data(config)
+    dataset, data_module = make_data(
+        config,
+        transforms=[AddDistancesAndInteractions(radius=config.interaction_radius)],
+    )
     node_types, edge_types = dataset[0].metadata()
     model = make_model(node_types, edge_types, config)
     val_checkpoint_callback = ModelCheckpoint(monitor="val_mae", mode="min")

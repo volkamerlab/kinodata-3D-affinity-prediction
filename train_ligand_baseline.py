@@ -68,6 +68,8 @@ if __name__ == "__main__":
         readout_type="sum",
     )
     config = configuration.get("data", "training", "ligand_gnn_baseline")
-    config = configuration.overwrite_from_file(config, "config_ligand_baseline_local.yaml")
+    config = configuration.overwrite_from_file(
+        config, "config_ligand_baseline_local.yaml"
+    )
     wandb.init(config=config, project="kinodata-docked-rescore", tags=["ligand-only"])
     train_baseline(wandb.config)
