@@ -29,6 +29,9 @@ def make_model(node_types, edge_types, config) -> RegressionModel:
         "reduce": config.mp_reduce,
     }
 
+    if config.checkpoint is not None:
+        ...
+
     model = RegressionModel(
         node_types=node_types,
         edge_types=edge_types,
@@ -44,6 +47,7 @@ def make_model(node_types, edge_types, config) -> RegressionModel:
         use_bonds=config.use_bonds,
         readout_aggregation_type=config.readout_type,
     )
+
     return model
 
 

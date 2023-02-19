@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional
 
 import matplotlib.pyplot as plt
 import torch
+from torch import Tensor
 import wandb
 
 from kinodata.model.model import Model
@@ -64,20 +65,20 @@ class RegressionModel(Model):
     def define_metrics(self):
         wandb.define_metric("val_mae", summary="min")
 
-    def forward(self, batch):
+    def forward(self, batch) -> Tensor:
         node_embed = self.egnn(batch)
         return self.readout(node_embed, batch)
 
-    def training_step(self, batch, *args):
+    def training_step(self, batch, *args) -> Tensor:
         pred = self.forward(batch).view(-1, 1)
         loss = self.criterion(pred, batch.y.view(-1, 1))
-        self.log("train_loss", loss, batch_size=self.hparams.batch_size, on_epoch=True)
+        self.log("train_loss", loss, batch_size=pred.size(0), on_epoch=True)
         return loss
 
     def validation_step(self, batch, *args):
         pred = self.forward(batch).flatten()
         val_mae = (pred - batch.y).abs().mean()
-        self.log("val_mae", val_mae, batch_size=self.hparams.batch_size, on_epoch=True)
+        self.log("val_mae", val_mae, batch_size=pred.size(0), on_epoch=True)
         return {"val_mae": val_mae, "pred": pred, "target": batch.y}
 
     def validation_epoch_end(self, outputs, *args, **kwargs) -> None:
@@ -106,10 +107,3 @@ class RegressionModel(Model):
 
     def test_step(self, batch, *args, **kwargs):
         ...
-
-    def configure_optimizers(self):
-        return torch.optim.AdamW(
-            self.parameters(),
-            lr=self.hparams.lr,
-            weight_decay=self.hparams.weight_decay,
-        )

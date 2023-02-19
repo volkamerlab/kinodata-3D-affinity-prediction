@@ -13,7 +13,7 @@ class ActivityTypes(Enum):
 class FilterActivityType:
     def __init__(self, allowed: Sequence[str]):
         self.allowed = set(allowed)
-        assert self.allowed.issubset(set(iter(ActivityTypes)))
+        assert self.allowed.issubset(set([at.value for at in ActivityTypes]))
 
     def __call__(self, data: Data) -> bool:
         return data.activity_type in self.allowed

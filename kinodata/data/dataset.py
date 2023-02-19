@@ -182,7 +182,7 @@ class KinodataDocked(InMemoryDataset):
         data_list = []
         skipped: List[str] = []
         print("Creating PyG data objects..")
-        pbar = tqdm(df.sample(100).iterrows(), total=len(df))
+        pbar = tqdm(df.iterrows(), total=len(df))
         for i, (ident, row) in enumerate(pbar):
             pbar.update(1)
             pbar.set_description(f"Skipped ratio: {len(skipped) / max(1, i):.3f}")
