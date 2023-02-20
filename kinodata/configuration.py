@@ -84,6 +84,11 @@ register(
     mp_reduce="sum",
     rbf_size=64,
     readout_type="sum",
+    edge_types=[
+        ("ligand", "interacts", "ligand"),
+        ("ligand", "interacts", "pocket"),
+        ("pocket", "interacts", "ligand"),
+    ],
 )
 
 register(
