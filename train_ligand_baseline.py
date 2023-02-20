@@ -56,6 +56,7 @@ def train_baseline(config):
     )
 
     trainer.fit(model, datamodule=data_module)
+    trainer.test(ckpt_path="best", datamodule=data_module)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 import matplotlib.pyplot as plt
 import torch
@@ -10,6 +10,15 @@ from kinodata.model.egnn import EGNN
 from kinodata.model.readout import HeteroReadout
 from kinodata.model.resolve import resolve_loss, resolve_aggregation
 from kinodata.typing import NodeType, EdgeType
+
+
+def cat_many(
+    data: List[Dict[str, Tensor]], subset: Optional[List[str]] = None, dim: int = 0
+) -> Dict[str, Tensor]:
+    if subset is None:
+        subset = list(data.keys())
+    assert set(subset).issubset(data[0].keys())
+    return {key: torch.cat([sub_data[key] for sub_data in data]) for key in subset}
 
 
 class RegressionModel(Model):
@@ -79,7 +88,12 @@ class RegressionModel(Model):
         pred = self.forward(batch).flatten()
         val_mae = (pred - batch.y).abs().mean()
         self.log("val_mae", val_mae, batch_size=pred.size(0), on_epoch=True)
-        return {"val_mae": val_mae, "pred": pred, "target": batch.y}
+        return {
+            "val_mae": val_mae,
+            "pred": pred,
+            "target": batch.y,
+            "ident": batch.ident,
+        }
 
     def validation_epoch_end(self, outputs, *args, **kwargs) -> None:
         super().validation_epoch_end(outputs)
@@ -106,4 +120,16 @@ class RegressionModel(Model):
         return {"pred": pred, "target": batch.y.flatten()}
 
     def test_step(self, batch, *args, **kwargs):
-        ...
+        info = self.validation_step(batch)
+        info["test_mae"] = info["val_mae"]
+        del info["val_mae"]
+        return info
+
+    def test_epoch_end(self, outputs, *args, **kwargs) -> None:
+        test_predictions = wandb.Artifact("test_predictions", type="predictions")
+        data = cat_many(outputs, subset=["pred", "ident"])
+        values = torch.stack(tuple(data.values()), dim=1)
+        table = wandb.Table(columns=list(data.keys()), data=values.tolist())
+        test_predictions.add(table, "predictions")
+        wandb.log_artifact(test_predictions)
+        pass
