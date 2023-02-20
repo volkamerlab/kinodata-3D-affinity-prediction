@@ -8,6 +8,12 @@ wandb
 artifacts
 notebooks
 
+# condor logs
+condor/*.log
+condor/*.json
+condor/*.out
+condor/*.err
+
 # local config files
 *_local.yaml
 
