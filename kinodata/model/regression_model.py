@@ -31,7 +31,7 @@ class RegressionModel(Model):
         use_bonds: bool = False,
         final_act: str = "softplus",
     ) -> None:
-        self.save_hyperparameters()
+        self.save_hyperparameters(dict(wandb.config))
         super().__init__(
             node_types,
             edge_types,
