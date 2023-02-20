@@ -1,0 +1,7 @@
+Reading additional config from config_regressor_local.yaml:
+accelerator: gpu
+hidden_channels: 128
+num_mp_layers: 4
+batch_size: 16
+accumulate_grad_batches: 4
+{'interaction_radius': 5.0, 'seed': 420, 'train_size': 0.8, 'val_size': 0.1, 'test_size': 0.1, 'use_bonds': True, 'add_artificial_decoys': False, 'cold_split': False, 'num_mp_layers': 4, 'hidden_channels': 128, 'act': 'silu', 'mp_type': 'rbf', 'mp_reduce': 'sum', 'rbf_size': 64, 'readout_type': 'sum', 'lr': 0.0003, 'weight_decay': 1e-05, 'batch_size': 16, 'accumulate_grad_batches': 4, 'epochs': 100, 'num_workers': 32, 'accelerator': 'gpu', 'loss_type': 'mse', 'lr_factor': 0.7, 'lr_patience': 5, 'min_lr': 1e-07}

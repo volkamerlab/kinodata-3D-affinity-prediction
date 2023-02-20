@@ -7,7 +7,7 @@ sys.path.append(".")
 import wandb
 import pytorch_lightning as pl
 from pytorch_lightning.loggers.wandb import WandbLogger
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from torch_geometric.data.lightning_datamodule import LightningDataset
 from torch_geometric.transforms import Compose
 
@@ -28,9 +28,6 @@ def make_model(node_types, edge_types, config) -> RegressionModel:
         "interaction_radius": config.interaction_radius,
         "reduce": config.mp_reduce,
     }
-
-    if config.checkpoint is not None:
-        ...
 
     model = RegressionModel(
         node_types=node_types,
@@ -55,8 +52,6 @@ def make_data(config, transforms=None) -> Tuple[KinodataDocked, LightningDataset
     if transforms is None:
         transforms = []
     transform = None if len(transforms) == 0 else Compose(transforms)
-
-    transforms = [AddDistancesAndInteractions(radius=config.interaction_radius)]
 
     if config.add_artificial_decoys:
         # cannot implement "ligand substitution" as a standard transform
@@ -90,6 +85,7 @@ def train_regressor(config):
     node_types, edge_types = dataset[0].metadata()
     model = make_model(node_types, edge_types, config)
     val_checkpoint_callback = ModelCheckpoint(monitor="val_mae", mode="min")
+    lr_monitor = LearningRateMonitor("epoch")
 
     trainer = pl.Trainer(
         logger=logger,
@@ -97,7 +93,7 @@ def train_regressor(config):
         max_epochs=config.epochs,
         accelerator=config.accelerator,
         accumulate_grad_batches=config.accumulate_grad_batches,
-        callbacks=[val_checkpoint_callback],
+        callbacks=[val_checkpoint_callback, lr_monitor],
     )
 
     trainer.fit(model, datamodule=data_module)
