@@ -11,7 +11,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from torch_geometric.nn.models import GIN
 from torch_geometric.nn.resolver import aggregation_resolver
 
-from kinodata.model.ligand_gnn_baseline import LigandGNNBaseline
+from kinodata.model.ligand_gin_baseline import LigandGNNBaseline
 from kinodata import configuration
 
 from train_regressor import make_data

@@ -208,7 +208,6 @@ class EGNN(nn.Module):
         hidden_channels: int,
         final_embedding_size: int = None,
         edge_attr_size: Optional[Dict[Any, int]] = None,
-        target_size: int = 1,
         num_mp_layers: int = 2,
         mp_type: str = "rbf",
         node_types: List[NodeType] = [],
@@ -274,7 +273,7 @@ class EGNN(nn.Module):
             for edge_type, layer in mp_layer_dict.items():
                 edge_type = tuple(edge_type.split("_"))
                 source_nt, _, target_nt = edge_type
-                dist = data[edge_type].dist
+                edge_weight = data[edge_type].edge_weight
                 edge_attr = (
                     data[edge_type].edge_attr
                     if "edge_attr" in data[edge_type]
@@ -288,7 +287,7 @@ class EGNN(nn.Module):
                     target_node_embed,
                     data[edge_type].edge_index,
                     edge_attr,
-                    dist,
+                    edge_weight,
                     data[target_nt].batch,
                 )
             node_embed = new_node_embed

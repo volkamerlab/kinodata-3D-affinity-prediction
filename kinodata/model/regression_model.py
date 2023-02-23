@@ -1,4 +1,4 @@
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 import matplotlib.pyplot as plt
 import torch
@@ -6,76 +6,47 @@ from torch import Tensor
 import wandb
 
 from kinodata.model.model import Model
-from kinodata.model.egnn import EGNN
 from kinodata.model.readout import HeteroReadout
 from kinodata.model.resolve import resolve_loss, resolve_aggregation
-from kinodata.typing import NodeType, EdgeType
+from kinodata.configuration import Config
 
 
 def cat_many(
     data: List[Dict[str, Tensor]], subset: Optional[List[str]] = None, dim: int = 0
 ) -> Dict[str, Tensor]:
     if subset is None:
-        subset = list(data.keys())
+        subset = list(data[0].keys())
     assert set(subset).issubset(data[0].keys())
     return {key: torch.cat([sub_data[key] for sub_data in data]) for key in subset}
 
 
 class RegressionModel(Model):
     def __init__(
-        self,
-        node_types: List[NodeType],
-        edge_types: List[EdgeType],
-        hidden_channels: int,
-        num_mp_layers: int,
-        act: str,
-        lr: float,
-        batch_size: int,
-        weight_decay: float,
-        mp_type: str,
-        loss_type: str,
-        mp_kwargs: Optional[Dict[str, Any]] = None,
-        readout_node_types: Optional[List[NodeType]] = None,
-        readout_aggregation_type: str = "sum",
-        use_bonds: bool = False,
-        final_act: str = "softplus",
+        self, config: Config, encoder_cls: Callable[..., torch.nn.Module]
     ) -> None:
-        self.save_hyperparameters(dict(wandb.config))
-        super().__init__(
-            node_types,
-            edge_types,
-            hidden_channels,
-            num_mp_layers,
-            act,
-            lr,
-            batch_size,
-            weight_decay,
-            mp_type,
-            mp_kwargs,
-            use_bonds,
-        )
+        self.save_hyperparameters(config)
+        super().__init__(config.init(encoder_cls))
 
         # default: use all nodes for readout
-        if readout_node_types is None:
-            readout_node_types = node_types
+        readout_node_types = config.node_types
 
         self.readout = HeteroReadout(
             readout_node_types,
-            resolve_aggregation(readout_aggregation_type),
-            hidden_channels,
-            hidden_channels,
+            resolve_aggregation(config.readout_aggregation_type),
+            config.hidden_channels,
+            config.hidden_channels,
             1,
-            act=act,
-            final_act=final_act,
+            act=config.act,
+            final_act=config.final_act,
         )
-        self.criterion = resolve_loss(loss_type)
+        self.criterion = resolve_loss(config.loss_type)
         self.define_metrics()
 
     def define_metrics(self):
         wandb.define_metric("val_mae", summary="min")
 
     def forward(self, batch) -> Tensor:
-        node_embed = self.egnn(batch)
+        node_embed = self.encoder.encode(batch)
         return self.readout(node_embed, batch)
 
     def training_step(self, batch, *args) -> Tensor:

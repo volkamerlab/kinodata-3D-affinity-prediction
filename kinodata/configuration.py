@@ -1,4 +1,6 @@
-from typing import Any, Dict, Optional, Union
+import inspect
+
+from typing import Any, Dict, Hashable, Iterable, Optional, Union, TypeVar
 import traceback
 from collections import defaultdict
 from pathlib import Path
@@ -7,7 +9,43 @@ from warnings import warn
 import torch
 import yaml
 
-from kinodata.typing import Config
+T = TypeVar("T")
+
+
+class Config(dict):
+    def __getattribute__(self, __name: str) -> Any:
+        if __name in self:
+            return self[__name]
+        return super().__getattribute__(__name)
+
+    def __setattr__(self, __name: str, __value: Any) -> None:
+        self[__name] == __value
+
+    def intersect(self, other: Union[dict, "Config"]) -> "Config":
+        return Config({k: v for k, v in self.items() if k in other})
+
+    def subset(self, keys: Iterable[Hashable]) -> "Config":
+        return Config({key: self[key] for key in keys if key in self})
+
+    def update(
+        self, other: Union[dict, "Config"], allow_duplicates: bool = True
+    ) -> "Config":
+        if not allow_duplicates:
+            intersection = self.intersect(other)
+            if len(intersection) > 0:
+                raise ValueError(f"Duplicate keys detected: {intersection.keys()}")
+        return Config(self | other)
+
+    def init(self, obj: type[T], *args, **kwargs) -> T:
+        obj_signature = inspect.signature(obj)
+        sub_config = self.subset(obj_signature.parameters.keys())
+        sub_config.update(kwargs, allow_duplicates=False)
+        bound_arguments = obj_signature.bind(*args, **sub_config)
+        return obj(*bound_arguments.args, **bound_arguments.kwargs)
+
+    def __repr__(self) -> str:
+        inner = ", ".join([f"{key}={value}" for key, value in self.items()])
+        return f"{self.__class__.__name__}({inner})"
 
 
 configs: Dict[str, Config] = dict()
@@ -15,8 +53,8 @@ configs: Dict[str, Config] = dict()
 
 def register(config_name: str, config: Optional[Config] = None, **kwargs: Any):
     if config is None:
-        config = kwargs
-    configs[config_name] = config
+        config = Config(**kwargs)
+    configs[config_name] = config.update(kwargs)
 
 
 def extend(config_name: str, **kwargs: Any):
@@ -43,7 +81,7 @@ def overwrite_from_file(config: Config, fp: Union[str, Path], verbose: bool = Tr
     if verbose:
         print(f"Reading additional config from {fp}:")
         print("\n".join([f"{key}: {value}" for key, value in file_config.items()]))
-    return config | file_config
+    return config.update(file_config)
 
 
 def get(*config_names: str) -> Config:
@@ -57,15 +95,23 @@ def get(*config_names: str) -> Config:
     if len(duplicate_keys) > 0:
         raise ValueError(f"Duplicate config keys: {duplicate_keys}")
 
-    config: Config = dict()
+    config = Config()
     for name in config_names:
-        config |= configs[name]
+        config = config.update(configs[name])
     return config
 
+
+register("meta", model_type="egin")
 
 register(
     "data",
     interaction_radius=5.0,
+    node_types=["ligand", "pocket"],
+    edge_types=[
+        ("ligand", "interacts", "ligand"),
+        ("ligand", "interacts", "pocket"),
+        ("pocket", "interacts", "ligand"),
+    ],
     seed=420,
     train_size=0.8,
     val_size=0.1,
@@ -76,19 +122,26 @@ register(
 )
 
 register(
-    "model",
+    "egnn",
     num_mp_layers=4,
     hidden_channels=64,
     act="silu",
+    final_act="softplus",
     mp_type="rbf",
     mp_reduce="sum",
     rbf_size=64,
-    readout_type="sum",
-    edge_types=[
-        ("ligand", "interacts", "ligand"),
-        ("ligand", "interacts", "pocket"),
-        ("pocket", "interacts", "ligand"),
-    ],
+    readout_aggregation_type="sum",
+)
+
+register(
+    "egin",
+    hidden_channels=128,
+    num_layers=4,
+    d_cut=5.0,
+    edge_dim=4,
+    readout_aggregation_type="sum",
+    act="relu",
+    final_act="softplus",
 )
 
 register(
@@ -104,4 +157,6 @@ register(
     lr_factor=0.7,
     lr_patience=5,
     min_lr=1e-7,
+    perturb_ligand_positions=None,
+    perturb_pocket_positions=None,
 )

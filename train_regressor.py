@@ -1,8 +1,10 @@
 import sys
-from typing import Tuple
+from typing import Callable, Tuple
 
 # dirty
 sys.path.append(".")
+
+from functools import partial
 
 import wandb
 import pytorch_lightning as pl
@@ -15,12 +17,15 @@ from kinodata.data.dataset import KinodataDocked
 from kinodata.data.artifical_decoys import KinodataDockedWithDecoys
 from kinodata.data.data_module import make_data_module
 from kinodata.data.data_split import RandomSplit
-from kinodata.transform import AddDistancesAndInteractions
+from kinodata.transform import AddDistancesAndInteractions, PerturbAtomPositions
 from kinodata.model.regression_model import RegressionModel
+from kinodata.model.egnn import EGNN
+from kinodata.model.egin import HeteroEGIN
+
 from kinodata import configuration
 
 
-def make_model(node_types, edge_types, config) -> RegressionModel:
+def make_egnn_model(config: configuration.Config) -> RegressionModel:
 
     # keyword arguments for the message passing class
     mp_kwargs = {
@@ -29,28 +34,40 @@ def make_model(node_types, edge_types, config) -> RegressionModel:
         "reduce": config.mp_reduce,
     }
 
+    # dirty code
+    # 4: single, double, triple, "other"
+    # wandb does not accept this in the config..
+    edge_attr_size = {
+        ("ligand", "interacts", "ligand"): 4,
+    }
+
     model = RegressionModel(
-        node_types=node_types,
-        edge_types=edge_types,
-        hidden_channels=config.hidden_channels,
-        num_mp_layers=config.num_mp_layers,
-        act=config.act,
-        lr=config.lr,
-        batch_size=config.batch_size,
-        weight_decay=config.weight_decay,
-        mp_type=config.mp_type,
-        loss_type=config.loss_type,
-        mp_kwargs=mp_kwargs,
-        use_bonds=config.use_bonds,
-        readout_aggregation_type=config.readout_type,
+        config,
+        partial(EGNN, message_layer_kwargs=mp_kwargs, edge_attr_size=edge_attr_size),
     )
 
     return model
 
 
+def make_egin_model(config: configuration.Config) -> RegressionModel:
+    return RegressionModel(config, HeteroEGIN)
+
+
 def make_data(config, transforms=None) -> Tuple[KinodataDocked, LightningDataset]:
     if transforms is None:
         transforms = []
+
+    if config.perturb_ligand_positions:
+        transforms.append(
+            PerturbAtomPositions("ligand", std=config.perturb_ligand_positions)
+        )
+    if config.perturb_pocket_positions:
+        transforms.append(
+            PerturbAtomPositions("pocket", std=config.perturb_pocket_positions)
+        )
+
+    transforms.append(AddDistancesAndInteractions(config.interaction_radius))
+
     transform = None if len(transforms) == 0 else Compose(transforms)
 
     if config.add_artificial_decoys:
@@ -75,15 +92,11 @@ def make_data(config, transforms=None) -> Tuple[KinodataDocked, LightningDataset
     return dataset, data_module
 
 
-def train_regressor(config):
+def train_regressor(config, fn_model: Callable[..., RegressionModel]):
     logger = WandbLogger(log_model="all")
 
-    dataset, data_module = make_data(
-        config,
-        transforms=[AddDistancesAndInteractions(radius=config.interaction_radius)],
-    )
-    node_types, edge_types = dataset[0].metadata()
-    model = make_model(node_types, edge_types, config)
+    _, data_module = make_data(config)
+    model = fn_model(config)
     val_checkpoint_callback = ModelCheckpoint(monitor="val_mae", mode="min")
     lr_monitor = LearningRateMonitor("epoch")
 
@@ -100,8 +113,15 @@ def train_regressor(config):
 
 
 if __name__ == "__main__":
-    config = configuration.get("data", "model", "training")
+    meta_config = configuration.get("meta")
+    config = configuration.get("data", meta_config.model_type, "training")
     config = configuration.overwrite_from_file(config, "config_regressor_local.yaml")
+
+    if meta_config.model_type == "egin":
+        fn_model = make_egin_model
+    if meta_config.model_type == "egnn":
+        fn_model = make_egnn_model
+
     print(config)
     wandb.init(config=config, project="kinodata-docked-rescore")
-    train_regressor(wandb.config)
+    train_regressor(config, fn_model)

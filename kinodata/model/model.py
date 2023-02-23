@@ -1,43 +1,24 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Protocol
 
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import pytorch_lightning as pl
+from torch_geometric.data import HeteroData
 
 from kinodata.model.egnn import EGNN
-from kinodata.typing import NodeType, EdgeType
+from kinodata.typing import NodeEmbedding
+from kinodata.configuration import Config
+
+
+class Encoder(Protocol):
+    def encode(self, data: HeteroData) -> NodeEmbedding:
+        ...
 
 
 class Model(pl.LightningModule):
-    def __init__(
-        self,
-        node_types: List[NodeType],
-        edge_types: List[EdgeType],
-        hidden_channels: int,
-        num_mp_layers: int,
-        act: str,
-        lr: float,
-        batch_size: int,
-        weight_decay: float,
-        mp_type: str,
-        mp_kwargs: Optional[Dict[str, Any]] = None,
-        use_bonds: bool = False,
-    ) -> None:
+    def __init__(self, encoder: Encoder) -> None:
         super().__init__()
-
-        # dirty
-        edge_attr_size = {("ligand", "interacts", "ligand"): 4} if use_bonds else dict()
-
-        self.egnn = EGNN(
-            edge_attr_size=edge_attr_size,
-            hidden_channels=hidden_channels,
-            final_embedding_size=hidden_channels,
-            target_size=1,
-            num_mp_layers=num_mp_layers,
-            act=act,
-            node_types=node_types,
-            edge_types=edge_types,
-        )
+        self.encoder = encoder
 
     def configure_optimizers(self):
         optim = AdamW(

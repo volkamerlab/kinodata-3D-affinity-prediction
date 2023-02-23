@@ -1,6 +1,6 @@
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 import torch
-from torch import Tensor 
+from torch import Tensor
 
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.data import Data, HeteroData
@@ -12,6 +12,8 @@ from torch_geometric.utils import (
 )
 from torch_cluster import radius
 from itertools import product
+
+from kinodata.typing import NodeType
 
 
 def interactions_and_distances(
@@ -28,14 +30,29 @@ def interactions_and_distances(
 
 
 class AddDistancesAndInteractions(BaseTransform):
-    def __init__(self, radius: float) -> None:
+    def __init__(
+        self,
+        radius: float,
+        subset: Optional[List[Tuple[NodeType, NodeType]]] = None,
+        distance_key: str = "edge_weight",
+    ) -> None:
         super().__init__()
+        self.distance_key = distance_key
         self.radius = radius
+        self.subset = None
+        if subset:
+            self.subset = set()
+            for (u, v) in subset:
+                self.subset.add((u, v))
+                self.subset.add((v, u))
 
     def __call__(self, data: HeteroData) -> HeteroData:
         if isinstance(data, HeteroData):
             node_types, edge_types = data.metadata()
-            for nt_a, nt_b in product(node_types, node_types):
+            itr = product(node_types, node_types)
+            if self.subset:
+                itr = filter(lambda nt_pair: nt_pair in self.subset, itr)
+            for nt_a, nt_b in itr:
                 edge_index, dist = interactions_and_distances(
                     data[nt_a].pos,
                     data[nt_b].pos,
@@ -56,10 +73,16 @@ class AddDistancesAndInteractions(BaseTransform):
                         max_num_nodes=num_nodes,
                     ).squeeze(0)
                     row, col = edge_index
-                    data[nt_a, "interacts", nt_b].edge_attr = bond_adj[row, col]
+                    data[nt_a, "interacts", nt_b].edge_attr = bond_adj[row, col].to(
+                        torch.float
+                    )
 
                 data[nt_a, "interacts", nt_b].edge_index = edge_index
-                data[nt_a, "interacts", nt_b].dist = dist.view(-1, 1).to(torch.float32)
+                setattr(
+                    data[nt_a, "interacts", nt_b],
+                    self.distance_key,
+                    dist.view(-1, 1).to(torch.float32),
+                )
 
             return data
         else:
