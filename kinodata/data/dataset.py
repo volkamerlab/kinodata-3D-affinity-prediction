@@ -185,7 +185,7 @@ class KinodataDocked(InMemoryDataset):
         pbar = tqdm(df.iterrows(), total=len(df))
         for i, (ident, row) in enumerate(pbar):
             pbar.update(1)
-            pbar.set_description(f"Skipped ratio: {len(skipped) / max(1, i):.3f}")
+            pbar.set_description(f"Skipped: {len(skipped)}")
             data = HeteroData()
 
             ligand = Chem.MolFromPDBFile(
@@ -211,20 +211,19 @@ class KinodataDocked(InMemoryDataset):
                     )
                     data = add_bonds(ligand, data, "ligand")
                 except (Chem.rdchem.AtomValenceException, ValueError) as e:
-                    print(
-                        f"Unable to add bonds from template for entry ident={ident}: {e}"
-                    )
                     # Draw.MolToFile(ligand, f"images/{ident}_ligand.png")
                     # Draw.MolToFile(
                     #     ligand_template, f"images/{ident}_ligand_template.png"
                     # )
-                    skipped.append(str(ident))
+                    skipped.append(
+                        f"Unable to add bonds from template for entry ident={ident}: {e}"
+                    )
                     continue
 
             pocket = Chem.rdmolfiles.MolFromMol2File(
                 str(row["pocket_mol2_file"]),
                 removeHs=self.remove_hydrogen,
-                sanitize=False,
+                sanitize=True,
             )
             if pocket is None:
                 skipped.append(str(ident))
