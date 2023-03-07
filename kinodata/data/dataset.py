@@ -2,6 +2,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Callable, List
 from warnings import warn
+import os
 
 import pandas as pd
 import rdkit.Chem as Chem
@@ -78,7 +79,7 @@ class KinodataDocked(InMemoryDataset):
         if not self.pocket_dir.exists():
             self.pocket_dir.mkdir(parents=True)
 
-        struc_ids = df['similar.klifs_structure_id'].unique()
+        struc_ids = df["similar.klifs_structure_id"].unique()
         pbar = tqdm(struc_ids, total=len(struc_ids))
         for structure_id in pbar:
             fp = self.pocket_dir / f"{structure_id}_pocket.mol2"
@@ -96,7 +97,8 @@ class KinodataDocked(InMemoryDataset):
             int(fp.stem.split("_")[0]): fp for fp in (self.pocket_dir).iterdir()
         }
         df["pocket_mol2_file"] = [
-            pocket_mol2_files[row["similar.klifs_structure_id"]] for _, row in df.iterrows()
+            pocket_mol2_files[row["similar.klifs_structure_id"]]
+            for _, row in df.iterrows()
         ]
 
         return df
@@ -106,76 +108,23 @@ class KinodataDocked(InMemoryDataset):
         RDLogger.DisableLog("rdApp.*")
         df = self.make_df_from_raw()
 
-        def atomic_numbers(mol) -> Tensor:
-            z = torch.empty(mol.GetNumAtoms(), dtype=torch.long)
-            for i, atom in enumerate(mol.GetAtoms()):
-                z[i] = atom.GetAtomicNum()
-            return z
-
-        def atom_positions(mol) -> Tensor:
-            conf = mol.GetConformer()
-            pos = conf.GetPositions()
-            return torch.from_numpy(pos)
-
-        def add_atoms(mol, data, key):
-            data[key].z = atomic_numbers(mol)
-            data[key].pos = atom_positions(mol)
-            assert data[key].z.size(0) == data[key].pos.size(0)
-            return data
-
-        def add_bonds(mol, data, key):
-            row, col = list(), list()
-            bond_type_indices = []
-            num_nodes = mol.GetNumAtoms()
-            for bond in mol.GetBonds():
-                i, j = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
-                type = bond.GetBondType()
-                row.append(i)
-                col.append(j)
-                bond_type_indices.append(BOND_TYPE_TO_IDX[type])
-
-            edge_index = torch.tensor([row, col], dtype=torch.long).view(2, -1)
-            bond_type_indices = torch.tensor(bond_type_indices)
-
-            # one-hot encode bond type
-            edge_attr = F.one_hot(bond_type_indices, NUM_BOND_TYPES)
-
-            edge_index, edge_attr = to_undirected(edge_index, edge_attr, num_nodes)
-
-            data[key, "bond", key].edge_index = edge_index
-            data[key, "bond", key].edge_attr = edge_attr
-
-            return data
-
         data_list = []
         skipped: List[str] = []
         print("Creating PyG data objects..")
-        def process_idx(ident):
-            print('start', ident)
-            data = HeteroData()
 
-            df.loc[ident]
-            ligand = row["molecule"]
-            data = add_atoms(ligand, data, "ligand")
-
-            pocket = Chem.rdmolfiles.MolFromMol2File(
-                str(row["pocket_mol2_file"]),
-                removeHs=self.remove_hydrogen,
-                sanitize=True,
+        tasks = [
+            (
+                ident,
+                row["molecule"],
+                float(row["activities.standard_value"]),
+                row["activities.standard_type"],
+                row["pocket_mol2_file"],
             )
-            if pocket is None:
-                return None
-            data = add_atoms(pocket, data, "pocket")
-
-            data.y = torch.tensor(row["activities.standard_value"]).view(1)
-            data.activity_type = row["activities.standard_type"]
-            data.ident = ident
-
-            print('stop', ident)
-            return data
+            for ident, row in df.iterrows()
+        ]
 
         with mp.Pool(os.cpu_count()) as pool:
-            data_list = pool.map(process_idx, list(df.index))
+            data_list = pool.map(process_idx, tasks)
 
         skipped = [ident for ident, data in zip(df.index, data_list) if data is None]
         data_list = [d for d in data_list if d is not None]
@@ -193,6 +142,72 @@ class KinodataDocked(InMemoryDataset):
 
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
+
+
+def atomic_numbers(mol) -> Tensor:
+    z = torch.empty(mol.GetNumAtoms(), dtype=torch.long)
+    for i, atom in enumerate(mol.GetAtoms()):
+        z[i] = atom.GetAtomicNum()
+    return z
+
+
+def atom_positions(mol) -> Tensor:
+    conf = mol.GetConformer()
+    pos = conf.GetPositions()
+    return torch.from_numpy(pos)
+
+
+def add_atoms(mol, data, key):
+    data[key].z = atomic_numbers(mol)
+    data[key].pos = atom_positions(mol)
+    assert data[key].z.size(0) == data[key].pos.size(0)
+    return data
+
+
+def add_bonds(mol, data, key):
+    row, col = list(), list()
+    bond_type_indices = []
+    num_nodes = mol.GetNumAtoms()
+    for bond in mol.GetBonds():
+        i, j = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+        type = bond.GetBondType()
+        row.append(i)
+        col.append(j)
+        bond_type_indices.append(BOND_TYPE_TO_IDX[type])
+
+    edge_index = torch.tensor([row, col], dtype=torch.long).view(2, -1)
+    bond_type_indices = torch.tensor(bond_type_indices)
+
+    # one-hot encode bond type
+    edge_attr = F.one_hot(bond_type_indices, NUM_BOND_TYPES)
+
+    edge_index, edge_attr = to_undirected(edge_index, edge_attr, num_nodes)
+
+    data[key, "bond", key].edge_index = edge_index
+    data[key, "bond", key].edge_attr = edge_attr
+
+    return data
+
+
+def process_idx(args):
+    ident, ligand, activity, activity_type, pocket_file = args
+    data = HeteroData()
+
+    data = add_atoms(ligand, data, "ligand")
+
+    pocket = Chem.rdmolfiles.MolFromMol2File(
+        str(pocket_file),
+        sanitize=True,
+    )
+    if pocket is None:
+        return None
+    data = add_atoms(pocket, data, "pocket")
+
+    data.y = torch.tensor(activity).view(1)
+    data.activity_type = activity_type
+    data.ident = ident
+
+    return data
 
 
 if __name__ == "__main__":
