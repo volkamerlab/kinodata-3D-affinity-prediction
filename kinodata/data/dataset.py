@@ -164,7 +164,6 @@ class KinodataDocked(InMemoryDataset):
                 sanitize=True,
             )
             if pocket is None:
-                print('skipping', ident)
                 return None
             data = add_atoms(pocket, data, "pocket")
 
@@ -178,6 +177,8 @@ class KinodataDocked(InMemoryDataset):
         with mp.Pool(os.cpu_count()) as pool:
             data_list = pool.map(process_idx, list(df.index))
 
+        skipped = [ident for ident, data in zip(df.index, data_list) if data is None]
+        data_list = [d for d in data_list if d is not None]
         if len(skipped) > 0:
             print(f"Skipped {len(skipped)} unprocessable entries.")
             (Path(self.root) / "skipped_idents.log").write_text("\n".join(skipped))
