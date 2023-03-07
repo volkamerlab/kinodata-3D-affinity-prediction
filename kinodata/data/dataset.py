@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Callable, List
 from warnings import warn
 import os
+from functools import cached_property
 
 import pandas as pd
 import rdkit.Chem as Chem
@@ -63,7 +64,8 @@ class KinodataDocked(InMemoryDataset):
         # TODO at some point set up public download?
         pass
 
-    def make_df_from_raw(self) -> pd.DataFrame:
+    @cached_property
+    def df(self) -> pd.DataFrame:
         print("Reading data frame..")
         df = PandasTools.LoadSDF(
             self.raw_paths[0],
@@ -106,7 +108,6 @@ class KinodataDocked(InMemoryDataset):
     def process(self):
 
         RDLogger.DisableLog("rdApp.*")
-        df = self.make_df_from_raw()
 
         data_list = []
         skipped: List[str] = []
@@ -120,13 +121,13 @@ class KinodataDocked(InMemoryDataset):
                 row["activities.standard_type"],
                 row["pocket_mol2_file"],
             )
-            for ident, row in df.iterrows()
+            for ident, row in self.df.iterrows()
         ]
 
-        with mp.Pool(os.cpu_count()) as pool:
+        with mp.Pool(64) as pool:
             data_list = pool.map(process_idx, tasks)
 
-        skipped = [ident for ident, data in zip(df.index, data_list) if data is None]
+        skipped = [ident for ident, data in zip(self.df.index, data_list) if data is None]
         data_list = [d for d in data_list if d is not None]
         if len(skipped) > 0:
             print(f"Skipped {len(skipped)} unprocessable entries.")
@@ -194,6 +195,7 @@ def process_idx(args):
     data = HeteroData()
 
     data = add_atoms(ligand, data, "ligand")
+    data = add_bonds(ligand, data, "ligand")
 
     pocket = Chem.rdmolfiles.MolFromMol2File(
         str(pocket_file),
