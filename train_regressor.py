@@ -36,10 +36,14 @@ def make_egnn_model(config: configuration.Config) -> RegressionModel:
     }
 
     # dirty code
-    # 4: single, double, triple, "other"
     # wandb does not accept this in the config..
+
+    docking_score_num = 2 if config.add_docking_scores else 0
     edge_attr_size = {
-        ("ligand", "interacts", "ligand"): 4,
+        # 4: single, double, triple, "other"
+        ("ligand", "interacts", "ligand"): 4 + docking_score_num,
+        ("pocket", "interacts", "ligand"): docking_score_num,
+        ("ligand", "interacts", "pocket"): docking_score_num,
     }
 
     model = RegressionModel(
@@ -83,7 +87,6 @@ def make_data(config, transforms=None) -> Tuple[KinodataDocked, LightningDataset
                 ),
             ]
         )
-
 
     transform = None if len(transforms) == 0 else Compose(transforms)
 
@@ -133,8 +136,8 @@ if __name__ == "__main__":
     meta_config = configuration.get("meta")
     config = configuration.get("data", meta_config.model_type, "training")
     config = configuration.overwrite_from_file(config, "config_regressor_local.yaml")
-    config['lr'] = 1e-4
-    config['add_docking_scores'] = True
+    config["lr"] = 1e-4
+    config["add_docking_scores"] = True
 
     if meta_config.model_type == "egin":
         fn_model = make_egin_model
