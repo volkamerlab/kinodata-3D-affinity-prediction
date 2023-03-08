@@ -134,7 +134,7 @@ class KinodataDocked(InMemoryDataset):
         # with mp.Pool(chunk_num) as pool:
         # data_lists = pool.map(list(map(process_idx, tasks)), task_chunks)
         # data_list = sum(data_lists, start=[])
-        data_list = list(map(process_idx, tqdm(tasks[:100])))
+        data_list = list(map(process_idx, tqdm(tasks)))
 
         skipped = [
             ident for ident, data in zip(self.df.index, data_list) if data is None

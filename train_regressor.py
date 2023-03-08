@@ -18,6 +18,7 @@ from kinodata.data.artifical_decoys import KinodataDockedWithDecoys
 from kinodata.data.data_module import make_data_module
 from kinodata.data.data_split import RandomSplit
 from kinodata.transform import AddDistancesAndInteractions, PerturbAtomPositions
+from kinodata.transform.add_global_attr_to_edge import AddGlobalAttrToEdge
 from kinodata.model.regression_model import RegressionModel
 from kinodata.model.egnn import EGNN
 from kinodata.model.egin import HeteroEGIN
@@ -68,6 +69,22 @@ def make_data(config, transforms=None) -> Tuple[KinodataDocked, LightningDataset
 
     transforms.append(AddDistancesAndInteractions(config.interaction_radius))
 
+    if config.add_docking_scores:
+        transforms.append(
+            [
+                AddGlobalAttrToEdge(
+                    ("pocket", "interacts", "ligand"), ["docking_score", "posit_prob"]
+                ),
+                AddGlobalAttrToEdge(
+                    ("pocket", "interacts", "pocket"), ["docking_score", "posit_prob"]
+                ),
+                AddGlobalAttrToEdge(
+                    ("ligand", "interacts", "ligand"), ["docking_score", "posit_prob"]
+                ),
+            ]
+        )
+
+
     transform = None if len(transforms) == 0 else Compose(transforms)
 
     if config.add_artificial_decoys:
@@ -116,6 +133,8 @@ if __name__ == "__main__":
     meta_config = configuration.get("meta")
     config = configuration.get("data", meta_config.model_type, "training")
     config = configuration.overwrite_from_file(config, "config_regressor_local.yaml")
+    config['lr'] = 1e-4
+    config['add_docking_scores'] = True
 
     if meta_config.model_type == "egin":
         fn_model = make_egin_model
