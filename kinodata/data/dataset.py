@@ -19,9 +19,11 @@ from rdkit.Chem.rdmolops import AddHs
 from torch import Tensor
 from torch_geometric.data import HeteroData, InMemoryDataset
 from torch_geometric.utils import to_undirected
+from torch_geometric.transforms import Compose
 from tqdm import tqdm
 
 from kinodata.transform.add_distances import AddDistancesAndInteractions
+from kinodata.transform.add_global_attr_to_edge import AddGlobalAttrToEdge
 from kinodata.transform.filter_activity import FilterActivityType
 
 BOND_TYPE_TO_IDX = defaultdict(int)  # other bonds will map to 0
@@ -113,15 +115,13 @@ class KinodataDocked(InMemoryDataset):
         skipped: List[str] = []
         print("Creating PyG data objects..")
 
-        from copy import deepcopy
-
         tasks = [
             (
-                int(ident),
-                deepcopy(row["molecule"]),
+                ident,
+                row["molecule"],
                 float(row["activities.standard_value"]),
-                str(row["activities.standard_type"]),
-                str(row["pocket_mol2_file"]),
+                row["activities.standard_type"],
+                row["pocket_mol2_file"],
                 float(row["docking.chemgauss_score"]),
                 float(row["docking.posit_probability"]),
             )
@@ -132,9 +132,9 @@ class KinodataDocked(InMemoryDataset):
         # chunk_size = int(len(tasks) / chunk_num)
         # task_chunks = [tasks[pos:pos+chunk_size] for pos in range(0, len(tasks), chunk_size)]
         # with mp.Pool(chunk_num) as pool:
-            # data_lists = pool.map(list(map(process_idx, tasks)), task_chunks)
+        # data_lists = pool.map(list(map(process_idx, tasks)), task_chunks)
         # data_list = sum(data_lists, start=[])
-        data_list = list(map(process_idx, tqdm(tasks)))
+        data_list = list(map(process_idx, tqdm(tasks[:100])))
 
         skipped = [
             ident for ident, data in zip(self.df.index, data_list) if data is None
@@ -180,7 +180,7 @@ def add_atoms(mol, data, key):
     return data
 
 
-def add_bonds(mol, data, key, global_features: List[float] = []):
+def add_bonds(mol, data, key):
     row, col = list(), list()
     bond_type_indices = []
     num_nodes = mol.GetNumAtoms()
@@ -197,13 +197,6 @@ def add_bonds(mol, data, key, global_features: List[float] = []):
     # one-hot encode bond type
     edge_attr = F.one_hot(bond_type_indices, NUM_BOND_TYPES)
 
-    # global edge features
-    if len(global_features) > 0:
-        glob_edge_attr = torch.ones(
-            (len(bond_type_indices), len(global_features))
-        ) * torch.tensor(global_features)
-        edge_attr = torch.cat((edge_attr, glob_edge_attr), axis=1)
-
     edge_index, edge_attr = to_undirected(edge_index, edge_attr, num_nodes)
 
     data[key, "bond", key].edge_index = edge_index
@@ -213,11 +206,19 @@ def add_bonds(mol, data, key, global_features: List[float] = []):
 
 
 def process_idx(args):
-    ident, ligand, activity, activity_type, pocket_file, score, positp = args
+    (
+        ident,
+        ligand,
+        activity,
+        activity_type,
+        pocket_file,
+        docking_score,
+        posit_prob,
+    ) = args
     data = HeteroData()
 
     data = add_atoms(ligand, data, "ligand")
-    data = add_bonds(ligand, data, "ligand", [score, positp])
+    data = add_bonds(ligand, data, "ligand")
 
     pocket = Chem.rdmolfiles.MolFromMol2File(
         str(pocket_file),
@@ -228,6 +229,9 @@ def process_idx(args):
     data = add_atoms(pocket, data, "pocket")
 
     data.y = torch.tensor(activity).view(1)
+    data.docking_score = torch.tensor(docking_score).view(1)
+    data.posit_prob = torch.tensor(posit_prob).view(1)
+
     data.activity_type = activity_type
     data.ident = ident
 
@@ -235,6 +239,19 @@ def process_idx(args):
 
 
 if __name__ == "__main__":
-    dataset = KinodataDocked(str(_DATA))
-    dataset.process()
-    dataset = KinodataDocked(transform=AddDistancesAndInteractions(radius=5.0))
+    transforms = [
+        AddDistancesAndInteractions(radius=5.0),
+        AddGlobalAttrToEdge(
+            ("pocket", "interacts", "ligand"), ["docking_score", "posit_prob"]
+        ),
+        AddGlobalAttrToEdge(
+            ("pocket", "interacts", "pocket"), ["docking_score", "posit_prob"]
+        ),
+        AddGlobalAttrToEdge(
+            ("ligand", "interacts", "ligand"), ["docking_score", "posit_prob"]
+        ),
+    ]
+    dataset = KinodataDocked(transform=Compose(transforms))
+
+    data = dataset[0]
+    pass
