@@ -50,7 +50,7 @@ class KinodataDocked(InMemoryDataset):
 
     @property
     def raw_file_names(self) -> List[str]:
-        return ["kinodata_docked_filtered.sdf.gz"]
+        return ["kinodata_docked.sdf.gz"]
 
     @property
     def processed_file_names(self) -> List[str]:
@@ -113,21 +113,32 @@ class KinodataDocked(InMemoryDataset):
         skipped: List[str] = []
         print("Creating PyG data objects..")
 
+        from copy import deepcopy
+
         tasks = [
             (
-                ident,
-                row["molecule"],
+                int(ident),
+                deepcopy(row["molecule"]),
                 float(row["activities.standard_value"]),
-                row["activities.standard_type"],
-                row["pocket_mol2_file"],
+                str(row["activities.standard_type"]),
+                str(row["pocket_mol2_file"]),
+                float(row["docking.chemgauss_score"]),
+                float(row["docking.posit_probability"]),
             )
             for ident, row in self.df.iterrows()
         ]
 
-        with mp.Pool(64) as pool:
-            data_list = pool.map(process_idx, tasks)
+        # chunk_num = os.cpu_count() - 1
+        # chunk_size = int(len(tasks) / chunk_num)
+        # task_chunks = [tasks[pos:pos+chunk_size] for pos in range(0, len(tasks), chunk_size)]
+        # with mp.Pool(chunk_num) as pool:
+            # data_lists = pool.map(list(map(process_idx, tasks)), task_chunks)
+        # data_list = sum(data_lists, start=[])
+        data_list = list(map(process_idx, tqdm(tasks)))
 
-        skipped = [ident for ident, data in zip(self.df.index, data_list) if data is None]
+        skipped = [
+            ident for ident, data in zip(self.df.index, data_list) if data is None
+        ]
         data_list = [d for d in data_list if d is not None]
         if len(skipped) > 0:
             print(f"Skipped {len(skipped)} unprocessable entries.")
@@ -143,6 +154,10 @@ class KinodataDocked(InMemoryDataset):
 
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
+
+
+def process_chunk(tasks) -> List:
+    return list(map(process_idx, tasks))
 
 
 def atomic_numbers(mol) -> Tensor:
@@ -165,7 +180,7 @@ def add_atoms(mol, data, key):
     return data
 
 
-def add_bonds(mol, data, key):
+def add_bonds(mol, data, key, global_features: List[float] = []):
     row, col = list(), list()
     bond_type_indices = []
     num_nodes = mol.GetNumAtoms()
@@ -182,6 +197,13 @@ def add_bonds(mol, data, key):
     # one-hot encode bond type
     edge_attr = F.one_hot(bond_type_indices, NUM_BOND_TYPES)
 
+    # global edge features
+    if len(global_features) > 0:
+        glob_edge_attr = torch.ones(
+            (len(bond_type_indices), len(global_features))
+        ) * torch.tensor(global_features)
+        edge_attr = torch.cat((edge_attr, glob_edge_attr), axis=1)
+
     edge_index, edge_attr = to_undirected(edge_index, edge_attr, num_nodes)
 
     data[key, "bond", key].edge_index = edge_index
@@ -191,11 +213,11 @@ def add_bonds(mol, data, key):
 
 
 def process_idx(args):
-    ident, ligand, activity, activity_type, pocket_file = args
+    ident, ligand, activity, activity_type, pocket_file, score, positp = args
     data = HeteroData()
 
     data = add_atoms(ligand, data, "ligand")
-    data = add_bonds(ligand, data, "ligand")
+    data = add_bonds(ligand, data, "ligand", [score, positp])
 
     pocket = Chem.rdmolfiles.MolFromMol2File(
         str(pocket_file),
