@@ -18,13 +18,18 @@ from rdkit.Chem.rdchem import BondType as BT
 from rdkit.Chem.rdmolops import AddHs
 from torch import Tensor
 from torch_geometric.data import HeteroData, InMemoryDataset
+from torch_geometric.data.separate import separate
 from torch_geometric.utils import to_undirected
 from torch_geometric.transforms import Compose
 from tqdm import tqdm
 
 from kinodata.transform.add_distances import AddDistancesAndInteractions
 from kinodata.transform.add_global_attr_to_edge import AddGlobalAttrToEdge
-from kinodata.transform.filter_activity import FilterCombine, FilterActivityScore, FilterActivityType
+from kinodata.transform.filter_activity import (
+    FilterCombine,
+    FilterActivityScore,
+    FilterActivityType,
+)
 
 BOND_TYPE_TO_IDX = defaultdict(int)  # other bonds will map to 0
 BOND_TYPE_TO_IDX[BT.SINGLE] = 1
@@ -44,12 +49,17 @@ class KinodataDocked(InMemoryDataset):
         transform: Callable = None,
         pre_transform: Callable = None,
         pre_filter: Callable = (lambda _: True),
-        post_filter: Callable = FilterCombine([FilterActivityType(["pIC50"]), FilterActivityScore]),
+        post_filter: Callable = FilterCombine(
+            [FilterActivityType(["pIC50"]), FilterActivgtyScore]
+        ),
     ):
         self.remove_hydrogen = remove_hydrogen
 
-        super().__init__(root, transform, pre_transform, pre_filter)
+        super().__init__(root, transform, pre_transform, None)
         self.data, self.slices = torch.load(self.processed_paths[0])
+
+        if post_filter is not None:
+            self._data_list = []
 
     @property
     def raw_file_names(self) -> List[str]:
