@@ -74,7 +74,7 @@ def make_data(config, transforms=None) -> Tuple[KinodataDocked, LightningDataset
     transforms.append(AddDistancesAndInteractions(config.interaction_radius))
 
     if config.add_docking_scores:
-        transforms.append(
+        transforms.extend(
             [
                 AddGlobalAttrToEdge(
                     ("pocket", "interacts", "ligand"), ["docking_score", "posit_prob"]
@@ -135,13 +135,14 @@ def train_regressor(config, fn_model: Callable[..., RegressionModel]):
 if __name__ == "__main__":
     meta_config = configuration.get("meta")
     config = configuration.get("data", meta_config.model_type, "training")
-    config = configuration.overwrite_from_file(config, "config_regressor_local.yaml")
     config["lr"] = 1e-4
     config["add_docking_scores"] = True
+    config['model_type'] = 'egnn'
+    config = configuration.overwrite_from_file(config, "config_regressor_local.yaml")
 
-    if meta_config.model_type == "egin":
+    if config.model_type == "egin":
         fn_model = make_egin_model
-    if meta_config.model_type == "egnn":
+    if config.model_type == "egnn":
         fn_model = make_egnn_model
 
     print(config)
