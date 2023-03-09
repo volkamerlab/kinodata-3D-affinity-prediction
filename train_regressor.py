@@ -125,7 +125,7 @@ def train_regressor(config, fn_model: Callable[..., RegressionModel]):
 
     _, data_module = make_data(config)
     model = fn_model(config)
-    val_checkpoint_callback = ModelCheckpoint(monitor="val_mae", mode="min")
+    val_checkpoint_callback = ModelCheckpoint(monitor="val/mae", mode="min")
     lr_monitor = LearningRateMonitor("epoch")
 
     trainer = pl.Trainer(

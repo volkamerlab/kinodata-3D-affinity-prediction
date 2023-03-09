@@ -43,7 +43,7 @@ class RegressionModel(Model):
         self.define_metrics()
 
     def define_metrics(self):
-        wandb.define_metric("val_mae", summary="min")
+        wandb.define_metric("val/mae", summary="min")
 
     def forward(self, batch) -> Tensor:
         node_embed = self.encoder.encode(batch)
@@ -58,9 +58,9 @@ class RegressionModel(Model):
     def validation_step(self, batch, *args):
         pred = self.forward(batch).flatten()
         val_mae = (pred - batch.y).abs().mean()
-        self.log("val_mae", val_mae, batch_size=pred.size(0), on_epoch=True)
+        self.log("val/mae", val_mae, batch_size=pred.size(0), on_epoch=True)
         return {
-            "val_mae": val_mae,
+            "val/mae": val_mae,
             "pred": pred,
             "target": batch.y,
             "ident": batch.ident,
@@ -92,8 +92,8 @@ class RegressionModel(Model):
 
     def test_step(self, batch, *args, **kwargs):
         info = self.validation_step(batch)
-        info["test_mae"] = info["val_mae"]
-        del info["val_mae"]
+        info["test_mae"] = info["val/mae"]
+        del info["val/mae"]
         return info
 
     def test_epoch_end(self, outputs, *args, **kwargs) -> None:

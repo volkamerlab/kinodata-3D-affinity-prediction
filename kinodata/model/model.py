@@ -38,7 +38,7 @@ class Model(pl.LightningModule):
         return [optim], [
             {
                 "scheduler": scheduler,
-                "monitor": "val_mae",
+                "monitor": "val/mae",
                 "interval": "epoch",
                 "frequency": 1,
             }

@@ -41,7 +41,7 @@ def train_baseline(config):
     _, data_module = make_data(config)
     model = make_model(config)
     val_checkpoint_callback = ModelCheckpoint(
-        monitor="val_mae",
+        monitor="val/mae",
         mode="min",
     )
     lr_monitor = LearningRateMonitor("epoch")
