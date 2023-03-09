@@ -24,7 +24,7 @@ from tqdm import tqdm
 
 from kinodata.transform.add_distances import AddDistancesAndInteractions
 from kinodata.transform.add_global_attr_to_edge import AddGlobalAttrToEdge
-from kinodata.transform.filter_activity import FilterActivityType
+from kinodata.transform.filter_activity import Compose, FilterActivityScore, FilterActivityType
 
 BOND_TYPE_TO_IDX = defaultdict(int)  # other bonds will map to 0
 BOND_TYPE_TO_IDX[BT.SINGLE] = 1
@@ -43,7 +43,8 @@ class KinodataDocked(InMemoryDataset):
         remove_hydrogen: bool = True,
         transform: Callable = None,
         pre_transform: Callable = None,
-        pre_filter: Callable = FilterActivityType(["pIC50"]),
+        pre_filter: Callable = (lambda _: True),
+        post_filter: Callable = Compose([FilterActivityType(["pIC50"]), FilterActivityScore]),
     ):
         self.remove_hydrogen = remove_hydrogen
 
@@ -52,7 +53,7 @@ class KinodataDocked(InMemoryDataset):
 
     @property
     def raw_file_names(self) -> List[str]:
-        return ["kinodata_docked.sdf.gz"]
+        return ["kinodata_docked_filtered.sdf.gz"]
 
     @property
     def processed_file_names(self) -> List[str]:
@@ -134,7 +135,7 @@ class KinodataDocked(InMemoryDataset):
         # with mp.Pool(chunk_num) as pool:
         # data_lists = pool.map(list(map(process_idx, tasks)), task_chunks)
         # data_list = sum(data_lists, start=[])
-        data_list = list(map(process_idx, tqdm(tasks)))
+        data_list = list(map(process_idx, tqdm(tasks[:10])))
 
         skipped = [
             ident for ident, data in zip(self.df.index, data_list) if data is None
