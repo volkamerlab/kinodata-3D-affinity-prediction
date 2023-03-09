@@ -240,6 +240,7 @@ class HeteroEGIN(nn.Module):
         norm: Union[str, Callable, None] = None,
         norm_kwargs: Optional[Dict[str, Any]] = None,
         jk: Optional[str] = None,
+        edge_attr_size: Optional[Dict[EdgeType, int]] = None,
         edge_dim: Optional[int] = None,
         **kwargs,
     ):
@@ -247,6 +248,8 @@ class HeteroEGIN(nn.Module):
         self.node_types = node_types
         self.edge_types = edge_types
         self.atom_emb = HeteroEmbedding(100, hidden_channels)
+        if edge_attr_size is not None:
+            edge_dim = edge_dim if edge_dim else max(edge_attr_size.values())
         egin = EGIN(
             hidden_channels,
             hidden_channels,
@@ -264,14 +267,26 @@ class HeteroEGIN(nn.Module):
             edge_dim,
             **kwargs,
         )
+        self.initial_edge_lins = nn.ModuleDict()
+        self.edge_key_mapping = dict()
+        if edge_attr_size is not None:
+            for key, size in edge_attr_size.items():
+                self.initial_edge_lins[str(key)] = nn.Linear(size, edge_dim, bias=False)
+                self.edge_key_mapping[str(key)] = key
+
         self.hetero_egin = to_hetero(egin, (node_types, edge_types))
 
     def forward(self, data: HeteroData) -> NodeEmbedding:
         x = self.atom_emb(**{nt: data[nt].z for nt in self.node_types})
+        edge_attr_dict = data.edge_attr_dict
+        for key, lin in self.initial_edge_lins.items():
+            _key = self.edge_key_mapping[key]
+            edge_attr_dict[_key] = lin(edge_attr_dict[_key])
+
         return self.hetero_egin(
             x,
             data.edge_index_dict,
-            edge_attr=data.edge_attr_dict,
+            edge_attr=edge_attr_dict,
             edge_weight=data.edge_weight_dict,
         )
 
