@@ -1,5 +1,5 @@
 import sys
-from typing import Callable, Tuple
+from typing import Callable, Tuple, Dict
 
 # dirty
 sys.path.append(".")
@@ -22,19 +22,12 @@ from kinodata.transform.add_global_attr_to_edge import AddGlobalAttrToEdge
 from kinodata.model.regression_model import RegressionModel
 from kinodata.model.egnn import EGNN
 from kinodata.model.egin import HeteroEGIN
+from kinodata.typing import EdgeType
 
 from kinodata import configuration
 
 
-def make_egnn_model(config: configuration.Config) -> RegressionModel:
-
-    # keyword arguments for the message passing class
-    mp_kwargs = {
-        "rbf_size": config.rbf_size,
-        "interaction_radius": config.interaction_radius,
-        "reduce": config.mp_reduce,
-    }
-
+def infer_edge_attr_size(config) -> Dict[EdgeType, int]:
     # dirty code
     # wandb does not accept this in the config..
 
@@ -46,6 +39,20 @@ def make_egnn_model(config: configuration.Config) -> RegressionModel:
         ("ligand", "interacts", "pocket"): docking_score_num,
     }
 
+    return edge_attr_size
+
+
+def make_egnn_model(config: configuration.Config) -> RegressionModel:
+
+    # keyword arguments for the message passing class
+    mp_kwargs = {
+        "rbf_size": config.rbf_size,
+        "interaction_radius": config.interaction_radius,
+        "reduce": config.mp_reduce,
+    }
+
+    edge_attr_size = infer_edge_attr_size(config)
+
     model = RegressionModel(
         config,
         partial(EGNN, message_layer_kwargs=mp_kwargs, edge_attr_size=edge_attr_size),
@@ -55,7 +62,8 @@ def make_egnn_model(config: configuration.Config) -> RegressionModel:
 
 
 def make_egin_model(config: configuration.Config) -> RegressionModel:
-    return RegressionModel(config, HeteroEGIN)
+    edge_attr_size = infer_edge_attr_size(config)
+    return RegressionModel(config, partial(HeteroEGIN, edge_attr_size=edge_attr_size))
 
 
 def make_data(config, transforms=None) -> Tuple[KinodataDocked, LightningDataset]:
@@ -80,7 +88,7 @@ def make_data(config, transforms=None) -> Tuple[KinodataDocked, LightningDataset
                     ("pocket", "interacts", "ligand"), ["docking_score", "posit_prob"]
                 ),
                 AddGlobalAttrToEdge(
-                    ("pocket", "interacts", "pocket"), ["docking_score", "posit_prob"]
+                    ("ligand", "interacts", "pocket"), ["docking_score", "posit_prob"]
                 ),
                 AddGlobalAttrToEdge(
                     ("ligand", "interacts", "ligand"), ["docking_score", "posit_prob"]
@@ -134,15 +142,18 @@ def train_regressor(config, fn_model: Callable[..., RegressionModel]):
 
 if __name__ == "__main__":
     meta_config = configuration.get("meta")
+    meta_config = configuration.overwrite_from_file(
+        meta_config, "config_regressor_local.yaml"
+    )
     config = configuration.get("data", meta_config.model_type, "training")
     config["lr"] = 1e-4
     config["add_docking_scores"] = True
-    config['model_type'] = 'egnn'
+    config["model_type"] = "egnn"
     config = configuration.overwrite_from_file(config, "config_regressor_local.yaml")
 
-    if config.model_type == "egin":
+    if meta_config.model_type == "egin":
         fn_model = make_egin_model
-    if config.model_type == "egnn":
+    if meta_config.model_type == "egnn":
         fn_model = make_egnn_model
 
     print(config)
