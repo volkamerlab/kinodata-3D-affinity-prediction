@@ -30,7 +30,7 @@ class FilterActivityScore:
         return data.docking_score < self.threshold
 
 
-class Compose:
+class FilterCombine:
     """
     Compose multiple activity filters using 'and'.
     """

@@ -24,7 +24,7 @@ from tqdm import tqdm
 
 from kinodata.transform.add_distances import AddDistancesAndInteractions
 from kinodata.transform.add_global_attr_to_edge import AddGlobalAttrToEdge
-from kinodata.transform.filter_activity import Compose, FilterActivityScore, FilterActivityType
+from kinodata.transform.filter_activity import FilterCombine, FilterActivityScore, FilterActivityType
 
 BOND_TYPE_TO_IDX = defaultdict(int)  # other bonds will map to 0
 BOND_TYPE_TO_IDX[BT.SINGLE] = 1
@@ -44,7 +44,7 @@ class KinodataDocked(InMemoryDataset):
         transform: Callable = None,
         pre_transform: Callable = None,
         pre_filter: Callable = (lambda _: True),
-        post_filter: Callable = Compose([FilterActivityType(["pIC50"]), FilterActivityScore]),
+        post_filter: Callable = FilterCombine([FilterActivityType(["pIC50"]), FilterActivityScore]),
     ):
         self.remove_hydrogen = remove_hydrogen
 
