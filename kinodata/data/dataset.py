@@ -55,11 +55,15 @@ class KinodataDocked(InMemoryDataset):
     ):
         self.remove_hydrogen = remove_hydrogen
 
-        super().__init__(root, transform, pre_transform, None)
+        super().__init__(root, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
         if post_filter is not None:
-            self._data_list = []
+            print("Separating data objects...")
+            data_list = [self.get(idx) for idx in tqdm(range(len(self)))]
+            print("Applying post filter...")
+            data_list = [data for data in tqdm(data_list) if post_filter(data)]
+            self.data, self.slices = self.collate(data_list)
 
     @property
     def raw_file_names(self) -> List[str]:
