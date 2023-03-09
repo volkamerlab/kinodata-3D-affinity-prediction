@@ -61,6 +61,8 @@ class KinodataDocked(InMemoryDataset):
         if post_filter is not None:
             print("Separating data objects...")
             data_list = [self.get(idx) for idx in tqdm(range(len(self)))]
+            # cache invalidation
+            self._data_list = None
             print("Applying post filter...")
             data_list = [data for data in tqdm(data_list) if post_filter(data)]
             self.data, self.slices = self.collate(data_list)
