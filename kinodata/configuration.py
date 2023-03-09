@@ -138,7 +138,7 @@ register(
     hidden_channels=128,
     num_layers=4,
     d_cut=5.0,
-    edge_dim=4,
+    edge_dim=None,
     readout_aggregation_type="sum",
     act="relu",
     final_act="softplus",
