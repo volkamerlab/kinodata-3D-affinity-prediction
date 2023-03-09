@@ -159,4 +159,5 @@ register(
     min_lr=1e-7,
     perturb_ligand_positions=None,
     perturb_pocket_positions=None,
+    add_docking_scores=False,
 )
