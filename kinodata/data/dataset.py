@@ -50,7 +50,7 @@ class KinodataDocked(InMemoryDataset):
         pre_transform: Callable = None,
         pre_filter: Callable = (lambda _: True),
         post_filter: Callable = FilterCombine(
-            [FilterActivityType(["pIC50"]), FilterActivgtyScore]
+            [FilterActivityType(["pIC50"]), FilterActivityScore()]
         ),
     ):
         self.remove_hydrogen = remove_hydrogen
