@@ -1,6 +1,16 @@
 import inspect
 
-from typing import Any, Dict, Hashable, Iterable, Optional, Union, TypeVar
+from typing import (
+    Any,
+    Dict,
+    Hashable,
+    Iterable,
+    MutableMapping,
+    Optional,
+    Union,
+    TypeVar,
+    Callable,
+)
 import traceback
 from collections import defaultdict
 from pathlib import Path
@@ -10,6 +20,8 @@ import torch
 import yaml
 
 T = TypeVar("T")
+
+_ROOT = Path(__file__).parents[1]
 
 
 class Config(dict):
@@ -21,22 +33,20 @@ class Config(dict):
     def __setattr__(self, __name: str, __value: Any) -> None:
         self[__name] == __value
 
-    def intersect(self, other: Union[dict, "Config"]) -> "Config":
+    def intersect(self, other: MutableMapping) -> "Config":
         return Config({k: v for k, v in self.items() if k in other})
 
     def subset(self, keys: Iterable[Hashable]) -> "Config":
         return Config({key: self[key] for key in keys if key in self})
 
-    def update(
-        self, other: Union[dict, "Config"], allow_duplicates: bool = True
-    ) -> "Config":
+    def update(self, other: MutableMapping, allow_duplicates: bool = True) -> "Config":
         if not allow_duplicates:
             intersection = self.intersect(other)
             if len(intersection) > 0:
                 raise ValueError(f"Duplicate keys detected: {intersection.keys()}")
         return Config(self | other)
 
-    def init(self, obj: type[T], *args, **kwargs) -> T:
+    def init(self, obj: Union[type[T], Callable[..., T]], *args, **kwargs) -> T:
         obj_signature = inspect.signature(obj)
         sub_config = self.subset(obj_signature.parameters.keys())
         sub_config.update(kwargs, allow_duplicates=False)
@@ -85,7 +95,7 @@ def overwrite_from_file(config: Config, fp: Union[str, Path], verbose: bool = Tr
 
 
 def get(*config_names: str) -> Config:
-    key_counts = defaultdict(int)
+    key_counts: Dict[str, int] = defaultdict(int)
     for name in config_names:
         assert name in configs, f'Unknown config: "{name}"'
         for key in configs[name]:
@@ -113,12 +123,9 @@ register(
         ("pocket", "interacts", "ligand"),
     ],
     seed=420,
-    train_size=0.8,
-    val_size=0.1,
-    test_size=0.1,
     use_bonds=True,
     add_artificial_decoys=False,
-    cold_split=False,
+    data_split=_ROOT / "data" / "splits" / "scaffold_split_811.csv",
 )
 
 register(

@@ -1,9 +1,10 @@
-from collections import defaultdict
-from pathlib import Path
-from typing import Callable, List
-from warnings import warn
+import multiprocessing as mp
 import os
+from collections import defaultdict
 from functools import cached_property
+from pathlib import Path
+from typing import Any, Callable, Dict, List
+from warnings import warn
 
 import pandas as pd
 import rdkit.Chem as Chem
@@ -11,7 +12,13 @@ import rdkit.Chem.AllChem as AllChem
 import requests
 import torch
 import torch.nn.functional as F
-import multiprocessing as mp
+from kinodata.transform.add_distances import AddDistancesAndInteractions
+from kinodata.transform.add_global_attr_to_edge import AddGlobalAttrToEdge
+from kinodata.transform.filter_activity import (
+    FilterActivityScore,
+    FilterActivityType,
+    FilterCombine,
+)
 from rdkit import RDLogger
 from rdkit.Chem import PandasTools
 from rdkit.Chem.rdchem import BondType as BT
@@ -19,17 +26,9 @@ from rdkit.Chem.rdmolops import AddHs
 from torch import Tensor
 from torch_geometric.data import HeteroData, InMemoryDataset
 from torch_geometric.data.separate import separate
-from torch_geometric.utils import to_undirected
 from torch_geometric.transforms import Compose
+from torch_geometric.utils import to_undirected
 from tqdm import tqdm
-
-from kinodata.transform.add_distances import AddDistancesAndInteractions
-from kinodata.transform.add_global_attr_to_edge import AddGlobalAttrToEdge
-from kinodata.transform.filter_activity import (
-    FilterCombine,
-    FilterActivityScore,
-    FilterActivityType,
-)
 
 BOND_TYPE_TO_IDX = defaultdict(int)  # other bonds will map to 0
 BOND_TYPE_TO_IDX[BT.SINGLE] = 1
@@ -66,6 +65,9 @@ class KinodataDocked(InMemoryDataset):
             print("Applying post filter...")
             data_list = [data for data in tqdm(data_list) if post_filter(data)]
             self.data, self.slices = self.collate(data_list)
+
+    def iter_no_transforms(self):
+        self.get()
 
     @property
     def raw_file_names(self) -> List[str]:
@@ -130,11 +132,11 @@ class KinodataDocked(InMemoryDataset):
 
         data_list = []
         skipped: List[str] = []
-        print("Creating PyG data objects..")
 
         tasks = [
             (
                 ident,
+                row["compound_structures.canonical_smiles"],
                 row["molecule"],
                 float(row["activities.standard_value"]),
                 row["activities.standard_type"],
@@ -142,16 +144,17 @@ class KinodataDocked(InMemoryDataset):
                 float(row["docking.chemgauss_score"]),
                 float(row["docking.posit_probability"]),
             )
-            for ident, row in self.df.iterrows()
+            for ident, row in tqdm(
+                self.df.iterrows(),
+                desc="Creating PyG object tasks..",
+                total=len(self.df),
+            )
         ]
 
-        # chunk_num = os.cpu_count() - 1
-        # chunk_size = int(len(tasks) / chunk_num)
-        # task_chunks = [tasks[pos:pos+chunk_size] for pos in range(0, len(tasks), chunk_size)]
-        # with mp.Pool(chunk_num) as pool:
-        # data_lists = pool.map(list(map(process_idx, tasks)), task_chunks)
-        # data_list = sum(data_lists, start=[])
-        data_list = list(map(process_idx, tqdm(tasks[:10])))
+        with mp.Pool(os.cpu_count()) as pool:
+            data_list = pool.map(process_idx, tasks)
+
+        # data_list = list(map(process_idx, tasks))
 
         skipped = [
             ident for ident, data in zip(self.df.index, data_list) if data is None
@@ -171,6 +174,11 @@ class KinodataDocked(InMemoryDataset):
 
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
+
+    def ident_index_map(self) -> Dict[Any, int]:
+        # this may be very slow if self.transform is computationally expensive
+        mapping = [(data.ident, index) for index, data in enumerate(self)]
+        return dict(mapping)
 
 
 def process_chunk(tasks) -> List:
@@ -225,6 +233,7 @@ def add_bonds(mol, data, key):
 def process_idx(args):
     (
         ident,
+        smiles,
         ligand,
         activity,
         activity_type,
@@ -251,6 +260,7 @@ def process_idx(args):
 
     data.activity_type = activity_type
     data.ident = ident
+    data.smiles = smiles
 
     return data
 

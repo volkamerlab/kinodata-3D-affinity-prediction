@@ -1,2 +1,2 @@
 import kinodata.configuration as configuration
-import kinodata.typing as typing
+import kinodata.types as types

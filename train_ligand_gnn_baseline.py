@@ -38,7 +38,7 @@ def make_model(config) -> LigandGNNBaseline:
 def train_baseline(config):
     logger = WandbLogger(log_model="all")
 
-    _, data_module = make_data(config)
+    data_module = make_data(config)
     model = make_model(config)
     val_checkpoint_callback = ModelCheckpoint(
         monitor="val/mae",
