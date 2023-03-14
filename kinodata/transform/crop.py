@@ -7,7 +7,7 @@ from torch_geometric.utils import subgraph
 
 from torch_cluster import knn
 
-from kinodata.typing import NodeType, EdgeType
+from kinodata.types import NodeType, EdgeType
 
 
 class RandomCropComplex(BaseTransform):

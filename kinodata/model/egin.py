@@ -16,7 +16,7 @@ from torch_geometric.nn import to_hetero
 from torch_geometric.data import HeteroData
 from kinodata.model.atom_embedding import HeteroEmbedding
 
-from kinodata.typing import EdgeType, NodeEmbedding, NodeType
+from kinodata.types import EdgeType, NodeEmbedding, NodeType
 
 
 class DistanceScaleShift(Protocol):

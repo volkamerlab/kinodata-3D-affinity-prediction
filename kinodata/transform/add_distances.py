@@ -13,7 +13,7 @@ from torch_geometric.utils import (
 from torch_cluster import radius
 from itertools import product
 
-from kinodata.typing import NodeType
+from kinodata.types import NodeType
 
 
 def interactions_and_distances(

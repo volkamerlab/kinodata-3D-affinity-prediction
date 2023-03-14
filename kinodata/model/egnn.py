@@ -10,7 +10,7 @@ from torch_geometric.nn.norm import GraphNorm
 
 from collections import defaultdict
 
-from kinodata.typing import NodeType, NodeEmbedding, EdgeType
+from kinodata.types import NodeType, NodeEmbedding, EdgeType
 from kinodata.model.resolve import resolve_act
 
 

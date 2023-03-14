@@ -6,7 +6,7 @@ import pytorch_lightning as pl
 from torch_geometric.data import HeteroData
 
 from kinodata.model.egnn import EGNN
-from kinodata.typing import NodeEmbedding
+from kinodata.types import NodeEmbedding
 from kinodata.configuration import Config
 
 

@@ -3,7 +3,7 @@ import torch
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.data import HeteroData
 
-from kinodata.typing import EdgeType
+from kinodata.types import EdgeType
 
 
 class AddGlobalAttrToEdge(BaseTransform):
