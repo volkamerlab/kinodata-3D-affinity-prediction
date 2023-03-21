@@ -12,6 +12,7 @@ from torch_geometric.nn.models import GIN
 from torch_geometric.nn.resolver import aggregation_resolver
 
 from kinodata.model.ligand_gin_baseline import LigandGNNBaseline
+from kinodata.callback import GarbageCallback
 from kinodata import configuration
 
 from train_regressor import make_data
@@ -46,13 +47,14 @@ def train_baseline(config):
     )
     lr_monitor = LearningRateMonitor("epoch")
 
+
     trainer = pl.Trainer(
         logger=logger,
         auto_select_gpus=True,
         max_epochs=config.epochs,
         accelerator=config.accelerator,
         accumulate_grad_batches=config.accumulate_grad_batches,
-        callbacks=[val_checkpoint_callback, lr_monitor],
+        callbacks=[val_checkpoint_callback, lr_monitor, GarbageCallback()],
     )
 
     trainer.fit(model, datamodule=data_module)
@@ -60,6 +62,10 @@ def train_baseline(config):
 
 
 if __name__ == "__main__":
+    import torch
+
+    print(f"torch.cuda.device_count(): {torch.cuda.device_count()}")
+
     configuration.register(
         "ligand_gnn_baseline",
         gnn_type="gin",
@@ -75,6 +81,4 @@ if __name__ == "__main__":
     config = config.update_from_args()
 
     wandb.init(config=config, project="kinodata-docked-rescore", tags=["ligand-only"])
-
-    wandb.agent()
     train_baseline(wandb.config)
