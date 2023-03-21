@@ -68,6 +68,7 @@ class ScaffoldSplitting:
         test_idxs = np.arange(skip_first_k, num_scaffolds, chunk_size)
         random_offsets = rng.integers(0, chunk_size, size=(test_idxs.shape[0],))
         test_idxs += random_offsets
+        test_idxs[-1] = min(test_idxs[-1], num_scaffolds - 1)
         train = np.full(num_scaffolds, True)
         train[test_idxs] = False
 
@@ -111,7 +112,7 @@ class ScaffoldSplitting:
         df["ident"] = df["ident"].astype(int)
         return df
 
-    CACHE_FN = "scaffold_split.csv"
+    CACHE_FN = "scaffold_split_{seed}.csv"
 
     def __init__(
         self,
@@ -128,20 +129,23 @@ class ScaffoldSplitting:
         self.train_size = train_size
         self.val_size = val_size
         self.test_size = test_size
-        self.cache = cache_dir / ScaffoldSplitting.CACHE_FN
+        self.cache_dir = cache_dir
 
     def __call__(
         self,
         dataset,
         seed: int,
-    ) -> Split:
-        if not self.cache.exists():
-            print(f"Creating scaffold split at {self.cache}..")
+        return_df: bool = False,
+        use_cache: bool = True,
+    ) -> Union[Split, Tuple[Split, pd.DataFrame]]:
+        cache = self.cache_dir / ScaffoldSplitting.CACHE_FN.format(seed=seed)
+        if not cache.exists() or not use_cache:
+            print(f"Creating scaffold split at {cache}..")
             df = ScaffoldSplitting.split(tqdm(dataset), self.train_size, seed)
-            df.to_csv(self.cache, index=False)
+            df.to_csv(cache, index=False)
         else:
-            print(f"Loading scaffold split from {self.cache}..")
-            df = pd.read_csv(self.cache)
+            print(f"Loading scaffold split from {cache}..")
+            df = pd.read_csv(cache)
 
         train_ident = df[df.split == "train"].ident.values
         test_ident = df[df.split == "test"].ident.values
@@ -154,13 +158,23 @@ class ScaffoldSplitting:
         val_ident = test_ident[:pivot]
         test_ident = test_ident[pivot:]
 
-        return Split(train_ident, val_ident, test_ident)
+        split = Split(train_ident, val_ident, test_ident)
+        if return_df:
+            return split, df
+        return split
 
 
 if __name__ == "__main__":
     from kinodata.data.dataset import KinodataDocked
 
     dataset = KinodataDocked()
+    dataset = dataset
     splitter = ScaffoldSplitting(0.8, 0.1, 0.1, "data/splits/scaffold")
-    split = splitter(dataset, 0)
-    print(split)
+    for seed in [7, 11, 13, 17, 19]:
+        split, df = splitter(dataset, seed, return_df=True)
+        df_split = split.to_data_frame()
+        df_joined = pd.merge(df, df_split, on="ident", how="inner")
+        df_joined["split"] = df_joined["split_y"]
+        df_joined.drop(columns=["split_x", "split_y"]).to_csv(
+            f"scaffold_split_{seed}.csv", index=False
+        )

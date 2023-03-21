@@ -78,5 +78,9 @@ if __name__ == "__main__":
     config = configuration.overwrite_from_file(
         config, "config_ligand_baseline_local.yaml"
     )
+    config = config.update_from_args()
+
     wandb.init(config=config, project="kinodata-docked-rescore", tags=["ligand-only"])
+
+    wandb.agent()
     train_baseline(wandb.config)

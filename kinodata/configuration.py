@@ -15,6 +15,7 @@ import traceback
 from collections import defaultdict
 from pathlib import Path
 from warnings import warn
+from argparse import ArgumentParser, Namespace
 
 import torch
 import yaml
@@ -52,6 +53,26 @@ class Config(dict):
         sub_config.update(kwargs, allow_duplicates=False)
         bound_arguments = obj_signature.bind(*args, **sub_config)
         return obj(*bound_arguments.args, **bound_arguments.kwargs)
+
+    def argparser(
+        self,
+        admissible_types: list = [int, float, str, Path],
+        overwrite_default_values: bool = True,
+    ) -> ArgumentParser:
+        parser = ArgumentParser()
+        for key, value in self.items():
+            if not any(isinstance(value, t) for t in admissible_types):
+                continue
+            default = None if overwrite_default_values else value
+            parser.add_argument(f"--{key}", default=default, type=type(value))
+        return parser
+
+    def update_from_args(self) -> "Config":
+        parser = self.argparser(overwrite_default_values=True)
+        args = parser.parse_args()
+        args = {key: getattr(args, key) for key in self if hasattr(args, key)}
+        updated_args = {key: value for key, value in args.items() if value is not None}
+        return self.update(updated_args)
 
     def __repr__(self) -> str:
         inner = ", ".join([f"{key}={value}" for key, value in self.items()])

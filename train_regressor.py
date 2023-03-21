@@ -1,3 +1,4 @@
+from pathlib import Path
 import sys
 from typing import Callable, Optional, Tuple, Dict
 
@@ -110,6 +111,9 @@ def make_data(config: configuration.Config, transforms=None) -> LightningDataset
         dataset_cls = KinodataDockedWithDecoys
     else:
         dataset_cls = KinodataDocked
+
+    if not Path(config.data_split).exists():
+        raise FileNotFoundError(config.data_split)
 
     print(f"Loading split from {config.data_split}..")
     # split that assigns *idents* to train/val/test
