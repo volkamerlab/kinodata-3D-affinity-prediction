@@ -172,6 +172,7 @@ if __name__ == "__main__":
     config["add_docking_scores"] = True
     config["model_type"] = "egnn"
     config = configuration.overwrite_from_file(config, "config_regressor_local.yaml")
+    config = config.update_from_args()
 
     if meta_config.model_type == "egin":
         fn_model = make_egin_model
