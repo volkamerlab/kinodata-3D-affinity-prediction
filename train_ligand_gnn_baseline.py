@@ -54,7 +54,7 @@ def train_baseline(config):
         max_epochs=config.epochs,
         accelerator=config.accelerator,
         accumulate_grad_batches=config.accumulate_grad_batches,
-        callbacks=[val_checkpoint_callback, lr_monitor, GarbageCallback()],
+        callbacks=[val_checkpoint_callback, lr_monitor],
     )
 
     trainer.fit(model, datamodule=data_module)
