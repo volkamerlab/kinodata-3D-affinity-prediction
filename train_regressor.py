@@ -39,7 +39,7 @@ def infer_edge_attr_size(config: configuration.Config) -> Dict[EdgeType, int]:
 
     docking_score_num = 2 if config.add_docking_scores else 0
     edge_attr_size = {
-        # 4: single, double, triple, "other"
+        # 4: single, double, triple, "other" bond
         ("ligand", "interacts", "ligand"): 4 + docking_score_num,
         ("pocket", "interacts", "ligand"): docking_score_num,
         ("ligand", "interacts", "pocket"): docking_score_num,
@@ -160,18 +160,17 @@ def train_regressor(
     )
 
     trainer.fit(model, datamodule=data_module)
+    trainer.test(ckpt_path="best", datamodule=data_module)
 
 
 if __name__ == "__main__":
     meta_config = configuration.get("meta")
-    meta_config = configuration.overwrite_from_file(
-        meta_config, "config_regressor_local.yaml"
-    )
+    meta_config = meta_config.update_from_file("config_regressor_local.yaml")
     config = configuration.get("data", meta_config.model_type, "training")
     config["lr"] = 1e-4
-    config["add_docking_scores"] = True
+    config["add_docking_scores"] = False
     config["model_type"] = "egnn"
-    config = configuration.overwrite_from_file(config, "config_regressor_local.yaml")
+    config = config.update_from_file("config_regressor_local.yaml")
     config = config.update_from_args()
 
     if meta_config.model_type == "egin":
@@ -179,6 +178,7 @@ if __name__ == "__main__":
     if meta_config.model_type == "egnn":
         fn_model = make_egnn_model
 
-    print(config)
+    for key, value in config.items():
+        print(f"{key}: {value}")
     wandb.init(config=config, project="kinodata-docked-rescore")
     train_regressor(config, fn_model)

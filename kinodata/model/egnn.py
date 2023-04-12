@@ -13,6 +13,8 @@ from collections import defaultdict
 from kinodata.types import NodeType, NodeEmbedding, EdgeType
 from kinodata.model.resolve import resolve_act
 
+RawMessage = Tuple[Tensor, Tensor, Tensor, Tensor]
+
 
 class EGNNMessageLayer(nn.Module):
     def __init__(
@@ -33,23 +35,40 @@ class EGNNMessageLayer(nn.Module):
         self.act = resolve_act(act)
         self.final_act = resolve_act(final_act)
         self.reduce = reduce
+        self.hidden_channels = hidden_channels
 
-        message_repr_size = self.compute_message_repr_size(
+        self.message_repr_size = self.compute_message_repr_size(
             source_node_size,
             target_node_size,
             edge_attr_size,
             distance_size,
             hidden_channels,
         )
-        self.fn_message = nn.Sequential(
-            nn.Linear(message_repr_size, hidden_channels),
+        self.init_parameters()
+
+        if target_node_size != output_channels:
+            self.residual_proj = nn.Linear(
+                target_node_size, output_channels, bias=False
+            )
+        else:
+            self.residual_proj = nn.Identity()
+        self.fn_combine = nn.Sequential(
+            nn.Linear(target_node_size + hidden_channels, hidden_channels),
             self.act,
-            nn.Linear(hidden_channels, hidden_channels),
+            nn.Linear(hidden_channels, output_channels),
+        )
+        self.norm = GraphNorm(output_channels)
+
+    def init_parameters(self):
+        self._fn_message = nn.Sequential(
+            nn.Linear(self.message_repr_size, self.hidden_channels),
+            self.act,
+            nn.Linear(self.hidden_channels, self.hidden_channels),
             self.act,
         )
-        self.residual_proj = nn.Linear(target_node_size, output_channels, bias=False)
-        self.fn_combine = nn.Linear(target_node_size + hidden_channels, output_channels)
-        self.norm = GraphNorm(output_channels)
+
+    def fn_message(self, message: Tensor) -> Tensor:
+        return self._fn_message(message)
 
     def compute_message_repr_size(
         self,
@@ -87,12 +106,12 @@ class EGNNMessageLayer(nn.Module):
         )
         aggr_messages = torch.zeros_like(target_node)
         scatter(messages, i_target, 0, reduce=self.reduce, out=aggr_messages)
-        return self.norm(
-            self.final_act(
+        return self.final_act(
+            self.norm(
                 self.residual_proj(target_node)
-                + self.fn_combine(torch.cat((target_node, aggr_messages), dim=1))
-            ),
-            target_batch,
+                + self.fn_combine(torch.cat((target_node, aggr_messages), dim=1)),
+                target_batch,
+            )
         )
 
 
@@ -158,15 +177,23 @@ class RBFLayer(EGNNMessageLayer):
             final_act,
             reduce,
         )
+
         if rbf_size is None:
             rbf_size = hidden_channels
+
         self.rbf = ExpnormRBFEmbedding(rbf_size, interaction_radius)
         self.w_dist = nn.Linear(rbf_size, hidden_channels, bias=False)
-        self.w_edge = nn.Linear(
-            source_node_size + target_node_size + edge_attr_size,
-            hidden_channels,
-            bias=False,
+        self.w_edge = nn.Sequential(
+            nn.Linear(
+                source_node_size + target_node_size + edge_attr_size,
+                hidden_channels,
+            ),
+            self.act,
+            nn.Linear(hidden_channels, hidden_channels),
         )
+
+    def init_parameters(self):
+        self.bias = nn.Parameter(torch.zeros(self.hidden_channels), requires_grad=True)
 
     def compute_message_repr_size(
         self,
@@ -184,14 +211,18 @@ class RBFLayer(EGNNMessageLayer):
         target_node: Tensor,
         edge_attr: Tensor,
         distance: Tensor,
-    ) -> Tensor:
-        dist_emb = self.w_dist(self.rbf(distance)).tanh()
+    ) -> RawMessage:
+        return source_node, target_node, edge_attr, distance
+
+    def fn_message(self, message: RawMessage) -> Tensor:
+        source_node, target_node, edge_attr, distance = message
+        dist_emb = self.w_dist(self.rbf(distance))
         if edge_attr is not None:
             edge_repr = torch.cat([source_node, target_node, edge_attr], dim=1)
         else:
             edge_repr = torch.cat([source_node, target_node], dim=1)
         edge_emb = self.w_edge(edge_repr)
-        return dist_emb * edge_emb
+        return self.act(dist_emb * edge_emb + self.bias)
 
 
 def resolve_mp_type(mp_type: str) -> type[EGNNMessageLayer]:
