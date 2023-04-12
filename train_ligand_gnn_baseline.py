@@ -26,6 +26,7 @@ def make_model(config) -> LigandGNNBaseline:
             num_layers=config.num_layers,
             out_channels=config.hidden_channels,
             act=config.act,
+            norm="GraphNorm",
         )
     else:
         raise ValueError(config.gnn_type)
@@ -46,7 +47,6 @@ def train_baseline(config):
         mode="min",
     )
     lr_monitor = LearningRateMonitor("epoch")
-
 
     trainer = pl.Trainer(
         logger=logger,
@@ -74,11 +74,13 @@ if __name__ == "__main__":
         act="silu",
         readout_type="sum",
     )
+
     config = configuration.get("data", "training", "ligand_gnn_baseline")
-    config = configuration.overwrite_from_file(
-        config, "config_ligand_baseline_local.yaml"
-    )
+    config = config.update_from_file("config_ligand_baseline_local.yaml")
     config = config.update_from_args()
+
+    for key, value in config.items():
+        print(f"{key}: {value}")
 
     wandb.init(config=config, project="kinodata-docked-rescore", tags=["ligand-only"])
     train_baseline(wandb.config)

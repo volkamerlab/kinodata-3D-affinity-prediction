@@ -74,6 +74,17 @@ class Config(dict):
         updated_args = {key: value for key, value in args.items() if value is not None}
         return self.update(updated_args)
 
+    def update_from_file(self, fp: Union[str, Path], verbose: bool = True) -> "Config":
+        fp = Path(fp)
+        if not fp.exists():
+            warn(f"Config file does not exist: {fp}")
+            return self
+        file_config = load_from_file(fp)
+        if verbose:
+            print(f"Reading additional config from {fp}:")
+            print("\n".join([f"{key}: {value}" for key, value in file_config.items()]))
+        return self.update(file_config)
+
     def __repr__(self) -> str:
         inner = ", ".join([f"{key}={value}" for key, value in self.items()])
         return f"{self.__class__.__name__}({inner})"
@@ -101,18 +112,6 @@ def load_from_file(fp: Path) -> Config:
         traceback.print_exc()
         exit(1)
     return config
-
-
-def overwrite_from_file(config: Config, fp: Union[str, Path], verbose: bool = True):
-    fp = Path(fp)
-    if not fp.exists():
-        warn(f"Config file does not exist: {fp}")
-        return config
-    file_config = load_from_file(fp)
-    if verbose:
-        print(f"Reading additional config from {fp}:")
-        print("\n".join([f"{key}: {value}" for key, value in file_config.items()]))
-    return config.update(file_config)
 
 
 def get(*config_names: str) -> Config:
@@ -151,20 +150,20 @@ register(
 
 register(
     "egnn",
-    num_mp_layers=4,
-    hidden_channels=64,
+    num_mp_layers=3,
+    hidden_channels=128,
     act="silu",
     final_act="softplus",
     mp_type="rbf",
     mp_reduce="sum",
-    rbf_size=64,
+    rbf_size=128,
     readout_aggregation_type="sum",
 )
 
 register(
     "egin",
     hidden_channels=128,
-    num_layers=4,
+    num_layers=3,
     d_cut=5.0,
     edge_dim=None,
     readout_aggregation_type="sum",
@@ -176,10 +175,10 @@ register(
     "training",
     lr=2e-4,
     weight_decay=1e-5,
-    batch_size=128,
+    batch_size=64,
     accumulate_grad_batches=1,
     epochs=500,
-    num_workers=32,
+    num_workers=16,
     accelerator="gpu" if torch.cuda.is_available() else "cpu",
     loss_type="mse",
     lr_factor=0.8,

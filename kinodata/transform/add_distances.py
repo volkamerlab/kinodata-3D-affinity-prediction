@@ -17,14 +17,16 @@ from kinodata.types import NodeType
 
 
 def interactions_and_distances(
-    pos1: Tensor,
-    pos2: Optional[Tensor] = None,
+    pos_x: Tensor,
+    pos_y: Optional[Tensor] = None,
+    batch_x: Optional[Tensor] = None,
+    batch_y: Optional[Tensor] = None,
     r: float = 1.0,
 ) -> Tuple[Tensor, Tensor]:
-    if pos2 is None:
-        pos2 = pos1
-    y_ind, x_ind = radius(pos1, pos2, r)
-    dist = (pos1[x_ind] - pos2[y_ind]).pow(2).sum(dim=1).sqrt()
+    if pos_y is None:
+        pos_y = pos_x
+    y_ind, x_ind = radius(pos_x, pos_y, r, batch_x=batch_x, batch_y=batch_y)
+    dist = (pos_x[x_ind] - pos_y[y_ind]).pow(2).sum(dim=1).sqrt()
     edge_index = torch.stack((x_ind, y_ind))
     return edge_index, dist
 
@@ -56,7 +58,7 @@ class AddDistancesAndInteractions(BaseTransform):
                 edge_index, dist = interactions_and_distances(
                     data[nt_a].pos,
                     data[nt_b].pos,
-                    self.radius,
+                    r=self.radius,
                 )
                 if nt_a == nt_b:
                     num_nodes = data[nt_a].num_nodes
@@ -131,7 +133,7 @@ if __name__ == "__main__":
     x = torch.tensor([1.0, 2.1, 3.8]).float().unsqueeze(1)
     y = torch.tensor([0, 3, 4.7]).float().unsqueeze(1)
 
-    edge_index, dist = interactions_and_distances(x, y, 1.0)
+    edge_index, dist = interactions_and_distances(x, y, r=1.0)
     print(edge_index, dist)
-    edge_index, dist = interactions_and_distances(y, x, 1.0)
+    edge_index, dist = interactions_and_distances(y, x, r=1.0)
     print(edge_index, dist)
