@@ -131,7 +131,7 @@ def get(*config_names: str) -> Config:
     return config
 
 
-register("meta", model_type="egin")
+register("meta", model_type="egnn")
 
 register(
     "data",
