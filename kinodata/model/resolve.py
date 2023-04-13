@@ -20,8 +20,11 @@ def resolve_act(act: str) -> nn.Module:
 
 
 def resolve_loss(loss_type: str) -> nn.Module:
+    loss_type = loss_type.lower()
     if loss_type == "mse":
         return nn.MSELoss()
+    if loss_type == "mae":
+        return nn.L1Loss()
     raise ValueError(loss_type)
 
 
