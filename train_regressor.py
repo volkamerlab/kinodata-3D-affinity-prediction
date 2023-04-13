@@ -150,6 +150,8 @@ def train_regressor(
     val_checkpoint_callback = ModelCheckpoint(monitor="val/mae", mode="min")
     lr_monitor = LearningRateMonitor("epoch")
 
+    print(model)
+
     trainer = pl.Trainer(
         logger=logger,
         auto_select_gpus=True,

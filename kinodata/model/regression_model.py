@@ -44,6 +44,7 @@ class RegressionModel(Model):
 
     def define_metrics(self):
         wandb.define_metric("val/mae", summary="min")
+        wandb.define_metric("val/corr", summary="max")
 
     def forward(self, batch) -> Tensor:
         node_embed = self.encoder.encode(batch)
@@ -52,7 +53,7 @@ class RegressionModel(Model):
     def training_step(self, batch, *args) -> Tensor:
         pred = self.forward(batch).view(-1, 1)
         loss = self.criterion(pred, batch.y.view(-1, 1))
-        self.log("train_loss", loss, batch_size=pred.size(0), on_epoch=True)
+        self.log("train/loss", loss, batch_size=pred.size(0), on_epoch=True)
         return loss
 
     def validation_step(self, batch, *args):
@@ -84,7 +85,7 @@ class RegressionModel(Model):
         ax.set_title(f"corr={corr}")
         wandb.log({"scatter_val": wandb.Image(fig)})
         plt.close(fig)
-        self.log("val_corr", corr)
+        self.log("val/corr", corr)
 
     def predict_step(self, batch, *args):
         pred = self.forward(batch).flatten()
@@ -92,7 +93,7 @@ class RegressionModel(Model):
 
     def test_step(self, batch, *args, **kwargs):
         info = self.validation_step(batch)
-        info["test_mae"] = info["val/mae"]
+        info["test/mae"] = info["val/mae"]
         del info["val/mae"]
         return info
 
