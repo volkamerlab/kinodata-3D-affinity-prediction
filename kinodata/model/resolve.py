@@ -23,8 +23,10 @@ def resolve_loss(loss_type: str) -> nn.Module:
     loss_type = loss_type.lower()
     if loss_type == "mse":
         return nn.MSELoss()
-    if loss_type == "mae":
+    if loss_type in ("mae", "l1"):
         return nn.L1Loss()
+    if loss_type == "smooth_l1":
+        return nn.SmoothL1Loss()
     raise ValueError(loss_type)
 
 
