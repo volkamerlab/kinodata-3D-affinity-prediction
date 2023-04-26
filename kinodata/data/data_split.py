@@ -1,6 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional, Protocol, Union, Mapping, TypeVar, Dict, Any, Generic
-import json
+from typing import List, Optional, Union, Mapping, TypeVar, Dict, Any, Generic
 from pathlib import Path
 import pandas as pd
 
@@ -12,7 +11,7 @@ from torch.utils.data import Dataset
 IndexLike = Union[Tensor, ndarray, List[int]]
 PathLike = Union[Path, str]
 
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, field
 
 
 Kwargs = Dict[str, Any]
@@ -27,6 +26,7 @@ class Split(Generic[IndexType]):
     train_split: List[IndexType]
     val_split: Optional[List[IndexType]] = field(default_factory=list)
     test_split: Optional[List[IndexType]] = field(default_factory=list)
+    source_file: Optional[str] = None
 
     def __post_init__(self):
         self.train_split = list(self.train_split)
@@ -51,36 +51,37 @@ class Split(Generic[IndexType]):
     def remap_index(
         self, mapping: Mapping[IndexType, OtherIndexType]
     ) -> "Split[OtherIndexType]":
-        return Split(
+        remapped = Split(
             [mapping[t] for t in self.train_split],
             [mapping[t] for t in self.val_split],
             [mapping[t] for t in self.test_split],
         )
+        remapped.source_file = self.source_file
+        return remapped
 
-    def to_data_frame(self) -> pd.DataFrame:
+    def to_data_frame(
+        self, split_key: str = "split", index_key: str = "ident"
+    ) -> pd.DataFrame:
         full_split = self.train_split + self.val_split + self.test_split
         split_assignment = (
             ["train"] * len(self.train_split)
             + ["val"] * len(self.val_split)
             + ["test"] * len(self.test_split)
         )
-        return pd.DataFrame({"ident": full_split, "split": split_assignment})
+        return pd.DataFrame({index_key: full_split, split_key: split_assignment})
 
     @classmethod
-    def from_data_frame(cls, df: pd.DataFrame):
+    def from_data_frame(
+        cls, df: pd.DataFrame, split_key: str = "split", index_key: str = "ident"
+    ):
         return cls(
-            df[df.split == "train"].ident.values.tolist(),
-            df[df.split == "val"].ident.values.tolist(),
-            df[df.split == "test"].ident.values.tolist(),
+            df[df[split_key] == "train"][index_key].values.tolist(),
+            df[df[split_key] == "val"][index_key].values.tolist(),
+            df[df[split_key] == "test"][index_key].values.tolist(),
         )
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}[{type(self.train_split[0])}](train={len(self.train_split)}, val={len(self.val_split)}, test={len(self.test_split)})"
-
-
-class SplittingMethod(Protocol):
-    def __call__(self, dataset: Dataset, seed: int = 0) -> Split:
-        ...
+        return f"{self.__class__.__name__}[{type(self.train_split[0])}](train={len(self.train_split)}, val={len(self.val_split)}, test={len(self.test_split)}, source={self.source_file})"
 
 
 class RandomSplit:

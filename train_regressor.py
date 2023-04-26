@@ -118,9 +118,10 @@ def make_data(config: configuration.Config, transforms=None) -> LightningDataset
     print(f"Loading split from {config.data_split}..")
     # split that assigns *idents* to train/val/test
     split = Split.from_data_frame(pd.read_csv(config.data_split))
+    split.source_file = str(config.data_split)
+    print(split)
     print("Remapping idents to dataset index..")
     index_mapping = dataset_cls().ident_index_map()
-    index_mapping = {int(k): v for k, v in index_mapping.items()}
     split = split.remap_index(index_mapping)
 
     print("Creating data module:")
@@ -169,7 +170,6 @@ if __name__ == "__main__":
     meta_config = configuration.get("meta")
     meta_config = meta_config.update_from_file("config_regressor_local.yaml")
     config = configuration.get("data", meta_config.model_type, "training")
-    config["lr"] = 1e-4
     config["add_docking_scores"] = False
     config["model_type"] = "egnn"
     config = config.update_from_file("config_regressor_local.yaml")

@@ -60,10 +60,12 @@ class KinodataDocked(InMemoryDataset):
         if post_filter is not None:
             print("Separating data objects...")
             data_list = [self.get(idx) for idx in tqdm(range(len(self)))]
+            len_before_filter = len(data_list)
             # cache invalidation
             self._data_list = None
-            print("Applying post filter...")
+            print(f"Applying post filter {post_filter}...")
             data_list = [data for data in tqdm(data_list) if post_filter(data)]
+            print(f"Filter removed {len_before_filter - len(data_list)} items.")
             self.data, self.slices = self.collate(data_list)
 
     def iter_no_transforms(self):
@@ -113,8 +115,7 @@ class KinodataDocked(InMemoryDataset):
                 params={"structure_ID": structure_id},
             )
             resp.raise_for_status()
-            if resp.ok:
-                fp.write_bytes(resp.content)
+            fp.write_bytes(resp.content)
 
         pocket_mol2_files = {
             int(fp.stem.split("_")[0]): fp for fp in (self.pocket_dir).iterdir()
@@ -123,6 +124,9 @@ class KinodataDocked(InMemoryDataset):
             pocket_mol2_files[row["similar.klifs_structure_id"]]
             for _, row in df.iterrows()
         ]
+
+        # backwards compatability
+        df["ident"] = df.index
 
         return df
 
@@ -177,7 +181,7 @@ class KinodataDocked(InMemoryDataset):
 
     def ident_index_map(self) -> Dict[Any, int]:
         # this may be very slow if self.transform is computationally expensive
-        mapping = [(data.ident, index) for index, data in enumerate(self)]
+        mapping = [(int(data.ident), index) for index, data in enumerate(self)]
         return dict(mapping)
 
 

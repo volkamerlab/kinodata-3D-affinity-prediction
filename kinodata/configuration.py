@@ -145,7 +145,7 @@ register(
     seed=420,
     use_bonds=True,
     add_artificial_decoys=False,
-    data_split=_ROOT / "data" / "splits" / "scaffold_split_811.csv",
+    data_split=_ROOT / "data" / "splits" / "pocket" / "seed_0.csv",
 )
 
 register(

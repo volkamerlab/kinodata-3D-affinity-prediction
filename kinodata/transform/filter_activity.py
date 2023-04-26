@@ -18,24 +18,35 @@ class FilterActivityType:
     def __call__(self, data: Data) -> bool:
         return data.activity_type in self.allowed
 
+    def __repr__(self) -> str:
+        return f"FilterActivityType(allowed={''.join(self.allowed)})"
+
 
 class FilterActivityScore:
     """
     Filter an activity by its `docking_score` attribute using `threshold` as an upper threshold.
     """
+
     def __init__(self, threshold: float = 0):
         self.threshold = threshold
 
     def __call__(self, data: Data) -> bool:
         return data.docking_score < self.threshold
 
+    def __repr__(self) -> str:
+        return f"FilterActivityScore(threshold={self.threshold})"
+
 
 class FilterCombine:
     """
     Compose multiple activity filters using 'and'.
     """
+
     def __init__(self, filters: List[Callable]):
         self.filters = filters
 
     def __call__(self, data: Data) -> bool:
         return all(f(data) for f in self.filters)
+
+    def __repr__(self) -> str:
+        return repr(self.filters)
