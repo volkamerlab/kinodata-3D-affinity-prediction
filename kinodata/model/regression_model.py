@@ -6,7 +6,7 @@ from torch import Tensor
 import wandb
 
 from kinodata.model.model import Model
-from kinodata.model.readout import HeteroReadout
+from kinodata.model.shared.readout import HeteroReadout
 from kinodata.model.resolve import resolve_loss, resolve_aggregation
 from kinodata.configuration import Config
 
@@ -17,7 +17,19 @@ def cat_many(
     if subset is None:
         subset = list(data[0].keys())
     assert set(subset).issubset(data[0].keys())
-    return {key: torch.cat([sub_data[key] for sub_data in data]) for key in subset}
+
+    def ensure_tensor(sub_data, key):
+        if isinstance(sub_data[key], torch.Tensor):
+            return sub_data[key]
+        if isinstance(sub_data[key], list):
+            # what have i done
+            return torch.tensor([int(x) for x in sub_data[key]])
+        raise ValueError(sub_data, key, "cannot convert to tensor")
+
+    return {
+        key: torch.cat([ensure_tensor(sub_data, key) for sub_data in data], dim=dim)
+        for key in subset
+    }
 
 
 class RegressionModel(Model):
@@ -56,24 +68,28 @@ class RegressionModel(Model):
         self.log("train/loss", loss, batch_size=pred.size(0), on_epoch=True)
         return loss
 
-    def validation_step(self, batch, *args):
+    def validation_step(self, batch, *args, key: str = "val"):
         pred = self.forward(batch).flatten()
         val_mae = (pred - batch.y).abs().mean()
-        self.log("val/mae", val_mae, batch_size=pred.size(0), on_epoch=True)
+        self.log(f"{key}/mae", val_mae, batch_size=pred.size(0), on_epoch=True)
         return {
-            "val/mae": val_mae,
+            f"{key}/mae": val_mae,
             "pred": pred,
             "target": batch.y,
             "ident": batch.ident,
         }
 
-    def validation_epoch_end(self, outputs, *args, **kwargs) -> None:
-        super().validation_epoch_end(outputs)
+    def correlation_from_eval_outputs(self, outputs) -> float:
         pred = torch.cat([output["pred"] for output in outputs], 0)
         target = torch.cat([output["target"] for output in outputs], 0)
         corr = ((pred - pred.mean()) * (target - target.mean())).mean() / (
             pred.std() * target.std()
         ).cpu().item()
+        return pred, target, corr
+
+    def validation_epoch_end(self, outputs, *args, **kwargs) -> None:
+        super().validation_epoch_end(outputs)
+        pred, target, corr = self.correlation_from_eval_outputs(outputs)
         y_min = min(pred.min().cpu().item(), target.min().cpu().item())
         y_max = max(pred.max().cpu().item(), target.max().cpu().item())
         fig, ax = plt.subplots()
@@ -92,12 +108,13 @@ class RegressionModel(Model):
         return {"pred": pred, "target": batch.y.flatten()}
 
     def test_step(self, batch, *args, **kwargs):
-        info = self.validation_step(batch)
-        info["test/mae"] = info["val/mae"]
-        del info["val/mae"]
+        info = self.validation_step(batch, key="test")
         return info
 
     def test_epoch_end(self, outputs, *args, **kwargs) -> None:
+        pred, target, corr = self.correlation_from_eval_outputs(outputs)
+        self.log("test/corr", corr)
+
         test_predictions = wandb.Artifact("test_predictions", type="predictions")
         data = cat_many(outputs, subset=["pred", "ident"])
         values = torch.stack(tuple(data.values()), dim=1)
