@@ -136,7 +136,7 @@ class KinodataDocked(InMemoryDataset):
                 desc="Creating PyG object tasks..",
                 total=len(self.df),
             )
-        ][:256]
+        ]
 
         with mp.Pool(os.cpu_count()) as pool:
             data_list = pool.map(process_idx, tasks)
