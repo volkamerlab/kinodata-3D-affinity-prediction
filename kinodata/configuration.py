@@ -19,6 +19,7 @@ from argparse import ArgumentParser, Namespace
 
 import torch
 import yaml
+import json
 
 T = TypeVar("T")
 
@@ -67,9 +68,11 @@ class Config(dict):
             parser.add_argument(f"--{key}", default=default, type=type(value))
         return parser
 
-    def update_from_args(self) -> "Config":
+    def update_from_args(self, known_only: bool = True) -> "Config":
+        if not known_only:
+            raise NotImplementedError
         parser = self.argparser(overwrite_default_values=True)
-        args = parser.parse_args()
+        args, unknown = parser.parse_known_args()
         args = {key: getattr(args, key) for key in self if hasattr(args, key)}
         updated_args = {key: value for key, value in args.items() if value is not None}
         return self.update(updated_args)
@@ -93,10 +96,13 @@ class Config(dict):
 configs: Dict[str, Config] = dict()
 
 
-def register(config_name: str, config: Optional[Config] = None, **kwargs: Any):
+def register(
+    config_name: str, config: Optional[Config] = None, **kwargs: Any
+) -> Config:
     if config is None:
         config = Config(**kwargs)
     configs[config_name] = config.update(kwargs)
+    return config
 
 
 def extend(config_name: str, **kwargs: Any):
@@ -112,6 +118,15 @@ def load_from_file(fp: Path) -> Config:
         traceback.print_exc()
         exit(1)
     return config
+
+
+def from_wandb(run=None) -> Config:
+    if run is not None:
+        dict_config = {
+            key: obj["value"] for key, obj in json.loads(run.json_config).items()
+        }
+        return Config(dict_config)
+    raise ValueError()
 
 
 def get(*config_names: str) -> Config:
@@ -163,7 +178,7 @@ register(
 register(
     "egin",
     hidden_channels=128,
-    num_layers=3,
+    num_mp_layers=3,
     d_cut=5.0,
     edge_dim=None,
     readout_aggregation_type="sum",
