@@ -52,9 +52,9 @@ class Split(Generic[IndexType]):
         self, mapping: Mapping[IndexType, OtherIndexType]
     ) -> "Split[OtherIndexType]":
         remapped = Split(
-            [mapping[t] for t in self.train_split],
-            [mapping[t] for t in self.val_split],
-            [mapping[t] for t in self.test_split],
+            [mapping[t] for t in self.train_split if t in mapping],
+            [mapping[t] for t in self.val_split if t in mapping],
+            [mapping[t] for t in self.test_split if t in mapping],
         )
         remapped.source_file = self.source_file
         return remapped
