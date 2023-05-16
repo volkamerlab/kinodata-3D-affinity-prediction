@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, List
 
 import pandas as pd
 import rdkit.Chem as Chem
-import requests
+import requests  # type : ignor
 import torch
 import torch.nn.functional as F
 from kinodata.transform.add_distances import AddDistancesAndInteractions
@@ -59,7 +59,7 @@ class KinodataDocked(InMemoryDataset):
 
     @property
     def processed_file_names(self) -> List[str]:
-        return "kinodata_docked.pt"
+        return ["kinodata_docked.pt"]
 
     @property
     def pocket_dir(self) -> Path:

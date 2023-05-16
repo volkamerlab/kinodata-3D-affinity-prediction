@@ -4,18 +4,13 @@ import sys
 sys.path.append(".")
 
 import wandb
-import pytorch_lightning as pl
-from pytorch_lightning.loggers.wandb import WandbLogger
-from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 
 from torch_geometric.nn.models import GIN
 from torch_geometric.nn.resolver import aggregation_resolver
 
 from kinodata.model.ligand_gin_baseline import LigandGNNBaseline
-from kinodata.callback import GarbageCallback
 from kinodata import configuration
-
-from train_regressor import make_data
+from kinodata.training import train
 
 
 def make_model(config) -> LigandGNNBaseline:
@@ -37,35 +32,7 @@ def make_model(config) -> LigandGNNBaseline:
     return model
 
 
-def train_baseline(config):
-    logger = WandbLogger(log_model="all")
-
-    data_module = make_data(config)
-    model = make_model(config)
-    val_checkpoint_callback = ModelCheckpoint(
-        monitor="val/mae",
-        mode="min",
-    )
-    lr_monitor = LearningRateMonitor("epoch")
-
-    trainer = pl.Trainer(
-        logger=logger,
-        auto_select_gpus=True,
-        max_epochs=config.epochs,
-        accelerator=config.accelerator,
-        accumulate_grad_batches=config.accumulate_grad_batches,
-        callbacks=[val_checkpoint_callback, lr_monitor],
-    )
-
-    trainer.fit(model, datamodule=data_module)
-    trainer.test(ckpt_path="best", datamodule=data_module)
-
-
 if __name__ == "__main__":
-    import torch
-
-    print(f"torch.cuda.device_count(): {torch.cuda.device_count()}")
-
     configuration.register(
         "ligand_gnn_baseline",
         gnn_type="gin",
@@ -83,4 +50,4 @@ if __name__ == "__main__":
         print(f"{key}: {value}")
 
     wandb.init(config=config, project="kinodata-docked-rescore", tags=["ligand-only"])
-    train_baseline(wandb.config)
+    train(config, fn_model=make_model)

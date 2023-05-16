@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 
 
 Kwargs = Dict[str, Any]
-PathLike = Union[Path, str]
+PathLike = Union[Path, str]  # type: ignore
 IndexType = TypeVar("IndexType")
 OtherIndexType = TypeVar("OtherIndexType")
 
@@ -24,14 +24,26 @@ OtherIndexType = TypeVar("OtherIndexType")
 class Split(Generic[IndexType]):
 
     train_split: List[IndexType]
-    val_split: Optional[List[IndexType]] = field(default_factory=list)
-    test_split: Optional[List[IndexType]] = field(default_factory=list)
+    val_split: List[IndexType] = field(default_factory=list)  # type: ignore
+    test_split: List[IndexType] = field(default_factory=list)  # type: ignore
     source_file: Optional[str] = None
 
     def __post_init__(self):
         self.train_split = list(self.train_split)
         self.val_split = list(self.val_split)
         self.test_split = list(self.test_split)
+
+    @property
+    def train_size(self) -> int:
+        return len(self.train_split)
+
+    @property
+    def val_size(self) -> int:
+        return len(self.val_split)
+
+    @property
+    def test_size(self) -> int:
+        return len(self.test_split)
 
     @classmethod
     def random_split(
@@ -42,19 +54,23 @@ class Split(Generic[IndexType]):
         index = np.arange(num)
         rng.shuffle(index)
 
-        return cls(
+        return cls(  # type: ignore
             index[0:num_train].tolist(),
             index[num_train : (num_train + num_val)].tolist(),
             index[(num_train + num_val) :].tolist(),
         )
 
     def remap_index(
-        self, mapping: Mapping[IndexType, OtherIndexType]
+        self, mapping: Mapping[IndexType, OtherIndexType], strict: bool = False
     ) -> "Split[OtherIndexType]":
+        new_splits = [
+            [mapping[t] for t in split if (t in mapping or strict)]
+            for split in (self.train_split, self.val_split, self.test_split)
+        ]
         remapped = Split(
-            [mapping[t] for t in self.train_split if t in mapping],
-            [mapping[t] for t in self.val_split if t in mapping],
-            [mapping[t] for t in self.test_split if t in mapping],
+            train_split=new_splits[0],  # type: ignore
+            val_split=new_splits[1],
+            test_split=new_splits[2],
         )
         remapped.source_file = self.source_file
         return remapped
@@ -64,20 +80,26 @@ class Split(Generic[IndexType]):
     ) -> pd.DataFrame:
         full_split = self.train_split + self.val_split + self.test_split
         split_assignment = (
-            ["train"] * len(self.train_split)
-            + ["val"] * len(self.val_split)
-            + ["test"] * len(self.test_split)
+            ["train"] * self.train_size
+            + ["val"] * self.val_size
+            + ["test"] * self.test_size
         )
         return pd.DataFrame({index_key: full_split, split_key: split_assignment})
 
     @classmethod
     def from_data_frame(
-        cls, df: pd.DataFrame, split_key: str = "split", index_key: str = "ident"
+        cls,
+        df: pd.DataFrame,
+        split_key: str = "split",
+        index_key: str = "ident",
+        train_identifier: Any = "train",
+        val_identifier: Any = "val",
+        test_identifier: Any = "test",
     ):
         return cls(
-            df[df[split_key] == "train"][index_key].values.tolist(),
-            df[df[split_key] == "val"][index_key].values.tolist(),
-            df[df[split_key] == "test"][index_key].values.tolist(),
+            df[df[split_key] == train_identifier][index_key].values.tolist(),
+            df[df[split_key] == val_identifier][index_key].values.tolist(),
+            df[df[split_key] == test_identifier][index_key].values.tolist(),
         )
 
     def __repr__(self) -> str:
@@ -88,8 +110,8 @@ class RandomSplit:
     def __init__(
         self,
         train_size: float = 1.0,
-        val_size: Optional[float] = None,
-        test_size: Optional[float] = None,
+        val_size: float = 0.0,
+        test_size: float = 0.0,
     ):
         self.train_size = train_size
         self.val_size = val_size
@@ -97,16 +119,18 @@ class RandomSplit:
 
     def __call__(self, dataset: Dataset, seed: int = 0) -> Split:
         split_sizes = {"train": self.train_size}
-        if self.val_size is not None:
+        if self.val_size > 0:
             split_sizes["val"] = self.val_size
-        if self.test_size is not None:
+        if self.test_size > 0:
             split_sizes["test"] = self.test_size
 
         for key, value in split_sizes.items():
-            split_sizes[key] = int(value * len(dataset))
+            split_sizes[key] = int(value * len(dataset))  # type: ignore
 
         # make sure split is congruent
-        split_sizes["train"] -= sum(split_sizes.values()) - len(dataset)
+        split_sizes["train"] -= sum(split_sizes.values()) - len(
+            dataset  # type : ignore
+        )
 
         split = Split.random_split(
             num_train=split_sizes["train"],

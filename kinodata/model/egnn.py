@@ -47,7 +47,7 @@ class EGNNMessageLayer(nn.Module):
         self.init_parameters()
 
         if target_node_size != output_channels:
-            self.residual_proj = nn.Linear(
+            self.residual_proj: nn.Module = nn.Linear(
                 target_node_size, output_channels, bias=False
             )
         else:

@@ -1,31 +1,19 @@
-from typing import Any, Dict, List, Optional
+from copy import deepcopy
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
 
+import pandas as pd
 from torch_geometric.data import InMemoryDataset
 from torch_geometric.data.lightning_datamodule import LightningDataset
 from torch_geometric.loader.dataloader import DataLoader
+from torch_geometric.transforms import Compose
 
+from kinodata.configuration import Config
 from kinodata.data.data_split import Split
-from copy import deepcopy
+from kinodata.data.dataset import KinodataDocked
+import kinodata.transform as T
 
 Kwargs = Dict[str, Any]
-
-# def make_data_module(
-#     dataset: Dataset,
-#     splitting_method: SplittingMethod,
-#     batch_size: int,
-#     num_workers: int,
-#     seed: int = 0,
-#     **kwargs
-# ) -> LightningDataset:
-#     split = splitting_method(dataset, seed)
-#     return LightningDataset(
-#         train_dataset=split.train,
-#         val_dataset=split.val,
-#         test_dataset=split.test,
-#         batch_size=batch_size,
-#         num_workers=num_workers,
-#         **kwargs,
-#     )
 
 
 def assert_unique_value(key: str, *kwarg_dicts: Optional[Kwargs], msg: str = ""):
@@ -46,7 +34,7 @@ def make_data_module(
     train_kwargs: Kwargs,
     val_kwargs: Optional[Kwargs] = None,
     test_kwargs: Optional[Kwargs] = None,
-    **kwargs
+    **kwargs,
 ) -> LightningDataset:
     assert_unique_value("pre_transform", train_kwargs, val_kwargs, test_kwargs)
 
@@ -74,7 +62,7 @@ def make_data_module(
         test_dataset=test_dataset,
         batch_size=batch_size,
         num_workers=num_workers,
-        **kwargs
+        **kwargs,
     )
 
 
@@ -90,3 +78,73 @@ class ComposedDatamodule(LightningDataset):
 
     def test_dataloader(self) -> DataLoader:
         return [data_module.test_dataloader() for data_module in self.data_modules]
+
+
+def compose(transforms: Optional[list]) -> Optional[Callable]:
+    return None if transforms is None else Compose(transforms)
+
+
+def make_kinodata_module(config: Config, transforms=None) -> LightningDataset:
+    if transforms is None:
+        transforms = []
+
+    augmentations = []
+
+    if config.perturb_ligand_positions:
+        augmentations.append(
+            T.PerturbAtomPositions("ligand", std=config.perturb_ligand_positions)
+        )
+    if config.perturb_pocket_positions:
+        augmentations.append(
+            T.PerturbAtomPositions("pocket", std=config.perturb_pocket_positions)
+        )
+
+    if config.need_distances:
+        transforms.append(T.AddDistancesAndInteractions(config.interaction_radius))
+
+    if config.add_docking_scores:
+        assert config.need_distances
+        transforms.extend(
+            [
+                T.AddGlobalAttrToEdge(
+                    ("pocket", "interacts", "ligand"), ["docking_score", "posit_prob"]
+                ),
+                T.AddGlobalAttrToEdge(
+                    ("ligand", "interacts", "pocket"), ["docking_score", "posit_prob"]
+                ),
+                T.AddGlobalAttrToEdge(
+                    ("ligand", "interacts", "ligand"), ["docking_score", "posit_prob"]
+                ),
+            ]
+        )
+
+    train_transform = compose(augmentations + transforms)
+    val_transform = compose(transforms)
+
+    if not Path(config.data_split).exists():
+        raise FileNotFoundError(config.data_split)
+
+    print(f"Loading split from {config.data_split}..")
+    # split that assigns *idents* to train/val/test
+    split = Split.from_data_frame(pd.read_csv(config.data_split))
+    split.source_file = str(config.data_split)
+    print(split)
+    print("Remapping idents to dataset index..")
+    index_mapping = KinodataDocked().ident_index_map()
+    split = split.remap_index(index_mapping)
+
+    print("Creating data module:")
+    print(f"    split:{split}")
+    print(f"    train_transform:{train_transform}")
+    print(f"    val_transform:{val_transform}")
+    data_module = make_data_module(
+        split,
+        config.batch_size,
+        config.num_workers,
+        dataset_cls=KinodataDocked,
+        train_kwargs={"transform": train_transform},
+        val_kwargs={"transform": val_transform},
+        test_kwargs={"transform": val_transform},
+    )
+
+    return data_module

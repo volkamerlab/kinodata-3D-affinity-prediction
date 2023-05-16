@@ -41,7 +41,7 @@ class Config(dict):
     def subset(self, keys: Iterable[Hashable]) -> "Config":
         return Config({key: self[key] for key in keys if key in self})
 
-    def update(self, other: MutableMapping, allow_duplicates: bool = True) -> "Config":
+    def update(self, other: MutableMapping, allow_duplicates: bool = True) -> "Config":  # type: ignore
         if not allow_duplicates:
             intersection = self.intersect(other)
             if len(intersection) > 0:
@@ -73,8 +73,10 @@ class Config(dict):
             raise NotImplementedError
         parser = self.argparser(overwrite_default_values=True)
         args, unknown = parser.parse_known_args()
-        args = {key: getattr(args, key) for key in self if hasattr(args, key)}
-        updated_args = {key: value for key, value in args.items() if value is not None}
+        shared_args = {key: getattr(args, key) for key in self if hasattr(args, key)}
+        updated_args = {
+            key: value for key, value in shared_args.items() if value is not None
+        }
         return self.update(updated_args)
 
     def update_from_file(self, fp: Union[str, Path], verbose: bool = True) -> "Config":
@@ -160,7 +162,8 @@ register(
     seed=420,
     use_bonds=True,
     add_artificial_decoys=False,
-    data_split=_ROOT / "data" / "splits" / "pocket" / "seed_0.csv",
+    data_split=_ROOT / "data" / "splits" / "random" / "seed_0.csv",
+    need_distances=True,
 )
 
 register(
@@ -188,18 +191,19 @@ register(
 
 register(
     "training",
-    lr=2e-4,
-    weight_decay=1e-5,
+    lr=1e-4,
+    weight_decay=3e-6,
     batch_size=64,
     accumulate_grad_batches=1,
-    epochs=500,
-    num_workers=16,
+    epochs=300,
+    num_workers=32,
     accelerator="gpu" if torch.cuda.is_available() else "cpu",
     loss_type="mse",
-    lr_factor=0.8,
-    lr_patience=10,
+    lr_factor=0.9,
+    lr_patience=8,
+    early_stopping_patience=24,
     min_lr=1e-6,
-    perturb_ligand_positions=None,
-    perturb_pocket_positions=None,
+    perturb_ligand_positions=0.1,
+    perturb_pocket_positions=0.1,
     add_docking_scores=False,
 )
