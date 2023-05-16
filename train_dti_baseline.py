@@ -30,7 +30,6 @@ if __name__ == "__main__":
 
     config = configuration.get("data", "training", "dti_baseline")
     config = config.update_from_args()
-    config["num_workers"] = 0
     config["need_distances"] = False
 
     for key, value in config.items():
