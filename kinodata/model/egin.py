@@ -14,7 +14,7 @@ from torch_geometric.nn.models.basic_gnn import BasicGNN
 from torch_geometric.nn.models import MLP
 from torch_geometric.nn import to_hetero
 from torch_geometric.data import HeteroData
-from kinodata.model.atom_embedding import HeteroEmbedding
+from kinodata.model.shared.atom_embedding import HeteroEmbedding
 
 from kinodata.types import EdgeType, NodeEmbedding, NodeType
 
