@@ -4,11 +4,9 @@ from collections import defaultdict
 from functools import cached_property
 from pathlib import Path
 from typing import Any, Callable, Dict, List
-from warnings import warn
 
 import pandas as pd
 import rdkit.Chem as Chem
-import rdkit.Chem.AllChem as AllChem
 import requests
 import torch
 import torch.nn.functional as F
@@ -22,10 +20,8 @@ from kinodata.transform.filter_activity import (
 from rdkit import RDLogger
 from rdkit.Chem import PandasTools
 from rdkit.Chem.rdchem import BondType as BT
-from rdkit.Chem.rdmolops import AddHs
 from torch import Tensor
 from torch_geometric.data import HeteroData, InMemoryDataset
-from torch_geometric.data.separate import separate
 from torch_geometric.transforms import Compose
 from torch_geometric.utils import to_undirected
 from tqdm import tqdm
@@ -53,23 +49,9 @@ class KinodataDocked(InMemoryDataset):
         ),
     ):
         self.remove_hydrogen = remove_hydrogen
-
+        self.post_filter = post_filter
         super().__init__(root, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0])
-
-        if post_filter is not None:
-            print("Separating data objects...")
-            data_list = [self.get(idx) for idx in tqdm(range(len(self)))]
-            len_before_filter = len(data_list)
-            # cache invalidation
-            self._data_list = None
-            print(f"Applying post filter {post_filter}...")
-            data_list = [data for data in tqdm(data_list) if post_filter(data)]
-            print(f"Filter removed {len_before_filter - len(data_list)} items.")
-            self.data, self.slices = self.collate(data_list)
-
-    def iter_no_transforms(self):
-        self.get()
 
     @property
     def raw_file_names(self) -> List[str]:
@@ -147,13 +129,14 @@ class KinodataDocked(InMemoryDataset):
                 row["pocket_mol2_file"],
                 float(row["docking.chemgauss_score"]),
                 float(row["docking.posit_probability"]),
+                int(row["similar.klifs_structure_id"]),
             )
             for ident, row in tqdm(
                 self.df.iterrows(),
                 desc="Creating PyG object tasks..",
                 total=len(self.df),
             )
-        ]
+        ][:256]
 
         with mp.Pool(os.cpu_count()) as pool:
             data_list = pool.map(process_idx, tasks)
@@ -175,6 +158,10 @@ class KinodataDocked(InMemoryDataset):
         if self.pre_transform is not None:
             print("Applying pre transform..")
             data_list = [self.pre_transform(data) for data in data_list]
+
+        if self.post_filter is not None:
+            print("Applying post filter..")
+            data_list = [data for data in data_list if self.post_filter(data)]
 
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
@@ -234,6 +221,19 @@ def add_bonds(mol, data, key):
     return data
 
 
+def load_kissim(structure_id: int) -> pd.DataFrame:
+    path = _DATA / "processed" / "kissim" / f"{structure_id}.csv"
+    if path.exists():
+        return pd.read_csv(path)
+    return None
+
+
+def add_kissim_fp(data, fp: pd.DataFrame):
+    fp = torch.from_numpy(fp.values)
+    data.kissim_fp = fp.unsqueeze(0)
+    return data
+
+
 def process_idx(args):
     (
         ident,
@@ -244,6 +244,7 @@ def process_idx(args):
         pocket_file,
         docking_score,
         posit_prob,
+        structure_id,
     ) = args
     data = HeteroData()
 
@@ -257,6 +258,11 @@ def process_idx(args):
     if pocket is None:
         return None
     data = add_atoms(pocket, data, "pocket")
+
+    kissim_fp = load_kissim(structure_id)
+    if kissim_fp is None:
+        return None
+    data = add_kissim_fp(data, kissim_fp)
 
     data.y = torch.tensor(activity).view(1)
     data.docking_score = torch.tensor(docking_score).view(1)
@@ -272,17 +278,7 @@ def process_idx(args):
 if __name__ == "__main__":
     transforms = [
         AddDistancesAndInteractions(radius=5.0),
-        AddGlobalAttrToEdge(
-            ("pocket", "interacts", "ligand"), ["docking_score", "posit_prob"]
-        ),
-        AddGlobalAttrToEdge(
-            ("pocket", "interacts", "pocket"), ["docking_score", "posit_prob"]
-        ),
-        AddGlobalAttrToEdge(
-            ("ligand", "interacts", "ligand"), ["docking_score", "posit_prob"]
-        ),
     ]
     dataset = KinodataDocked(transform=Compose(transforms))
 
-    data = dataset[0]
     pass
