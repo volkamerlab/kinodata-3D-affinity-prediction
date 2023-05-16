@@ -5,6 +5,7 @@ from torch_geometric.data.lightning_datamodule import LightningDataset
 from torch_geometric.loader.dataloader import DataLoader
 
 from kinodata.data.data_split import Split
+from copy import deepcopy
 
 Kwargs = Dict[str, Any]
 
@@ -50,10 +51,10 @@ def make_data_module(
     assert_unique_value("pre_transform", train_kwargs, val_kwargs, test_kwargs)
 
     if split.val_split is not None and val_kwargs is None:
-        val_kwargs = train_kwargs
+        val_kwargs = deepcopy(train_kwargs)
 
     if split.test_split is not None and test_kwargs is None:
-        test_kwargs = val_kwargs
+        test_kwargs = deepcopy(val_kwargs)
 
     train_dataset = dataset_cls(**train_kwargs)[split.train_split]
     val_dataset = (
