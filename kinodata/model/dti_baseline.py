@@ -10,6 +10,7 @@ from torch.nn import (
     Embedding,
     SiLU,
     BatchNorm1d,
+    LayerNorm,
 )
 import pytorch_lightning as pl
 
@@ -98,7 +99,9 @@ class KissimPocketTransformer(Module):
         num_heads: int = 1,
     ) -> None:
         super().__init__()
-        self.lin1 = Sequential(Linear(kissim_size, hidden_channels), SiLU())
+        self.lin1 = Sequential(
+            Linear(kissim_size, hidden_channels), SiLU(), LayerNorm(hidden_channels)
+        )
         self.attention_blocks = ModuleList(
             [
                 SetAttentionBlock(hidden_channels, num_heads)
