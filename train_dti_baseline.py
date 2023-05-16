@@ -94,11 +94,10 @@ if __name__ == "__main__":
 
     config = configuration.get("data", "training", "dti_baseline")
     config = config.update_from_args()
-    config["num_workers"] = 0
-    config["epochs"] = 1
+    config["num_workers"] = 32
 
     for key, value in config.items():
         print(f"{key}: {value}")
 
-    wandb.init(config=config, project="kinodata-docked-rescore", tags=["ligand-only"])
+    wandb.init(config=config, project="kinodata-docked-rescore", tags=["dti"])
     main(config)
