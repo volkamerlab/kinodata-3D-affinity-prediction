@@ -117,7 +117,8 @@ class RegressionModel(Model):
 
         test_predictions = wandb.Artifact("test_predictions", type="predictions")
         data = cat_many(outputs, subset=["pred", "ident"])
-        values = torch.stack(tuple(data.values()), dim=1)
+        values = [t.detach().cpu() for t in data.values()]
+        values = torch.stack(values, dim=1)
         table = wandb.Table(columns=list(data.keys()), data=values.tolist())
         test_predictions.add(table, "predictions")
         wandb.log_artifact(test_predictions)
