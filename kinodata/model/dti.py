@@ -15,8 +15,7 @@ from torch.nn import (
 import pytorch_lightning as pl
 
 from kinodata.configuration import Config
-from kinodata.model.regression_model import RegressionModel
-from kinodata.model.model import Model
+from kinodata.model.regression import RegressionModel
 from kinodata.model.resolve import resolve_act, resolve_loss
 from kinodata.model.shared import GINE, SetAttentionBlock
 from torch_geometric.nn.pool import global_add_pool
@@ -58,10 +57,8 @@ class DTIModel(RegressionModel):
         pocket_encoder_cls: Callable[..., Encoder],
         decoder_cls: Callable[..., Decoder],
     ) -> None:
-        super(Model, self).__init__()
-        self.save_hyperparameters(config)
+        super().__init__(config)
         self.criterion = resolve_loss(config.loss_type)
-        self.define_metrics()
         self.ligand_encoder = config.init(ligand_encoder_cls)
         self.pocket_encoder = config.init(pocket_encoder_cls)
         self.decoder = config.init(decoder_cls)

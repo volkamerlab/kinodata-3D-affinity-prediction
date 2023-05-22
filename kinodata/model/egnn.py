@@ -3,14 +3,14 @@ import torch
 from torch import Tensor, LongTensor
 import torch.nn as nn
 from torch_geometric.data import HeteroData
-from torch_geometric.nn import MeanAggregation
 from torch_scatter import scatter
 
 from torch_geometric.nn.norm import GraphNorm
 
 from collections import defaultdict
 
-from kinodata.types import NodeType, NodeEmbedding, EdgeType
+from kinodata.types import NodeType, NodeEmbedding, Kwargs
+from kinodata.types import EdgeType
 from kinodata.model.resolve import resolve_act
 
 RawMessage = Tuple[Tensor, Tensor, Tensor, Tensor]
@@ -244,7 +244,7 @@ class EGNN(nn.Module):
         node_types: List[NodeType] = [],
         edge_types: List[EdgeType] = [],
         act: str = "elu",
-        message_layer_kwargs: Optional[Dict[str, Any]] = None,
+        message_layer_kwargs: Optional[Dict[EdgeType, Kwargs]] = None,
     ) -> None:
         super().__init__()
         self.node_types = node_types
@@ -260,15 +260,10 @@ class EGNN(nn.Module):
         edge_attr_size = _edge_attr_size
 
         if message_layer_kwargs is None:
-            message_layer_kwargs = dict()
+            message_layer_kwargs = defaultdict(dict)
 
         if final_embedding_size is None:
             final_embedding_size = hidden_channels
-
-        # equation (1) "psi_0"
-        self.f_initial_embed = nn.ModuleDict(
-            {nt: nn.Embedding(100, hidden_channels) for nt in node_types}
-        )
 
         # create stacks of MP layers
         self.message_passing_layers = nn.ModuleList()
@@ -277,7 +272,7 @@ class EGNN(nn.Module):
             self.message_passing_layers.append(
                 nn.ModuleDict(
                     {
-                        "_".join(edge_type): mp_class(
+                        "__".join(edge_type): mp_class(
                             source_node_size=d_in,
                             target_node_size=d_in,
                             edge_attr_size=edge_attr_size[edge_type],
@@ -286,7 +281,7 @@ class EGNN(nn.Module):
                             output_channels=d_out,
                             act=act,
                             final_act=act,
-                            **message_layer_kwargs,
+                            **message_layer_kwargs[edge_type],
                         )
                         for edge_type in edge_types
                         if edge_type[1] == "interacts"
@@ -294,15 +289,11 @@ class EGNN(nn.Module):
                 )
             )
 
-    def encode(self, data: HeteroData) -> NodeEmbedding:
-        node_embed = dict()
-        for node_type in self.node_types:
-            node_embed[node_type] = self.f_initial_embed[node_type](data[node_type].z)
-
+    def forward(self, data: HeteroData, node_embedding: NodeEmbedding) -> NodeEmbedding:
         for mp_layer_dict in self.message_passing_layers:
-            new_node_embed = {nt: x.clone() for nt, x in node_embed.items()}
+            new_node_embed = {nt: x.clone() for nt, x in node_embedding.items()}
             for edge_type, layer in mp_layer_dict.items():
-                edge_type = tuple(edge_type.split("_"))
+                edge_type = tuple(edge_type.split("__"))
                 source_nt, _, target_nt = edge_type
                 edge_weight = data[edge_type].edge_weight
                 edge_attr = (
@@ -310,8 +301,8 @@ class EGNN(nn.Module):
                     if "edge_attr" in data[edge_type]
                     else None
                 )
-                source_node_embed = node_embed[source_nt]
-                target_node_embed = node_embed[target_nt]
+                source_node_embed = node_embedding[source_nt]
+                target_node_embed = node_embedding[target_nt]
 
                 new_node_embed[target_nt] += layer(
                     source_node_embed,
@@ -321,9 +312,6 @@ class EGNN(nn.Module):
                     edge_weight,
                     data[target_nt].batch,
                 )
-            node_embed = new_node_embed
+            node_embedding = new_node_embed
 
-        return node_embed
-
-    def forward(self, data: HeteroData) -> NodeEmbedding:
-        return self.encode(data)
+        return node_embedding

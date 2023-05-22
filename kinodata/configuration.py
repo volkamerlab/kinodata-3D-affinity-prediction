@@ -153,6 +153,7 @@ register("meta", model_type="egnn")
 register(
     "data",
     interaction_radius=5.0,
+    residue_interaction_radius=12.0,
     node_types=["ligand", "pocket"],
     edge_types=[
         ("ligand", "interacts", "ligand"),
@@ -164,6 +165,7 @@ register(
     add_artificial_decoys=False,
     data_split=_ROOT / "data" / "splits" / "random" / "seed_0.csv",
     need_distances=True,
+    num_residue_features=6,
 )
 
 register(
@@ -196,7 +198,7 @@ register(
     batch_size=64,
     accumulate_grad_batches=1,
     epochs=300,
-    num_workers=32,
+    num_workers=32 if torch.cuda.is_available() else 0,
     accelerator="gpu" if torch.cuda.is_available() else "cpu",
     loss_type="mse",
     lr_factor=0.9,

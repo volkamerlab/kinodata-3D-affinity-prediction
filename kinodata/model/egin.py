@@ -14,7 +14,7 @@ from torch_geometric.nn.models.basic_gnn import BasicGNN
 from torch_geometric.nn.models import MLP
 from torch_geometric.nn import to_hetero
 from torch_geometric.data import HeteroData
-from kinodata.model.shared.atom_embedding import HeteroEmbedding
+from kinodata.model.shared.node_embedding import HeteroEmbedding
 
 from kinodata.types import EdgeType, NodeEmbedding, NodeType
 
@@ -247,7 +247,6 @@ class HeteroEGIN(nn.Module):
         super().__init__()
         self.node_types = node_types
         self.edge_types = edge_types
-        self.atom_emb = HeteroEmbedding(100, hidden_channels)
         if edge_attr_size is not None:
             edge_dim = edge_dim if edge_dim else max(edge_attr_size.values())
         egin = EGIN(
@@ -276,15 +275,14 @@ class HeteroEGIN(nn.Module):
 
         self.hetero_egin = to_hetero(egin, (node_types, edge_types))
 
-    def forward(self, data: HeteroData) -> NodeEmbedding:
-        x = self.atom_emb(**{nt: data[nt].z for nt in self.node_types})
+    def forward(self, data: HeteroData, node_embedding: NodeEmbedding) -> NodeEmbedding:
         edge_attr_dict = data.edge_attr_dict
         for key, lin in self.initial_edge_lins.items():
             _key = self.edge_key_mapping[key]
             edge_attr_dict[_key] = lin(edge_attr_dict[_key])
 
         return self.hetero_egin(
-            x,
+            node_embedding,
             data.edge_index_dict,
             edge_attr=edge_attr_dict,
             edge_weight=data.edge_weight_dict,

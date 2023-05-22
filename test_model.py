@@ -10,7 +10,8 @@ import wandb
 from kinodata.configuration import from_wandb, register
 from kinodata.data.data_module import make_kinodata_module as make_data
 from train_ligand_gnn_baseline import make_model as make_baseline_model
-from train_regressor import make_egnn_model
+from train_egnn import make_egnn_model
+from train_dti_baseline import make_dti_model
 
 
 def retrieve_model_artifact(run, alias: str):
@@ -37,6 +38,8 @@ def main():
 
     if "ligand-only" in training_run.tags:
         make_model = make_baseline_model
+    elif "dti" in training_run.tags:
+        make_model = make_dti_model
     else:
         make_model = make_egnn_model
 

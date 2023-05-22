@@ -8,7 +8,7 @@ import wandb
 from torch_geometric.nn.models import GIN
 from torch_geometric.nn.resolver import aggregation_resolver
 
-from kinodata.model.ligand_gin_baseline import LigandGNNBaseline
+from kinodata.model.ligand_gin import LigandGNNBaseline
 from kinodata import configuration
 from kinodata.training import train
 
@@ -28,7 +28,7 @@ def make_model(config) -> LigandGNNBaseline:
 
     readout = aggregation_resolver(config.readout_type)
 
-    model = LigandGNNBaseline(encoder, readout)
+    model = LigandGNNBaseline(config, encoder, readout)
     return model
 
 

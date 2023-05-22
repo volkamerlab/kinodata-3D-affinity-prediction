@@ -22,10 +22,18 @@ def interactions_and_distances(
     batch_x: Optional[Tensor] = None,
     batch_y: Optional[Tensor] = None,
     r: float = 1.0,
+    max_num_neighbors: int = 32,
 ) -> Tuple[Tensor, Tensor]:
     if pos_y is None:
         pos_y = pos_x
-    y_ind, x_ind = radius(pos_x, pos_y, r, batch_x=batch_x, batch_y=batch_y)
+    y_ind, x_ind = radius(
+        pos_x,
+        pos_y,
+        r,
+        batch_x=batch_x,
+        batch_y=batch_y,
+        max_num_neighbors=max_num_neighbors,
+    )
     dist = (pos_x[x_ind] - pos_y[y_ind]).pow(2).sum(dim=1).sqrt()
     edge_index = torch.stack((x_ind, y_ind))
     return edge_index, dist
@@ -37,11 +45,13 @@ class AddDistancesAndInteractions(BaseTransform):
         radius: float,
         subset: Optional[List[Tuple[NodeType, NodeType]]] = None,
         distance_key: str = "edge_weight",
+        max_num_neighbors: int = 32,
     ) -> None:
         super().__init__()
         self.distance_key = distance_key
         self.radius = radius
         self.subset = None
+        self.max_num_neighbors = max_num_neighbors
         if subset:
             self.subset = set()
             for (u, v) in subset:
@@ -59,6 +69,7 @@ class AddDistancesAndInteractions(BaseTransform):
                     data[nt_a].pos,
                     data[nt_b].pos,
                     r=self.radius,
+                    max_num_neighbors=self.max_num_neighbors,
                 )
                 if nt_a == nt_b:
                     num_nodes = data[nt_a].num_nodes

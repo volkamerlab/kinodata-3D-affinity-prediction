@@ -1,4 +1,5 @@
 from copy import deepcopy
+from itertools import product
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -100,7 +101,12 @@ def make_kinodata_module(config: Config, transforms=None) -> LightningDataset:
         )
 
     if config.need_distances:
-        transforms.append(T.AddDistancesAndInteractions(config.interaction_radius))
+        subset = list(product(config.node_types, config.node_types))
+        if ("pocket", "pocket") in subset:
+            subset.remove(("pocket", "pocket"))
+        transforms.append(
+            T.AddDistancesAndInteractions(config.interaction_radius, subset=subset)
+        )
 
     if config.add_docking_scores:
         assert config.need_distances

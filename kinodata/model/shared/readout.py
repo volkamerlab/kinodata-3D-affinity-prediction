@@ -15,7 +15,7 @@ class HeteroReadout(nn.Module):
         self,
         node_types: Iterable[NodeType],
         node_aggregation: Aggregation,
-        aggreagtion_out_channels: int,
+        aggregation_out_channels: int,
         hidden_channels: int,
         out_channels: int,
         act: str = "elu",
@@ -30,7 +30,7 @@ class HeteroReadout(nn.Module):
         self.lins = nn.ModuleDict()
         for node_type in self.node_types:
             self.lins[node_type] = nn.Sequential(
-                nn.Linear(aggreagtion_out_channels, hidden_channels, bias=False), act_fn
+                nn.Linear(aggregation_out_channels, hidden_channels, bias=False), act_fn
             )
 
         self.f_predict = nn.Sequential(

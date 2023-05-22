@@ -11,8 +11,8 @@ from kinodata.data.data_module import make_kinodata_module
 
 def train(config, fn_data=make_kinodata_module, fn_model=lambda _: None):
     logger = WandbLogger(log_model="all")
-    data_module = fn_data(config)
     model = fn_model(config)
+    data_module = fn_data(config)
     validation_checkpoint = ModelCheckpoint(
         monitor="val/mae",
         mode="min",

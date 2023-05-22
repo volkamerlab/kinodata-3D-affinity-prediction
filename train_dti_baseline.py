@@ -5,7 +5,7 @@ sys.path.append(".")
 import wandb
 
 import kinodata.configuration as configuration
-from kinodata.model.dti_baseline import (
+from kinodata.model.dti import (
     DTIModel,
     GlobalSumDecoder,
     KissimPocketTransformer,

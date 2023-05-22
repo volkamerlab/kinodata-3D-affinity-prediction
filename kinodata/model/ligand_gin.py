@@ -8,22 +8,21 @@ from torch_geometric.data import HeteroData
 from torch_geometric.nn import MLP
 
 from kinodata.model.resolve import resolve_loss
-from kinodata.model.regression_model import RegressionModel
-
-import wandb
+from kinodata.model.regression import RegressionModel
+from kinodata.configuration import Config
 
 
 class LigandGNNBaseline(RegressionModel):
     def __init__(
         self,
+        config: Config,
         encoder: BasicGNN,
-        readout: Aggregation,
+        aggr: Aggregation,
     ) -> None:
-        self.save_hyperparameters(dict(wandb.config))
-        LightningModule.__init__(self)
+        super().__init__(config)
         self.initial_embedding = Embedding(100, self.hparams.hidden_channels)
         self.encoder = encoder
-        self.readout = readout
+        self.aggr = aggr
         self.prediction_head = MLP(
             channel_list=[
                 self.hparams.hidden_channels,
@@ -43,6 +42,6 @@ class LigandGNNBaseline(RegressionModel):
             batch["ligand", "bond", "ligand"].edge_index,
             edge_attr=batch["ligand", "bond", "ligand"].edge_attr,
         )
-        aggr = self.readout.forward(h, index=batch["ligand"].batch)
+        aggr = self.aggr.forward(h, index=batch["ligand"].batch)
         pred = self.prediction_head(aggr)
         return pred

@@ -1,14 +1,16 @@
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Dict, List, Optional
 
 import matplotlib.pyplot as plt
 import torch
 from torch import Tensor
 import wandb
+from torch.optim import AdamW
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+import pytorch_lightning as pl
 
-from kinodata.model.model import Model
-from kinodata.model.shared.readout import HeteroReadout
-from kinodata.model.resolve import resolve_loss, resolve_aggregation
 from kinodata.configuration import Config
+from kinodata.model.resolve import resolve_loss
+from pytorch_lightning.utilities.grads import grad_norm
 
 
 def cat_many(
@@ -32,35 +34,50 @@ def cat_many(
     }
 
 
-class RegressionModel(Model):
+class RegressionModel(pl.LightningModule):
     def __init__(
-        self, config: Config, encoder_cls: Callable[..., torch.nn.Module]
+        self,
+        config: Config,
     ) -> None:
-        self.save_hyperparameters(config)
-        super().__init__(config.init(encoder_cls))
-
-        # default: use all nodes for readout
-        readout_node_types = config.node_types
-
-        self.readout = HeteroReadout(
-            readout_node_types,
-            resolve_aggregation(config.readout_aggregation_type),
-            config.hidden_channels,
-            config.hidden_channels,
-            1,
-            act=config.act,
-            final_act=config.final_act,
-        )
-        self.criterion = resolve_loss(config.loss_type)
+        super().__init__()
+        self.config = config
+        self.save_hyperparameters(config)  # triggers wandb hook
         self.define_metrics()
+        self.set_criterion()
+
+    def set_criterion(self):
+        self.criterion = resolve_loss(self.config.loss_type)
+
+    def forward(self, batch) -> Tensor:
+        raise NotImplementedError
+
+    def configure_optimizers(self):
+        optim = AdamW(
+            self.parameters(),
+            lr=self.hparams.lr,
+            weight_decay=self.hparams.weight_decay,
+        )
+
+        scheduler = ReduceLROnPlateau(
+            optim,
+            mode="min",
+            factor=self.hparams.lr_factor,
+            patience=self.hparams.lr_patience,
+            min_lr=self.hparams.min_lr,
+        )
+
+        return [optim], [
+            {
+                "scheduler": scheduler,
+                "monitor": "val/mae",
+                "interval": "epoch",
+                "frequency": 1,
+            }
+        ]
 
     def define_metrics(self):
         wandb.define_metric("val/mae", summary="min")
         wandb.define_metric("val/corr", summary="max")
-
-    def forward(self, batch) -> Tensor:
-        node_embed = self.encoder.encode(batch)
-        return self.readout(node_embed, batch)
 
     def training_step(self, batch, *args) -> Tensor:
         pred = self.forward(batch).view(-1, 1)
@@ -79,19 +96,23 @@ class RegressionModel(Model):
             "ident": batch.ident,
         }
 
-    def correlation_from_eval_outputs(self, outputs) -> float:
+    def process_eval_outputs(self, outputs) -> float:
         pred = torch.cat([output["pred"] for output in outputs], 0)
         target = torch.cat([output["target"] for output in outputs], 0)
         corr = ((pred - pred.mean()) * (target - target.mean())).mean() / (
             pred.std() * target.std()
         ).cpu().item()
-        return pred, target, corr
+        mae = (pred - target).abs().mean()
+        return pred, target, corr, mae
 
     def validation_epoch_end(self, outputs, *args, **kwargs) -> None:
         super().validation_epoch_end(outputs)
-        pred, target, corr = self.correlation_from_eval_outputs(outputs)
-        y_min = min(pred.min().cpu().item(), target.min().cpu().item())
-        y_max = max(pred.max().cpu().item(), target.max().cpu().item())
+        pred, target, corr, mae = self.process_eval_outputs(outputs)
+        self.log("val/corr", corr)
+
+        # scatter plot
+        y_min = min(pred.min().cpu().item(), target.min().cpu().item()) - 1
+        y_max = max(pred.max().cpu().item(), target.max().cpu().item()) + 1
         fig, ax = plt.subplots()
         ax.scatter(target.cpu().numpy(), pred.cpu().numpy(), s=0.7)
         ax.set_xlim(y_min, y_max)
@@ -101,7 +122,6 @@ class RegressionModel(Model):
         ax.set_title(f"corr={corr}")
         wandb.log({"scatter_val": wandb.Image(fig)})
         plt.close(fig)
-        self.log("val/corr", corr)
 
     def predict_step(self, batch, *args):
         pred = self.forward(batch).flatten()
@@ -112,7 +132,8 @@ class RegressionModel(Model):
         return info
 
     def test_epoch_end(self, outputs, *args, **kwargs) -> None:
-        pred, target, corr = self.correlation_from_eval_outputs(outputs)
+        pred, target, corr, mae = self.process_eval_outputs(outputs)
+        self.log("test/mae", mae)
         self.log("test/corr", corr)
 
         test_predictions = wandb.Artifact("test_predictions", type="predictions")
