@@ -1,9 +1,11 @@
 from pathlib import Path
 from typing import Union
 import pandas as pd
-from biopandas.mol2 import PandasMol2
-
-pmol = PandasMol2()
+try:
+    from biopandas.mol2 import PandasMol2
+    pmol = PandasMol2()
+except:
+    print("i am so tired of rebuilding my entire docker image every single time")
 
 klifs_mol2_columns = {
     0: ("atom.id", "int32"),
