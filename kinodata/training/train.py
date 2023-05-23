@@ -9,7 +9,7 @@ from pytorch_lightning.loggers.wandb import WandbLogger
 from kinodata.data.data_module import make_kinodata_module
 
 
-def train(config, fn_data=make_kinodata_module, fn_model=lambda _: None):
+def train(config, fn_data=make_kinodata_module, fn_model=None):
     logger = WandbLogger(log_model="all")
     model = fn_model(config)
     data_module = fn_data(config)
@@ -29,7 +29,7 @@ def train(config, fn_data=make_kinodata_module, fn_model=lambda _: None):
         accelerator=config.accelerator,
         accumulate_grad_batches=config.accumulate_grad_batches,
         callbacks=[validation_checkpoint, lr_monitor, early_stopping],
-        gradient_clip_val=config.clip_grad_value
+        gradient_clip_val=config.clip_grad_value,
     )
 
     trainer.fit(model, datamodule=data_module)
