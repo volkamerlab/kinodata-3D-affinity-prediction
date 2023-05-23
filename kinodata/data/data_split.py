@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional, Union, Mapping, TypeVar, Dict, Any, Generic
+from typing import List, Optional, Type, Union, Mapping, TypeVar, Dict, Any, Generic
 from pathlib import Path
 import pandas as pd
 
@@ -44,6 +44,10 @@ class Split(Generic[IndexType]):
     @property
     def test_size(self) -> int:
         return len(self.test_split)
+
+    @property
+    def index_cls(self) -> Type[IndexType]:
+        return self.train_split[0].__class__
 
     @classmethod
     def random_split(
@@ -103,7 +107,7 @@ class Split(Generic[IndexType]):
         )
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}[{type(self.train_split[0])}](train={len(self.train_split)}, val={len(self.val_split)}, test={len(self.test_split)}, source={self.source_file})"
+        return f"{self.__class__.__name__}[{self.index_cls.__name__}](train={len(self.train_split)}, val={len(self.val_split)}, test={len(self.test_split)}, source={self.source_file})"
 
 
 class RandomSplit:

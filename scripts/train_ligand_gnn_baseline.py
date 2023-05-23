@@ -46,6 +46,7 @@ if __name__ == "__main__":
     config = configuration.get("data", "training", "ligand_gnn_baseline")
     config = config.update_from_file("config_ligand_baseline_local.yaml")
     config = config.update_from_args()
+    config["need_distances"] = False
 
     for key, value in config.items():
         print(f"{key}: {value}")
