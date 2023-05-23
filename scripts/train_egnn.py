@@ -6,6 +6,7 @@ from kinodata.model.resolve import resolve_aggregation
 
 # dirty
 sys.path.append(".")
+sys.path.append("..")
 
 from functools import partial
 

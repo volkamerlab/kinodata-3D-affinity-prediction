@@ -2,6 +2,7 @@ import sys
 
 # dirty
 sys.path.append(".")
+sys.path.append("..")
 
 import wandb
 
