@@ -1,4 +1,5 @@
-from typing import List, Optional, Tuple
+from collections import defaultdict
+from typing import Dict, List, Optional, Tuple
 import torch
 from torch import Tensor
 
@@ -42,21 +43,24 @@ def interactions_and_distances(
 class AddDistancesAndInteractions(BaseTransform):
     def __init__(
         self,
-        radius: float,
-        subset: Optional[List[Tuple[NodeType, NodeType]]] = None,
+        default_radius: float = 5.0,
+        edge_types: Optional[Dict[Tuple[NodeType, NodeType], float]] = None,
         distance_key: str = "edge_weight",
-        max_num_neighbors: int = 32,
+        max_num_neighbors: int = 85,
     ) -> None:
         super().__init__()
         self.distance_key = distance_key
-        self.radius = radius
         self.subset = None
         self.max_num_neighbors = max_num_neighbors
-        if subset:
+        self.default_radius = default_radius
+        self.radii = defaultdict(lambda _: default_radius)
+        if edge_types:
             self.subset = set()
-            for (u, v) in subset:
+            for (u, v), r in edge_types.items():
                 self.subset.add((u, v))
                 self.subset.add((v, u))
+                self.radii[(u, v)] = r
+                self.radii[(v, u)] = r
 
     def __call__(self, data: HeteroData) -> HeteroData:
         if isinstance(data, HeteroData):
@@ -68,7 +72,7 @@ class AddDistancesAndInteractions(BaseTransform):
                 edge_index, dist = interactions_and_distances(
                     data[nt_a].pos,
                     data[nt_b].pos,
-                    r=self.radius,
+                    r=self.radii[(nt_a, nt_b)],
                     max_num_neighbors=self.max_num_neighbors,
                 )
                 if nt_a == nt_b:
@@ -104,7 +108,7 @@ class AddDistancesAndInteractions(BaseTransform):
 
     def __repr__(self) -> str:
         subset_str = "" if self.subset is None else f", subset={self.subset}"
-        return f"{self.__class__.__name__}({self.radius}{subset_str})"
+        return f"{self.__class__.__name__}({self.radii})"
 
 
 class ForceSymmetricInteraction(BaseTransform):

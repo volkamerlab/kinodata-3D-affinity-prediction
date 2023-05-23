@@ -102,10 +102,16 @@ def make_kinodata_module(config: Config, transforms=None) -> LightningDataset:
 
     if config.need_distances:
         subset = list(product(config.node_types, config.node_types))
+        subset = {
+            nt_pair: config.residue_interaction_radius
+            if "pocket_residue" in nt_pair
+            else config.interaction_radius
+            for nt_pair in subset
+        }
         if ("pocket", "pocket") in subset:
-            subset.remove(("pocket", "pocket"))
+            del subset[("pocket", "pocket")]
         transforms.append(
-            T.AddDistancesAndInteractions(config.interaction_radius, subset=subset)
+            T.AddDistancesAndInteractions(config.interaction_radius, edge_types=subset)
         )
 
     if config.add_docking_scores:

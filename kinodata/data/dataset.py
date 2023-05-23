@@ -207,7 +207,7 @@ def process_idx(args):
 
 if __name__ == "__main__":
     transforms = [
-        AddDistancesAndInteractions(radius=5.0),
+        AddDistancesAndInteractions(default_radius=5.0),
     ]
     dataset = KinodataDocked(transform=Compose(transforms))
     print(dataset[3])
