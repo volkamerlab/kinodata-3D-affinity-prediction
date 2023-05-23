@@ -10,6 +10,7 @@ sys.path.append("..")
 
 from functools import partial
 
+import torch
 import wandb
 
 from kinodata import configuration
@@ -23,7 +24,7 @@ from kinodata.model.shared.node_embedding import (
 from kinodata.model.complex_mpnn import MessagePassingModel
 from kinodata.model.shared.readout import HeteroReadout
 from kinodata.training import train
-from kinodata.types import EdgeType
+from kinodata.types import EdgeType, NodeType
 
 
 def infer_edge_attr_size(config: configuration.Config) -> Dict[EdgeType, int]:
@@ -41,8 +42,10 @@ def infer_edge_attr_size(config: configuration.Config) -> Dict[EdgeType, int]:
 
 def make_atom_embedding_cls(
     config: configuration.Config,
-) -> Callable[..., MessagePassingModel]:
-    emb = {
+) -> Callable[..., HeteroEmbedding]:
+    # TODO
+    # somehow set this based on config?
+    default_embeddings: Dict[NodeType, torch.nn.Module] = {
         "ligand": AtomTypeEmbedding("ligand", hidden_chanels=config.hidden_channels),
         "pocket": AtomTypeEmbedding("pocket", hidden_chanels=config.hidden_channels),
         "pocket_residue": FeatureEmbedding(
@@ -54,7 +57,7 @@ def make_atom_embedding_cls(
     }
     return partial(
         HeteroEmbedding,
-        **{node_type: emb[node_type] for node_type in config.node_types},
+        **{node_type: default_embeddings[node_type] for node_type in config.node_types},
     )
 
 
