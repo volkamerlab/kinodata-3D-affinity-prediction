@@ -207,5 +207,6 @@ register(
     min_lr=1e-6,
     perturb_ligand_positions=0.1,
     perturb_pocket_positions=0.1,
+    clip_grad_value=2.0,
     add_docking_scores=False,
 )

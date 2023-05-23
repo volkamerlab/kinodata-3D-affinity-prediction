@@ -29,6 +29,7 @@ def train(config, fn_data=make_kinodata_module, fn_model=lambda _: None):
         accelerator=config.accelerator,
         accumulate_grad_batches=config.accumulate_grad_batches,
         callbacks=[validation_checkpoint, lr_monitor, early_stopping],
+        gradient_clip_val=config.clip_grad_value
     )
 
     trainer.fit(model, datamodule=data_module)
