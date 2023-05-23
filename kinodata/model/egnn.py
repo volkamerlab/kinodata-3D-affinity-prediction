@@ -237,7 +237,7 @@ class EGNN(nn.Module):
     def __init__(
         self,
         hidden_channels: int,
-        final_embedding_size: int = None,
+        output_channels: int = None,
         edge_attr_size: Optional[Dict[Any, int]] = None,
         num_mp_layers: int = 2,
         mp_type: str = "rbf",
@@ -246,6 +246,30 @@ class EGNN(nn.Module):
         act: str = "elu",
         message_layer_kwargs: Optional[Dict[EdgeType, Kwargs]] = None,
     ) -> None:
+        """
+        E(3)-invariant graph neural network for heterogeneous point clouds.
+
+        Parameters
+        ----------
+        hidden_channels : int
+            Number of hidden channels of node embeddings.
+        output_channels : int, optional
+            _description_, if None, will be set to be the same as hidden_channels.
+        edge_attr_size : Optional[Dict[Any, int]], optional
+            number of edge features, by default None if no edge features are used.
+        num_mp_layers : int, optional
+            number of message passing steps to perform, by default 2
+        mp_type : str, optional
+            the type of message passing layer, by default "rbf"
+        node_types : List[NodeType], optional
+            the types of nodes, by default []
+        edge_types : List[EdgeType], optional
+            the, by default []
+        act : str, optional
+            _description_, by default "elu"
+        message_layer_kwargs : Optional[Dict[EdgeType, Kwargs]], optional
+            _description_, by default None
+        """
         super().__init__()
         self.node_types = node_types
         self.edge_types = edge_types
@@ -262,12 +286,12 @@ class EGNN(nn.Module):
         if message_layer_kwargs is None:
             message_layer_kwargs = defaultdict(dict)
 
-        if final_embedding_size is None:
-            final_embedding_size = hidden_channels
+        if output_channels is None:
+            output_channels = hidden_channels
 
         # create stacks of MP layers
         self.message_passing_layers = nn.ModuleList()
-        channels = [hidden_channels] * (num_mp_layers) + [final_embedding_size]
+        channels = [hidden_channels] * (num_mp_layers) + [output_channels]
         for d_in, d_out in zip(channels[:-1], channels[1:]):
             self.message_passing_layers.append(
                 nn.ModuleDict(

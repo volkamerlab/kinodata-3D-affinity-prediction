@@ -1,6 +1,3 @@
-from pathlib import Path
-from typing import Union
-
 import pandas as pd
 import numpy as np
 
@@ -48,7 +45,7 @@ class ColdSplit:
                 seed,
             )
         else:
-            df_split = solve_random(
+            df_split = self.solver(
                 dataset,
                 self.attribute_key,
                 {

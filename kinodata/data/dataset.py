@@ -49,6 +49,7 @@ class KinodataDocked(InMemoryDataset):
 
     @property
     def processed_file_names(self) -> List[str]:
+        # TODO add preprocessed kssim fingerprints?
         return ["kinodata_docked.pt"]
 
     @property
@@ -103,6 +104,9 @@ class KinodataDocked(InMemoryDataset):
         return df
 
     def process(self):
+
+        # TODO
+        # <add kissim preprocessing> (?)
 
         RDLogger.DisableLog("rdApp.*")
 

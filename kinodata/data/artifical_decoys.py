@@ -1,3 +1,6 @@
+"""
+DEPRECATED
+"""
 from typing import Callable
 import copy
 
@@ -8,21 +11,29 @@ from torch_geometric.data import Data, HeteroData
 from kinodata.transform.kabsch import pseudo_kabsch_alignment
 from kinodata.data.dataset import KinodataDocked, _DATA
 
+
 def replace_ligand(original: HeteroData, replacement: HeteroData) -> HeteroData:
     modified = copy.copy(original)
-    
+
     # this ensures E(3)-invariance of the 'contrastive' / pretraining loss
-    aligned_replacement_pos = pseudo_kabsch_alignment(replacement["ligand"].pos, original["ligand"].pos)
-    
+    aligned_replacement_pos = pseudo_kabsch_alignment(
+        replacement["ligand"].pos, original["ligand"].pos
+    )
+
     modified["ligand"].z = replacement["ligand"].z
     modified["ligand"].pos = aligned_replacement_pos
-    
+
     _, edge_types = original.metadata()
     if ("ligand", "bond", "ligand") in edge_types:
-        modified["ligand", "bond", "ligand"].edge_index = replacement["ligand", "bond", "ligand"].edge_index
-        modified["ligand", "bond", "ligand"].edge_attr = replacement["ligand", "bond", "ligand"].edge_attr
-        
+        modified["ligand", "bond", "ligand"].edge_index = replacement[
+            "ligand", "bond", "ligand"
+        ].edge_index
+        modified["ligand", "bond", "ligand"].edge_attr = replacement[
+            "ligand", "bond", "ligand"
+        ].edge_attr
+
     return modified
+
 
 class KinodataDockedWithDecoys(KinodataDocked):
     def __init__(
@@ -36,7 +47,9 @@ class KinodataDockedWithDecoys(KinodataDocked):
         percentage_valid: float = 0.5,
         seed: int = 0,
     ):
-        super().__init__(root, add_bond_info, remove_hydrogen, transform, pre_transform, pre_filter)
+        super().__init__(
+            root, add_bond_info, remove_hydrogen, transform, pre_transform, pre_filter
+        )
         self.percentage_valid = percentage_valid
         self.rng = np.random.default_rng(seed)
 
@@ -48,8 +61,5 @@ class KinodataDockedWithDecoys(KinodataDocked):
             replacement = super().get(random_index)
             original = replace_ligand(original, replacement)
             original.y = torch.zeros_like(original.y)
-            
+
         return original
-
-
-    

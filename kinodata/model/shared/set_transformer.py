@@ -9,11 +9,6 @@ class MultiheadAttentionBlock(torch.nn.Module):
     r"""The Multihead Attention Block (MAB) from the `"Set Transformer: A
     Framework for Attention-based Permutation-Invariant Neural Networks"
     <https://arxiv.org/abs/1810.00825>`_ paper
-    .. math::
-        \mathrm{MAB}(\mathbf{x}, \mathbf{y}) &= \mathrm{LayerNorm}(\mathbf{h} +
-        \mathbf{W} \mathbf{h})
-        \mathbf{h} &= \mathrm{LayerNorm}(\mathbf{x} +
-        \mathrm{Multihead}(\mathbf{x}, \mathbf{y}, \mathbf{y}))
     Args:
         channels (int): Size of each input sample.
         heads (int, optional): Number of multi-head-attentions.
