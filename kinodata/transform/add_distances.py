@@ -102,6 +102,10 @@ class AddDistancesAndInteractions(BaseTransform):
             raise NotImplementedError
             ...
 
+    def __repr__(self) -> str:
+        subset_str = "" if self.subset is None else f", subset={self.subset}"
+        return f"{self.__class__.__name__}({self.radius}{subset_str})"
+
 
 class ForceSymmetricInteraction(BaseTransform):
     def __init__(self, edge_type: Tuple[str, str, str]) -> None:

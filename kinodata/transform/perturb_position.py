@@ -58,6 +58,9 @@ class PerturbAtomPositions(BaseTransform):
         setattr(data[self.atom_key], self.store_key, noisy_pos)
         return data
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self.atom_key}, {self.std:.2f})"
+
 
 if __name__ == "__main__":
 
