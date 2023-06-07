@@ -46,7 +46,8 @@ class Config(dict):
             intersection = self.intersect(other)
             if len(intersection) > 0:
                 raise ValueError(f"Duplicate keys detected: {intersection.keys()}")
-        return Config(self | other)
+        super().update(other)
+        return self
 
     def init(self, obj: Union[type[T], Callable[..., T]], *args, **kwargs) -> T:
         obj_signature = inspect.signature(obj)
