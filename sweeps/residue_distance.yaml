@@ -1,0 +1,8 @@
+method: bayes
+metric:
+  name: val/corr
+  goal: maximize
+parameters:
+  residue_interaction_radius:
+    min: 2.0
+    max: 24.0

@@ -26,6 +26,8 @@ from kinodata.model.shared.readout import HeteroReadout
 from kinodata.training import train
 from kinodata.types import EdgeType, NodeType
 
+from wandb_utils import sweep
+
 
 def infer_edge_attr_size(config: configuration.Config) -> Dict[EdgeType, int]:
     # dirty code
@@ -94,7 +96,8 @@ def make_egnn_model(config: configuration.Config) -> MessagePassingModel:
     return model
 
 
-if __name__ == "__main__":
+def main():
+    wandb.init(project="kinodata-docked-rescore")
     config = configuration.get("data", "egnn", "training")
     config["node_types"] = ["ligand", "pocket_residue"]
     config["edge_types"] = [
@@ -108,7 +111,14 @@ if __name__ == "__main__":
     config = config.update_from_file("config_regressor_local.yaml")
     config = config.update_from_args()
 
+    config.update(wandb.config)
+    wandb.config.update(config)
+
     for key, value in config.items():
         print(f"{key}: {value}")
-    wandb.init(config=config, project="kinodata-docked-rescore")
+
     train(config, fn_model=make_egnn_model)
+
+
+if __name__ == "__main__":
+    main()
