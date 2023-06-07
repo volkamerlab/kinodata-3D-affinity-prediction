@@ -1,4 +1,4 @@
-from typing import Dict, List, Container, Union
+from typing import List, Union
 from torch_geometric.data import HeteroData
 from torch.nn import (
     Embedding,
