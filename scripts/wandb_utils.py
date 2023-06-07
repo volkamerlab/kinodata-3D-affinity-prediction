@@ -1,3 +1,4 @@
+from functools import partial
 import wandb
 import json
 from dataclasses import dataclass
@@ -5,7 +6,7 @@ from typing import Any, Dict, List
 import json
 from dataclasses import dataclass
 
-api = wandb.Api()
+from argparse import ArgumentParser
 
 
 @dataclass
@@ -95,5 +96,34 @@ class RunInfo:
 
     @classmethod
     def fetch_all(cls, path="nextaids/kinodata-docked-rescore") -> List["RunInfo"]:
+        api = wandb.Api()
         runs = api.runs(path)
         return [cls.from_run(run) for run in runs]
+
+
+_sweep_parser = ArgumentParser()
+_sweep_parser.add_argument("--sweep_id")
+
+
+def try_parse_sweep():
+    args, _ = _sweep_parser.parse_known_args()
+    return args.sweep_id
+
+
+def sweepable(func, sweep_id=None):
+    get_sweep = lambda: sweep_id
+    if sweep_id is None:
+        get_sweep = try_parse_sweep
+
+    def maybe_sweep(*args, **kwargs):
+        sweep_id = get_sweep()
+        if sweep_id is None:
+            return func(*args, **kwargs)
+        else:
+            return wandb.agent(sweep_id, function=func)
+
+    return maybe_sweep
+
+
+def sweep(sweep_id):
+    return partial(sweepable, sweep_id=sweep_id)
