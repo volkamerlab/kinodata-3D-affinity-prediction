@@ -59,7 +59,10 @@ class RunInfo:
         elif self.is_egnn:
             suffix = ""
             if "pocket_residue" in self.config["node_types"]:
-                suffix = "(R)"
+                if "residue_interaction_radius" in self.config:
+                    suffix = f"(R/{self.config['residue_interaction_radius']})"
+                else:
+                    suffix = "(R)"
             return f"EGNN {suffix}"
         elif "kissim_size" in self.run.config and self.run.config["kissim_size"] == 12:
             return "DTI"
