@@ -35,6 +35,8 @@ def cat_many(
 
 
 class RegressionModel(pl.LightningModule):
+    log_scatter_plot: bool = False
+
     def __init__(
         self,
         config: Config,
@@ -110,18 +112,18 @@ class RegressionModel(pl.LightningModule):
         pred, target, corr, mae = self.process_eval_outputs(outputs)
         self.log("val/corr", corr)
 
-        # scatter plot
-        y_min = min(pred.min().cpu().item(), target.min().cpu().item()) - 1
-        y_max = max(pred.max().cpu().item(), target.max().cpu().item()) + 1
-        fig, ax = plt.subplots()
-        ax.scatter(target.cpu().numpy(), pred.cpu().numpy(), s=0.7)
-        ax.set_xlim(y_min, y_max)
-        ax.set_ylim(y_min, y_max)
-        ax.set_ylabel("Pred")
-        ax.set_xlabel("Target")
-        ax.set_title(f"corr={corr}")
-        wandb.log({"scatter_val": wandb.Image(fig)})
-        plt.close(fig)
+        if self.log_scatter_plot:
+            y_min = min(pred.min().cpu().item(), target.min().cpu().item()) - 1
+            y_max = max(pred.max().cpu().item(), target.max().cpu().item()) + 1
+            fig, ax = plt.subplots()
+            ax.scatter(target.cpu().numpy(), pred.cpu().numpy(), s=0.7)
+            ax.set_xlim(y_min, y_max)
+            ax.set_ylim(y_min, y_max)
+            ax.set_ylabel("Pred")
+            ax.set_xlabel("Target")
+            ax.set_title(f"corr={corr}")
+            wandb.log({"scatter_val": wandb.Image(fig)})
+            plt.close(fig)
 
     def predict_step(self, batch, *args):
         pred = self.forward(batch).flatten()
