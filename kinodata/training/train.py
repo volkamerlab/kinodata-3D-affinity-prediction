@@ -19,7 +19,7 @@ def train(config, fn_data=make_kinodata_module, fn_model=None):
     )
     lr_monitor = LearningRateMonitor("epoch")
     early_stopping = EarlyStopping(
-        monitor="val/mae", patience=config.early_stopping_patience, mode="min"
+        monitor="val/corr", patience=config.early_stopping_patience, mode="max"
     )
 
     trainer = pl.Trainer(
