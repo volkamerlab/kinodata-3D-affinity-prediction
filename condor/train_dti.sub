@@ -1,6 +1,7 @@
 universe = docker
 docker_image = gjoschka/massspec_with_wandb
-executable = train_dti.sh
+executable = train_datasail.sh
+arguments = train_dti_baseline
 output = train_kinodata.$(ClusterId).$(ProcId).out
 error = train_kinodata.$(ClusterId).$(ProcId).err
 log = train_kinodata.$(ClusterId).log
