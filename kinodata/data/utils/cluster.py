@@ -14,22 +14,52 @@ class Clustering(Generic[T]):
 
     def __call__(
         self,
-        df: pd.DataFrame,
-        key: str,
+        data: pd.DataFrame,
+        column_key: str,
         similarities: np.ndarray,
     ) -> pd.DataFrame:
-        self.unique_items: Sequence[T] = df[key].unique()
+        """
+        Wrapper around clustering.
+        Used for clustering all unique values of a
+        specific dataset column
+
+        Parameters
+        ----------
+        data : pd.DataFrame
+        key : str
+        similarities : np.ndarray
+
+        Returns
+        -------
+        pd.DataFrame
+            The clustered data, i.e., the input data frame
+            with a new column that contains the cluster label
+            for each data point.
+        """
+        # TODO change this such that unique data points are given as input
+        # instead of entire data?
+
+        # only cluster the unique data points
+        self.unique_items: Sequence[T] = data[column_key].unique()
         self.similarities = similarities
         cluster_labels = self.solve()
         df_cluster = pd.DataFrame(
             {
-                key: self.unique_items,
+                column_key: self.unique_items,
                 self.cluster_key: cluster_labels,
             }
         )
-        return pd.merge(df, df_cluster, on=key)
+        return pd.merge(data, df_cluster, on=column_key)
 
     def solve(self) -> Sequence[int]:
+        """
+        Find a clustering based on the given similarities.
+
+        Returns
+        -------
+        Sequence[int]
+            The labels (cluster indices) for all data points.
+        """
         raise NotImplementedError
 
 
@@ -41,3 +71,10 @@ class AffinityPropagation(Clustering):
     def solve(self):
         self.model.fit(self.similarities)
         return self.model.labels_
+
+
+# TODO implement hierarchical/agglomerative clustering for 'easier" splits?
+class HierarchicalClustering(Clustering):
+    def __init__(self) -> None:
+        super().__init__()
+        raise NotImplementedError
