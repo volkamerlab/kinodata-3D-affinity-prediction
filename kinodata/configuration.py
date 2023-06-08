@@ -194,6 +194,7 @@ register(
 
 register(
     "training",
+    optim="adamw",
     lr=1e-4,
     weight_decay=3e-6,
     batch_size=64,
@@ -207,7 +208,7 @@ register(
     early_stopping_patience=24,
     min_lr=1e-6,
     perturb_ligand_positions=0.1,
-    perturb_pocket_positions=0.1,
+    perturb_pocket_positions=0.0,
     clip_grad_value=2.0,
     add_docking_scores=False,
 )
