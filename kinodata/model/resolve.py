@@ -1,4 +1,5 @@
 import torch.nn as nn
+import torch.optim as opt
 from torch_geometric.nn import aggr
 
 
@@ -12,6 +13,21 @@ _act = {
 }
 
 
+def resolve_optim(optim: str) -> opt.Optimizer:
+    optim = optim.lower().strip()
+    if optim == "adam":
+        return opt.Adam
+    if optim == "adamw":
+        return opt.AdamW
+    if optim == "radam":
+        return opt.RAdam
+    if optim == "rmsprop":
+        return opt.RMSprop
+    if optim == "sgd":
+        return opt.SGD
+    raise ValueError(optim)
+
+
 def resolve_act(act: str) -> nn.Module:
     try:
         return _act[act]
@@ -20,7 +36,7 @@ def resolve_act(act: str) -> nn.Module:
 
 
 def resolve_loss(loss_type: str) -> nn.Module:
-    loss_type = loss_type.lower()
+    loss_type = loss_type.lower().lstrip()
     if loss_type == "mse":
         return nn.MSELoss()
     if loss_type in ("mae", "l1"):

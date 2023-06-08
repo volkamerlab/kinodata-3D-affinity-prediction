@@ -10,7 +10,7 @@ import pytorch_lightning as pl
 
 from kinodata.configuration import Config
 from kinodata.model.resolve import resolve_loss
-from pytorch_lightning.utilities.grads import grad_norm
+from kinodata.model.resolve import resolve_optim
 
 
 def cat_many(
@@ -54,7 +54,8 @@ class RegressionModel(pl.LightningModule):
         raise NotImplementedError
 
     def configure_optimizers(self):
-        optim = AdamW(
+        Opt = resolve_optim(self.hparams.optim)
+        optim = Opt(
             self.parameters(),
             lr=self.hparams.lr,
             weight_decay=self.hparams.weight_decay,
