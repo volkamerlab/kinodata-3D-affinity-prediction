@@ -1,6 +1,6 @@
 method: bayes
 metric:
-  name: val/corr
+  name: val/corr.max
   goal: maximize
 parameters:
   residue_interaction_radius:
