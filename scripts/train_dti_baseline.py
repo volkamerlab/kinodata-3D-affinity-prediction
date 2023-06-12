@@ -26,7 +26,7 @@ if __name__ == "__main__":
         hidden_channels=128,
         act="silu",
         num_attention_blocks=2,
-        kissim_size=12,
+        kissim_size=6,
     )
 
     config = configuration.get("data", "training", "dti_baseline")

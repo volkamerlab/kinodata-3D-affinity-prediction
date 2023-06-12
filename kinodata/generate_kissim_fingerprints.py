@@ -1,8 +1,11 @@
+import logging
 from pathlib import Path
+
 import pandas as pd
 from tqdm import tqdm
+
+# TODO fix environment
 import kissim.encoding.fingerprint as fp
-import logging
 
 
 def main(

@@ -15,8 +15,13 @@ from tqdm import tqdm
 
 from kinodata.data.featurization.pocket import add_pocket_information
 from kinodata.data.featurization.ligand import add_atoms, add_bonds
-from kinodata.data.featurization.kissim import add_kissim_fp, load_kissim
-from kinodata.transform.add_distances import AddDistancesAndInteractions
+from kinodata.data.featurization.kissim import (
+    add_kissim_fp,
+    load_kissim,
+    PHYSICOCHEMICAL,
+    STRUCTURAL,
+)
+from kinodata.transform.add_distances import AddDistances, AddDistancesAndInteractions
 from kinodata.transform.filter_activity import (
     FilterActivityScore,
     FilterActivityType,
@@ -30,7 +35,7 @@ class KinodataDocked(InMemoryDataset):
     def __init__(
         self,
         root: str = str(_DATA),
-        remove_hydrogen: bool = True,
+        remove_hydrogen: bool = False,
         transform: Callable = None,
         pre_transform: Callable = None,
         pre_filter: Callable = (lambda _: True),
@@ -68,6 +73,7 @@ class KinodataDocked(InMemoryDataset):
             smilesName="compound_structures.canonical_smiles",
             molColName="molecule",
             embedProps=True,
+            removeHs=self.remove_hydrogen,
         )
         df.set_index("ID", inplace=True)
 
@@ -193,7 +199,7 @@ def process_idx(args):
     kissim_fp = load_kissim(structure_id)
     if kissim_fp is None:
         return None
-    data = add_kissim_fp(data, kissim_fp)
+    data = add_kissim_fp(data, kissim_fp, subset=PHYSICOCHEMICAL)
 
     data.y = torch.tensor(activity).view(1)
     data.docking_score = torch.tensor(docking_score).view(1)
@@ -206,9 +212,7 @@ def process_idx(args):
 
 
 if __name__ == "__main__":
-    transforms = [
-        AddDistancesAndInteractions(default_radius=5.0),
-    ]
+    transforms = [AddDistances(("pocket", "bond", "pocket"))]
     dataset = KinodataDocked(transform=Compose(transforms))
     print(dataset[3])
 

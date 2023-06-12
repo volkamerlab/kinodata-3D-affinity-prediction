@@ -110,9 +110,13 @@ def make_kinodata_module(config: Config, transforms=None) -> LightningDataset:
         }
         if ("pocket", "pocket") in subset:
             del subset[("pocket", "pocket")]
+        if ("ligand", "ligand") in subset:
+            del subset[("ligand", "ligand")]
         transforms.append(
             T.AddDistancesAndInteractions(config.interaction_radius, edge_types=subset)
         )
+        transforms.append(T.AddDistances(("pocket", "bond", "pocket")))
+        transforms.append(T.AddDistances(("ligand", "bond", "ligand")))
 
     if config.add_docking_scores:
         assert config.need_distances

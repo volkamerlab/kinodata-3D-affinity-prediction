@@ -11,10 +11,10 @@ sys.path.append("..")
 from functools import partial
 
 import torch
+from torch.nn import Embedding
 import wandb
 
 from kinodata import configuration
-from kinodata.model.egin import HeteroEGIN
 from kinodata.model.egnn import EGNN
 from kinodata.model.shared.node_embedding import (
     HeteroEmbedding,
@@ -25,6 +25,7 @@ from kinodata.model.complex_mpnn import MessagePassingModel
 from kinodata.model.shared.readout import HeteroReadout
 from kinodata.training import train
 from kinodata.types import EdgeType, NodeType
+from kinodata.data.featurization.atoms import AtomFeatures as LigandAtomFeatures
 
 from wandb_utils import sweep
 
@@ -35,7 +36,8 @@ def infer_edge_attr_size(config: configuration.Config) -> Dict[EdgeType, int]:
 
     docking_score_num = 2 if config.add_docking_scores else 0
     edge_attr_size = defaultdict(int)
-    edge_attr_size[("ligand", "interacts", "ligand")] = 4 + docking_score_num
+    edge_attr_size[("ligand", "bond", "ligand")] = 4 + docking_score_num
+    edge_attr_size[("pocket", "bond", "pocket")] = 6 + docking_score_num
     edge_attr_size[("pocket", "interacts", "ligand")] = docking_score_num
     edge_attr_size[("ligand", "interacts", "pocket")] = docking_score_num
 
@@ -47,9 +49,34 @@ def make_atom_embedding_cls(
 ) -> Callable[..., HeteroEmbedding]:
     # TODO
     # somehow set this based on config?
+    shared_element_embedding = Embedding(100, config.hidden_channels)
     default_embeddings: Dict[NodeType, torch.nn.Module] = {
-        "ligand": AtomTypeEmbedding("ligand", hidden_chanels=config.hidden_channels),
-        "pocket": AtomTypeEmbedding("pocket", hidden_chanels=config.hidden_channels),
+        "ligand": [
+            AtomTypeEmbedding(
+                "ligand",
+                hidden_chanels=config.hidden_channels,
+                embedding=shared_element_embedding,
+            ),
+            FeatureEmbedding(
+                "ligand",
+                in_channels=LigandAtomFeatures.size,
+                hidden_channels=config.hidden_channels,
+                act=config.act,
+            ),
+        ],
+        "pocket": [
+            AtomTypeEmbedding(
+                "pocket",
+                hidden_chanels=config.hidden_channels,
+                embedding=shared_element_embedding,
+            ),
+            FeatureEmbedding(
+                "pocket",
+                in_channels=10,
+                hidden_channels=config.hidden_channels,
+                act=config.act,
+            ),
+        ],
         "pocket_residue": FeatureEmbedding(
             "pocket_residue",
             in_channels=config.num_residue_features,
@@ -99,11 +126,12 @@ def make_egnn_model(config: configuration.Config) -> MessagePassingModel:
 def main():
     wandb.init(project="kinodata-docked-rescore")
     config = configuration.get("data", "egnn", "training")
-    config["node_types"] = ["ligand", "pocket_residue"]
+    config["node_types"] = ["ligand", "pocket"]
     config["edge_types"] = [
-        ("ligand", "interacts", "ligand"),
-        ("ligand", "interacts", "pocket_residue"),
-        ("pocket_residue", "interacts", "ligand"),
+        ("ligand", "bond", "ligand"),
+        ("ligand", "interacts", "pocket"),
+        ("pocket", "interacts", "ligand"),
+        ("pocket", "bond", "pocket"),
     ]
 
     config["add_docking_scores"] = False

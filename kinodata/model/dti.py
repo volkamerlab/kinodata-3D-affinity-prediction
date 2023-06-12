@@ -107,7 +107,7 @@ class KissimPocketTransformer(Module):
         )
 
     def forward(self, batch) -> Tuple[Tensor, Optional[Tensor]]:
-        x = self.lin1(batch.kissim_fp[:, :, 1:].float())
+        x = self.lin1(batch.kissim_fp.float())
         for attn in self.attention_blocks:
             x = attn(x)
         return x, None

@@ -308,7 +308,6 @@ class EGNN(nn.Module):
                             **message_layer_kwargs[edge_type],
                         )
                         for edge_type in edge_types
-                        if edge_type[1] == "interacts"
                     }
                 )
             )

@@ -14,7 +14,7 @@ from torch_geometric.utils import (
 from torch_cluster import radius
 from itertools import product
 
-from kinodata.types import NodeType
+from kinodata.types import NodeType, EdgeType
 
 
 def interactions_and_distances(
@@ -53,7 +53,7 @@ class AddDistancesAndInteractions(BaseTransform):
         self.subset = None
         self.max_num_neighbors = max_num_neighbors
         self.default_radius = default_radius
-        self.radii = defaultdict(lambda _: default_radius)
+        self.radii = defaultdict(lambda: default_radius)
         if edge_types:
             self.subset = set()
             for (u, v), r in edge_types.items():
@@ -69,10 +69,11 @@ class AddDistancesAndInteractions(BaseTransform):
             if self.subset:
                 itr = filter(lambda nt_pair: nt_pair in self.subset, itr)
             for nt_a, nt_b in itr:
+                radius = self.radii[(nt_a, nt_b)]
                 edge_index, dist = interactions_and_distances(
                     data[nt_a].pos,
                     data[nt_b].pos,
-                    r=self.radii[(nt_a, nt_b)],
+                    r=radius,
                     max_num_neighbors=self.max_num_neighbors,
                 )
                 if nt_a == nt_b:
@@ -144,6 +145,34 @@ class ForceSymmetricInteraction(BaseTransform):
             data[source, relation, target].edge_index = merged_edge_index
             data[source, relation, target].dist = merged_dist
 
+        return data
+
+
+class AddDistances(BaseTransform):
+    def __init__(self, edge_type: EdgeType, distance_key: str = "edge_weight") -> None:
+        super().__init__()
+        self.edge_type = edge_type
+        self.distance_key = distance_key
+
+    def __call__(self, data: HeteroData) -> HeteroData:
+        row, col = data[
+            self.edge_type[0], self.edge_type[1], self.edge_type[2]
+        ].edge_index
+        distance = (
+            (
+                (data[self.edge_type[0]].pos[row] - data[self.edge_type[2]].pos[col])
+                .pow(2)
+                .sum(dim=1)
+                .sqrt()
+            )
+            .view(-1, 1)
+            .to(torch.float32)
+        )
+        setattr(
+            data[self.edge_type[0], self.edge_type[1], self.edge_type[2]],
+            self.distance_key,
+            distance,
+        )
         return data
 
 

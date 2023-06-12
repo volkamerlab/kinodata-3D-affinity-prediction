@@ -4,6 +4,7 @@ from torch_geometric.utils import to_undirected
 from torch_geometric.data import HeteroData
 import torch.nn.functional as F
 from .bonds import BOND_TYPE_TO_IDX, NUM_BOND_TYPES
+from .atoms import AtomFeatures
 
 
 def atomic_numbers(mol) -> Tensor:
@@ -21,6 +22,7 @@ def atom_positions(mol) -> Tensor:
 
 def add_atoms(mol, data: HeteroData, key: str) -> HeteroData:
     data[key].z = atomic_numbers(mol)
+    data[key].x = torch.from_numpy(AtomFeatures.compute(mol)).float()
     data[key].pos = atom_positions(mol)
     assert data[key].z.size(0) == data[key].pos.size(0)
     return data
