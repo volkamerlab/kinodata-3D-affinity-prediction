@@ -12,12 +12,12 @@ from torch.nn import (
     BatchNorm1d,
     LayerNorm,
 )
-import pytorch_lightning as pl
 
 from kinodata.configuration import Config
 from kinodata.model.regression import RegressionModel
 from kinodata.model.resolve import resolve_act, resolve_loss
 from kinodata.model.shared import GINE, SetAttentionBlock
+from kinodata.types import NodeType, RelationType
 from torch_geometric.nn.pool import global_add_pool
 
 
@@ -77,14 +77,16 @@ class LigandGINE(Module):
         self.gine = GINE(hidden_channels, num_layers, edge_channels=4, act=act)
 
     def forward(self, batch) -> Tuple[Tensor, Tensor]:
-        x = self.atom_embedding(batch["ligand"].z)
+        ligand_node_store = batch[NodeType.Ligand]
+        ligand_bond_store = batch[NodeType.Ligand, RelationType.Bond, NodeType.Ligand]
+        x = self.atom_embedding(ligand_node_store.z)
         h = self.gine(
             x=x,
-            edge_index=batch["ligand", "bond", "ligand"].edge_index,
-            edge_attr=batch["ligand", "bond", "ligand"].edge_attr,
-            batch=batch["ligand"].batch,
+            edge_index=ligand_bond_store.edge_index,
+            edge_attr=ligand_bond_store.edge_attr,
+            batch=ligand_node_store.batch,
         )
-        return h, batch["ligand"].batch
+        return h, ligand_node_store.batch
 
 
 class KissimPocketTransformer(Module):

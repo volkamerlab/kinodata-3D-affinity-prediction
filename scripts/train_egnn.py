@@ -42,9 +42,9 @@ def infer_edge_attr_size(config: configuration.Config) -> Dict[EdgeType, int]:
 
     docking_score_num = 2 if config.add_docking_scores else 0
     edge_attr_size = defaultdict(int)
-    for edge_type in STRUCTURAL_EDGE_TYPES:
-        edge_attr_size[edge_type] = NUM_BOND_TYPES + docking_score_num
     for edge_type in COVALENT_EDGE_TYPES:
+        edge_attr_size[edge_type] = NUM_BOND_TYPES + docking_score_num
+    for edge_type in STRUCTURAL_EDGE_TYPES:
         edge_attr_size[edge_type] = docking_score_num
 
     return edge_attr_size

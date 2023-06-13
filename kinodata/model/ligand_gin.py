@@ -10,6 +10,12 @@ from torch_geometric.nn import MLP
 from kinodata.model.resolve import resolve_loss
 from kinodata.model.regression import RegressionModel
 from kinodata.configuration import Config
+from kinodata.model.shared.node_embedding import (
+    FeatureEmbedding,
+    AtomTypeEmbedding,
+    CombineSum,
+)
+from kinodata.types import NodeType, RelationType
 
 
 class LigandGNNBaseline(RegressionModel):
@@ -20,7 +26,20 @@ class LigandGNNBaseline(RegressionModel):
         aggr: Aggregation,
     ) -> None:
         super().__init__(config)
-        self.initial_embedding = Embedding(100, self.hparams.hidden_channels)
+        self.initial_embedding = CombineSum(
+            [
+                AtomTypeEmbedding(
+                    NodeType.Ligand,
+                    hidden_chanels=config.hidden_channels,
+                    act=config.act,
+                ),
+                FeatureEmbedding(
+                    NodeType.Ligand,
+                    hidden_channels=config.hidden_channels,
+                    act=config.act,
+                ),
+            ]
+        )
         self.encoder = encoder
         self.aggr = aggr
         self.prediction_head = MLP(
@@ -36,12 +55,14 @@ class LigandGNNBaseline(RegressionModel):
         self.define_metrics()
 
     def forward(self, batch: HeteroData) -> Tensor:
-        x = self.initial_embedding(batch["ligand"].z)
+        x = self.initial_embedding(batch)
         h = self.encoder.forward(
             x,
-            batch["ligand", "bond", "ligand"].edge_index,
-            edge_attr=batch["ligand", "bond", "ligand"].edge_attr,
+            batch[NodeType.Ligand, RelationType.Bond, NodeType.Ligand].edge_index,
+            edge_attr=batch[
+                NodeType.Ligand, RelationType.Bond, NodeType.Ligand
+            ].edge_attr,
         )
-        aggr = self.aggr.forward(h, index=batch["ligand"].batch)
+        aggr = self.aggr.forward(h, index=batch[NodeType.Ligand].batch)
         pred = self.prediction_head(aggr)
         return pred
