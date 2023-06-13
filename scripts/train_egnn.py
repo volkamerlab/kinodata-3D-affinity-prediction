@@ -15,7 +15,7 @@ from torch.nn import Embedding
 import wandb
 
 from kinodata import configuration
-from kinodata.model.egnn import EGNN
+from kinodata.model.egnn import EGNN, REGNN
 from kinodata.model.shared.node_embedding import (
     HeteroEmbedding,
     AtomTypeEmbedding,
@@ -24,8 +24,14 @@ from kinodata.model.shared.node_embedding import (
 from kinodata.model.complex_mpnn import MessagePassingModel
 from kinodata.model.shared.readout import HeteroReadout
 from kinodata.training import train
-from kinodata.types import EdgeType, NodeType
-from kinodata.data.featurization.atoms import AtomFeatures as LigandAtomFeatures
+from kinodata.types import (
+    EdgeType,
+    NodeType,
+    STRUCTURAL_EDGE_TYPES,
+    COVALENT_EDGE_TYPES,
+)
+from kinodata.data.featurization.atoms import AtomFeatures
+from kinodata.data.featurization.bonds import NUM_BOND_TYPES
 
 from wandb_utils import sweep
 
@@ -36,10 +42,10 @@ def infer_edge_attr_size(config: configuration.Config) -> Dict[EdgeType, int]:
 
     docking_score_num = 2 if config.add_docking_scores else 0
     edge_attr_size = defaultdict(int)
-    edge_attr_size[("ligand", "bond", "ligand")] = 4 + docking_score_num
-    edge_attr_size[("pocket", "bond", "pocket")] = 6 + docking_score_num
-    edge_attr_size[("pocket", "interacts", "ligand")] = docking_score_num
-    edge_attr_size[("ligand", "interacts", "pocket")] = docking_score_num
+    for edge_type in STRUCTURAL_EDGE_TYPES:
+        edge_attr_size[edge_type] = NUM_BOND_TYPES + docking_score_num
+    for edge_type in COVALENT_EDGE_TYPES:
+        edge_attr_size[edge_type] = docking_score_num
 
     return edge_attr_size
 
@@ -51,34 +57,34 @@ def make_atom_embedding_cls(
     # somehow set this based on config?
     shared_element_embedding = Embedding(100, config.hidden_channels)
     default_embeddings: Dict[NodeType, torch.nn.Module] = {
-        "ligand": [
+        NodeType.Ligand: [
             AtomTypeEmbedding(
-                "ligand",
+                NodeType.Ligand,
                 hidden_chanels=config.hidden_channels,
                 embedding=shared_element_embedding,
             ),
             FeatureEmbedding(
-                "ligand",
-                in_channels=LigandAtomFeatures.size,
+                NodeType.Ligand,
+                in_channels=AtomFeatures.size,
                 hidden_channels=config.hidden_channels,
                 act=config.act,
             ),
         ],
-        "pocket": [
+        NodeType.Pocket: [
             AtomTypeEmbedding(
-                "pocket",
+                NodeType.Pocket,
                 hidden_chanels=config.hidden_channels,
                 embedding=shared_element_embedding,
             ),
             FeatureEmbedding(
-                "pocket",
-                in_channels=10,
+                NodeType.Pocket,
+                in_channels=AtomFeatures.size,
                 hidden_channels=config.hidden_channels,
                 act=config.act,
             ),
         ],
-        "pocket_residue": FeatureEmbedding(
-            "pocket_residue",
+        NodeType.PocketResidue: FeatureEmbedding(
+            NodeType.PocketResidue,
             in_channels=config.num_residue_features,
             hidden_channels=config.hidden_channels,
             act=config.act,
@@ -106,11 +112,18 @@ def make_egnn_model(config: configuration.Config) -> MessagePassingModel:
 
     edge_attr_size = infer_edge_attr_size(config)
 
+    if config.model_type.lower() == "egnn":
+        EGNNCls = EGNN
+    elif config.model_type.lower() == "rel-egnn":
+        EGNNCls = REGNN
+    else:
+        raise ValueError(config.model_type)
+
     model = MessagePassingModel(
         config,
         embedding_cls=make_atom_embedding_cls(config),
         message_passing_cls=partial(
-            EGNN, message_layer_kwargs=mp_layer_kwargs, edge_attr_size=edge_attr_size
+            EGNNCls, message_layer_kwargs=mp_layer_kwargs, edge_attr_size=edge_attr_size
         ),
         readout_cls=partial(
             HeteroReadout,
@@ -126,16 +139,10 @@ def make_egnn_model(config: configuration.Config) -> MessagePassingModel:
 def main():
     wandb.init(project="kinodata-docked-rescore")
     config = configuration.get("data", "egnn", "training")
-    config["node_types"] = ["ligand", "pocket"]
-    config["edge_types"] = [
-        ("ligand", "bond", "ligand"),
-        ("ligand", "interacts", "pocket"),
-        ("pocket", "interacts", "ligand"),
-        ("pocket", "bond", "pocket"),
-    ]
+    config["node_types"] = [NodeType.Ligand, NodeType.Pocket]
+    config["edge_types"] = COVALENT_EDGE_TYPES + STRUCTURAL_EDGE_TYPES
 
     config["add_docking_scores"] = False
-    config["model_type"] = "egnn"
     config = config.update_from_file("config_regressor_local.yaml")
     config = config.update_from_args()
 

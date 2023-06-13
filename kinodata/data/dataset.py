@@ -8,18 +8,16 @@ import pandas as pd
 import requests  # type : ignore
 import torch
 from rdkit import RDLogger
-from rdkit.Chem import PandasTools
+from rdkit.Chem import PandasTools, MolFromMol2File, Kekulize
 from torch_geometric.data import HeteroData, InMemoryDataset
 from torch_geometric.transforms import Compose
 from tqdm import tqdm
 
-from kinodata.data.featurization.pocket import add_pocket_information
-from kinodata.data.featurization.ligand import add_atoms, add_bonds
+from kinodata.data.featurization.rdkit import add_atoms, add_bonds
 from kinodata.data.featurization.kissim import (
     add_kissim_fp,
     load_kissim,
     PHYSICOCHEMICAL,
-    STRUCTURAL,
 )
 from kinodata.transform.add_distances import AddDistances, AddDistancesAndInteractions
 from kinodata.transform.filter_activity import (
@@ -27,6 +25,7 @@ from kinodata.transform.filter_activity import (
     FilterActivityType,
     FilterCombine,
 )
+from kinodata.types import NodeType, EdgeType
 
 _DATA = Path(__file__).parents[2] / "data"
 
@@ -139,9 +138,9 @@ class KinodataDocked(InMemoryDataset):
         ]
 
         with mp.Pool(os.cpu_count()) as pool:
-            data_list = pool.map(process_idx, tasks)
+            data_list = pool.map(process_idx, tqdm(tasks))
 
-        # data_list = list(map(process_idx, tasks))
+        # data_list = list(map(process_idx, tqdm(tasks)))
 
         skipped = [
             ident for ident, data in zip(self.df.index, data_list) if data is None
@@ -190,9 +189,18 @@ def process_idx(args):
     ) = args
     data = HeteroData()
 
-    data = add_atoms(ligand, data, "ligand")
-    data = add_bonds(ligand, data, "ligand")
-    data = add_pocket_information(data, pocket_file)
+    try:
+        Kekulize(ligand)
+        data = add_atoms(ligand, data, NodeType.Ligand)
+        data = add_bonds(ligand, data, NodeType.Ligand)
+
+        pocket = MolFromMol2File(str(pocket_file))
+        Kekulize(pocket)
+        data = add_atoms(pocket, data, NodeType.Pocket)
+        data = add_bonds(pocket, data, NodeType.Pocket)
+    except Exception as e:
+        print(e)
+        return None
     if data is None:
         return None
 
@@ -212,7 +220,7 @@ def process_idx(args):
 
 
 if __name__ == "__main__":
-    transforms = [AddDistances(("pocket", "bond", "pocket"))]
+    transforms = [AddDistances((NodeType.Pocket, EdgeType.Bond, NodeType.Ligand))]
     dataset = KinodataDocked(transform=Compose(transforms))
     print(dataset[3])
 

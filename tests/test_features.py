@@ -1,5 +1,5 @@
 import numpy as np
-from kinodata.data.featurization.ligand import (
+from kinodata.data.featurization.rdkit import (
     AtomFeatures,
     FormalCharge,
     NumHydrogens,

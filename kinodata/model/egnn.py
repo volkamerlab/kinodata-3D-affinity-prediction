@@ -1,4 +1,14 @@
-from typing import Any, Dict, List, Optional, Tuple
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+)
 import torch
 from torch import Tensor, LongTensor
 import torch.nn as nn
@@ -9,7 +19,7 @@ from torch_geometric.nn.norm import GraphNorm
 
 from collections import defaultdict
 
-from kinodata.types import NodeType, NodeEmbedding, Kwargs
+from kinodata.types import NodeType, NodeEmbedding, Kwargs, RelationType
 from kinodata.types import EdgeType
 from kinodata.model.resolve import resolve_act
 
@@ -289,6 +299,28 @@ class EGNN(nn.Module):
         if output_channels is None:
             output_channels = hidden_channels
 
+        self.reset_parameters(
+            hidden_channels,
+            num_mp_layers,
+            output_channels,
+            mp_class,
+            edge_attr_size,
+            act,
+            message_layer_kwargs,
+            edge_types,
+        )
+
+    def reset_parameters(
+        self,
+        hidden_channels: int,
+        num_mp_layers: int,
+        output_channels: int,
+        mp_class: Type[EGNNMessageLayer],
+        edge_attr_size: Mapping[EdgeType, int],
+        act: Union[str, nn.Module],
+        message_layer_kwargs: Dict[str, Any],
+        edge_types: Iterable[EdgeType],
+    ):
         # create stacks of MP layers
         self.message_passing_layers = nn.ModuleList()
         channels = [hidden_channels] * (num_mp_layers) + [output_channels]
@@ -337,4 +369,77 @@ class EGNN(nn.Module):
                 )
             node_embedding = new_node_embed
 
+        return node_embedding
+
+
+class REGNN(EGNN):
+    def assert_edge_attr_matches(
+        self, edge_attr_size: Mapping[EdgeType, int]
+    ) -> Mapping[RelationType, int]:
+        size_sets = defaultdict(set)
+        for (_, relation, _), size in edge_attr_size.items():
+            size_sets[relation].add(size)
+        assert all(len(size_set) == 1 for size_set in size_sets.values())
+        return {relation: size_set.pop() for relation, size_set in size_sets.items()}
+
+    def reset_parameters(
+        self,
+        hidden_channels: int,
+        num_mp_layers: int,
+        output_channels: int,
+        mp_class: Type[EGNNMessageLayer],
+        edge_attr_size: Mapping[EdgeType, int],
+        act: Union[str, nn.Module],
+        message_layer_kwargs: Dict[str, Any],
+        edge_types: Iterable[EdgeType],
+    ):
+        self.edge_types = edge_types
+        relation_edge_attr_size = self.assert_edge_attr_matches(edge_attr_size)
+        relation_message_layer_kwargs = {
+            relation: kwargs
+            for (_, relation, _), kwargs in message_layer_kwargs.items()
+        }
+        self.message_passing_layers = nn.ModuleList()
+        for i_layer in range(num_mp_layers):
+            self.message_passing_layers.append(
+                nn.ModuleDict(
+                    {
+                        relation: mp_class(
+                            hidden_channels,
+                            hidden_channels,
+                            _edge_attr_size,
+                            1,
+                            hidden_channels,
+                            hidden_channels,
+                            act=act,
+                            **relation_message_layer_kwargs[relation],
+                        )
+                        for relation, _edge_attr_size in relation_edge_attr_size.items()
+                    }
+                )
+            )
+        pass
+
+    def forward(self, data: HeteroData, node_embedding: NodeEmbedding) -> NodeEmbedding:
+        for layer_dict in self.message_passing_layers:
+            new_node_embed = {nt: x.clone() for nt, x in node_embedding.items()}
+            for source_node_type, relation, target_node_type in self.edge_types:
+                edge_store = data[source_node_type, relation, target_node_type]
+                edge_weight = edge_store.edge_weight
+                edge_attribute = (
+                    edge_store.edge_attr if "edge_attr" in edge_store else None
+                )
+                source_node_embedding = node_embedding[source_node_type]
+                target_node_embedding = node_embedding[target_node_type]
+
+                message_passing_layer = layer_dict[relation]
+                new_node_embed[target_node_type] += message_passing_layer(
+                    source_node_embedding,
+                    target_node_embedding,
+                    edge_store.edge_index,
+                    edge_attribute,
+                    edge_weight,
+                    data[target_node_type].batch,
+                )
+            node_embedding = new_node_embed
         return node_embedding

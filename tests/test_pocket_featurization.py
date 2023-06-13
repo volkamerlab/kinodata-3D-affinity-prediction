@@ -2,7 +2,7 @@ from pathlib import Path
 
 from torch_geometric.data import HeteroData
 
-from kinodata.data.featurization.pocket import (
+from kinodata.data.featurization.biopandas import (
     add_pocket_information,
     prepare_pocket_information,
     remove_hydrogens,

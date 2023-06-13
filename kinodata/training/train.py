@@ -14,8 +14,8 @@ def train(config, fn_data=make_kinodata_module, fn_model=None):
     model = fn_model(config)
     data_module = fn_data(config)
     validation_checkpoint = ModelCheckpoint(
-        monitor="val/mae",
-        mode="min",
+        monitor="val/corr",
+        mode="max",
     )
     lr_monitor = LearningRateMonitor("epoch")
     early_stopping = EarlyStopping(
