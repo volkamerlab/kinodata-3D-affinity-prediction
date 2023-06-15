@@ -57,6 +57,8 @@ class RunInfo:
             return "DTI"
         elif "ligand-only" in self.tags:
             return "GIN"
+        elif self.config.get("model_type", None) == "rel-egnn":
+            return "REL-EGNN"
         elif self.is_egnn:
             suffix = ""
             if "pocket_residue" in self.config["node_types"]:
@@ -71,9 +73,11 @@ class RunInfo:
 
     @property
     def split_seed(self) -> int:
-        if len(self.split_path) > 0:
-            return int(self.split_path[-1].split("_")[-1].split(".")[0])
-        return None
+        try:
+            if len(self.split_path) > 0:
+                return int(self.split_path[-1].split("_")[-1].split(".")[0])
+        except:
+            return None
 
     @property
     def split_type(self) -> str:
