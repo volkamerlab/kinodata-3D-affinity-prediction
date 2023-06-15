@@ -1,6 +1,6 @@
 universe = docker
 docker_image = gjoschka/massspec_with_wandb
-executable = train_datasail.sh
+executable = train_$(split).sh
 arguments = train_egnn
 output = train_kinodata.$(ClusterId).$(ProcId).out
 error = train_kinodata.$(ClusterId).$(ProcId).err
@@ -9,7 +9,7 @@ should_transfer_files   = YES
 when_to_transfer_output = ON_EXIT
 request_GPUs = 1
 request_CPUs = 32
-request_memory = 128G
+request_memory = 64G
 requirements = UidDomain == "cs.uni-saarland.de" && machine != "fulla.cs.uni-saarland.de"
 +WantGPUHomeMounted = true
-queue
+queue 1 split in scaffold, pocket, random
