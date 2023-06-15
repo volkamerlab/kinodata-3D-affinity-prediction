@@ -7,27 +7,30 @@ parameters:
     min: 2.0
     max: 24.0
   lr:
-    min: 0.000001
-    max: 0.01
+    min: 0.00001
+    max: 0.1
   hidden_channels:
-    values: [16, 32, 64, 128, 256]
+    min: 32
+    max: 256
   rbf_size:
-    values: [16, 32, 64, 128, 256]
+    min: 16
+    max: 128
   num_mp_layers:
-    values: [1, 2, 3, 4]
+    min: 1
+    max: 6
   early_stopping_patience:
-    min: 10
-    max: 50
+    value: 30
   weight_decay:
-    min: 0.0
-    max: 0.005
+    value: 0.0005
   clip_grad_value:
-    min: 1.0
-    max: 10.0
+    value: 10.0
   act:
     values: ["relu", "elu", "silu"]
   perturb_ligand_positions:
-    min: 0.0
-    max: 0.3
+    value: 0.1
   perturb_pocket_positions:
     value: 0.0
+  batch_size:
+    values: [16, 32, 64, 128]
+  optim:
+    values: ["adamw", "radam", "rmsprop", "sgd"]
