@@ -4,11 +4,11 @@ from torch.nn import (
     Embedding,
     Module,
     Linear,
-    Identity,
+    Dropout,
+    LayerNorm,
     ModuleDict,
     ModuleList,
 )
-from torch_geometric.nn.norm import GraphNorm
 from torch import Tensor, cat
 
 from kinodata.types import NodeEmbedding
@@ -28,6 +28,7 @@ class CategoricalEmbedding(Module):
         max_num_categories: int = 100,
         # enable parameter sharing for different node types
         embedding: Optional[Embedding] = None,
+        dropout: float = 0.0,
     ) -> None:
         super().__init__()
         self.node_type = node_type
@@ -37,10 +38,12 @@ class CategoricalEmbedding(Module):
             if embedding is None
             else embedding
         )
+        self.dropout = Dropout(dropout)
+        self.ln = LayerNorm(hidden_chanels)
 
     def forward(self, data: HeteroData) -> Tensor:
         category = getattr(data[self.node_type], self.category_key)
-        return self.embedding(category)
+        return self.ln(self.dropout(self.embedding(category)))
 
 
 class AtomTypeEmbedding(CategoricalEmbedding):
@@ -51,6 +54,7 @@ class AtomTypeEmbedding(CategoricalEmbedding):
         category_key: str = "z",
         max_num_categories: int = 100,
         embedding: Optional[Embedding] = None,
+        dropout: float = 0.0,
     ) -> None:
         super().__init__(
             node_type,
@@ -58,6 +62,7 @@ class AtomTypeEmbedding(CategoricalEmbedding):
             category_key,
             max_num_categories,
             embedding=embedding,
+            dropout=dropout,
         )
 
 
@@ -68,23 +73,18 @@ class FeatureEmbedding(Module):
         in_channels: int,
         hidden_channels: int,
         act: str,
-        embedding_norm: bool = True,
+        dropout: float = 0.0,
     ) -> None:
         super().__init__()
         self.node_type = node_type
         self.lin = Linear(in_channels, hidden_channels)
         self.act = resolve_act(act)
-        if embedding_norm:
-            self.norm = GraphNorm(hidden_channels)
-        else:
-            self.norm = Identity()
-
+        self.dropout = Dropout(dropout)
+        self.ln = LayerNorm(hidden_channels)
         self.out_channels = self.lin.out_features
 
     def forward(self, data: HeteroData) -> Tensor:
-        return self.norm(
-            self.act(self.lin(data[self.node_type].x)), batch=data[self.node_type].batch
-        )
+        return self.ln(self.dropout(self.act(self.lin(data[self.node_type].x))))
 
 
 class CombineConcat(Module):

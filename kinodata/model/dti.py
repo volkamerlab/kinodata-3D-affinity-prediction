@@ -78,7 +78,9 @@ class LigandGINE(Module):
 
     def forward(self, batch) -> Tuple[Tensor, Tensor]:
         ligand_node_store = batch[NodeType.Ligand]
-        ligand_bond_store = batch[NodeType.Ligand, RelationType.Bond, NodeType.Ligand]
+        ligand_bond_store = batch[
+            NodeType.Ligand, RelationType.Covalent, NodeType.Ligand
+        ]
         x = self.atom_embedding(ligand_node_store.z)
         h = self.gine(
             x=x,

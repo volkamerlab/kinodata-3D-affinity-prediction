@@ -15,13 +15,12 @@ import torch.nn as nn
 from torch_geometric.data import HeteroData
 from torch_scatter import scatter
 
-from torch_geometric.nn.norm import GraphNorm
-
 from collections import defaultdict
 
 from kinodata.types import NodeType, NodeEmbedding, Kwargs, RelationType
 from kinodata.types import EdgeType
 from kinodata.model.resolve import resolve_act
+import numpy as np
 
 RawMessage = Tuple[Tensor, Tensor, Tensor, Tensor]
 
@@ -62,12 +61,11 @@ class EGNNMessageLayer(nn.Module):
             )
         else:
             self.residual_proj = nn.Identity()
-        self.fn_combine = nn.Sequential(
-            nn.Linear(target_node_size + hidden_channels, hidden_channels),
-            self.act,
-            nn.Linear(hidden_channels, output_channels),
+        self.lin_out = nn.Sequential(
+            nn.Linear(hidden_channels, hidden_channels),
+            self.final_act,
+            nn.LayerNorm(hidden_channels),
         )
-        self.norm = GraphNorm(output_channels)
 
     def init_parameters(self):
         self._fn_message = nn.Sequential(
@@ -116,48 +114,32 @@ class EGNNMessageLayer(nn.Module):
         )
         aggr_messages = torch.zeros_like(target_node)
         scatter(messages, i_target, 0, reduce=self.reduce, out=aggr_messages)
-        return self.final_act(
-            self.norm(
-                self.residual_proj(target_node)
-                + self.fn_combine(torch.cat((target_node, aggr_messages), dim=1)),
-                target_batch,
-            )
-        )
+        return self.lin_out(aggr_messages)
 
 
-class ExpnormRBFEmbedding(nn.Module):
-    def __init__(self, size: int, d_cut: float, trainable: bool = False) -> None:
+def gaussian(x, mean, std):
+    return torch.exp(-0.5 * (((x - mean) / std) ** 2)) / ((2 * np.pi**0.5) * std)
+
+
+class GaussianDistEmbedding(nn.Module):
+    def __init__(self, size: int, d_cut: float) -> None:
         super().__init__()
         self.size = size
         self.d_cut = nn.parameter.Parameter(
             torch.tensor([d_cut], dtype=torch.float32), requires_grad=False
         )
 
-        means, betas = self._initial_params()
-        if trainable:
-            self.register_parameter("means", nn.Parameter(means))
-            self.register_parameter("betas", nn.Parameter(betas))
-        else:
-            self.register_buffer("means", means)
-            self.register_buffer("betas", betas)
+        means, stds = self._initial_params()
+        self.means = nn.Parameter(means)
+        self.stds = nn.Parameter(stds)
 
-    # taken from torchmd-net
     def _initial_params(self):
-        # initialize means and betas according to the default values in PhysNet
-        # https://pubs.acs.org/doi/10.1021/acs.jctc.9b00181
-        start_value = torch.exp(-self.d_cut.squeeze())
-        means = torch.linspace(start_value, 1, self.size)
-        betas = torch.tensor([(2 / self.size * (1 - start_value)) ** -2] * self.size)
-        return means, betas
-
-    def cosine_cutoff(self, d: Tensor) -> Tensor:
-        d = d.clamp_max(self.d_cut)
-        return 0.5 * (torch.cos(d * torch.pi / self.d_cut) + 1)
+        means = torch.linspace(0, self.d_cut.item(), self.size)
+        stds = torch.ones(self.size)
+        return means, stds
 
     def forward(self, d: Tensor) -> Tensor:
-        cutoff = self.cosine_cutoff(d)
-        rbf = torch.exp(-self.betas * (torch.exp(-d) - self.means).pow(2))
-        return cutoff * rbf
+        return gaussian(d, self.means, self.stds)
 
 
 class RBFLayer(EGNNMessageLayer):
@@ -191,19 +173,19 @@ class RBFLayer(EGNNMessageLayer):
         if rbf_size is None:
             rbf_size = hidden_channels
 
-        self.rbf = ExpnormRBFEmbedding(rbf_size, interaction_radius)
-        self.w_dist = nn.Linear(rbf_size, hidden_channels, bias=False)
+        self.rbf = GaussianDistEmbedding(rbf_size, interaction_radius)
+        self.w_dist = nn.Linear(rbf_size, hidden_channels * 2, bias=False)
         self.w_edge = nn.Sequential(
             nn.Linear(
                 source_node_size + target_node_size + edge_attr_size,
                 hidden_channels,
             ),
             self.act,
-            nn.Linear(hidden_channels, hidden_channels),
+            nn.Linear(hidden_channels, hidden_channels, bias=False),
         )
 
     def init_parameters(self):
-        self.bias = nn.Parameter(torch.zeros(self.hidden_channels), requires_grad=True)
+        return
 
     def compute_message_repr_size(
         self,
@@ -226,13 +208,13 @@ class RBFLayer(EGNNMessageLayer):
 
     def fn_message(self, message: RawMessage) -> Tensor:
         source_node, target_node, edge_attr, distance = message
-        dist_emb = self.w_dist(self.rbf(distance))
+        dist_mul, dist_add = torch.chunk(self.w_dist(self.rbf(distance)), 2, -1)
         if edge_attr is not None:
             edge_repr = torch.cat([source_node, target_node, edge_attr], dim=1)
         else:
             edge_repr = torch.cat([source_node, target_node], dim=1)
         edge_emb = self.w_edge(edge_repr)
-        return self.act(dist_emb * edge_emb + self.bias)
+        return self.act((1 + dist_mul) * edge_emb + dist_add)
 
 
 def resolve_mp_type(mp_type: str) -> type[EGNNMessageLayer]:
@@ -243,11 +225,48 @@ def resolve_mp_type(mp_type: str) -> type[EGNNMessageLayer]:
     raise ValueError(f"Unknown message passing type: {mp_type}", mp_type)
 
 
-class EGNN(nn.Module):
+class NodeUpdate(nn.Module):
     def __init__(
         self,
         hidden_channels: int,
-        output_channels: int = None,
+        node_types: List[NodeType],
+        act: str,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__()
+        self.node_types = node_types
+        self.lins = nn.ModuleDict(
+            {
+                node_type: nn.Sequential(
+                    nn.Linear(hidden_channels * 2, hidden_channels),
+                    resolve_act(act),
+                    nn.Linear(hidden_channels, hidden_channels),
+                    resolve_act(act),
+                    nn.Dropout(dropout),
+                )
+                for node_type in self.node_types
+            }
+        )
+        self.lns = nn.ModuleDict(
+            {node_type: nn.LayerNorm(hidden_channels) for node_type in self.node_types}
+        )
+
+    def forward(
+        self, node_embedding: NodeEmbedding, aggregated_messages: Dict[NodeType, Tensor]
+    ) -> NodeEmbedding:
+        out = dict()
+        for node_type in node_embedding:
+            residual = node_embedding[node_type]
+            incoming_message = aggregated_messages[node_type]
+            update = self.lins[node_type](torch.cat((residual, incoming_message), -1))
+            out[node_type] = self.lns[node_type](residual + update)
+        return out
+
+
+class HeteroEGNN(nn.Module):
+    def __init__(
+        self,
+        hidden_channels: int,
         edge_attr_size: Optional[Dict[Any, int]] = None,
         num_mp_layers: int = 2,
         mp_type: str = "rbf",
@@ -255,6 +274,7 @@ class EGNN(nn.Module):
         edge_types: List[EdgeType] = [],
         act: str = "elu",
         message_layer_kwargs: Optional[Dict[EdgeType, Kwargs]] = None,
+        dropout: float = 0.0,
     ) -> None:
         """
         E(3)-invariant graph neural network for heterogeneous point clouds.
@@ -296,34 +316,50 @@ class EGNN(nn.Module):
         if message_layer_kwargs is None:
             message_layer_kwargs = defaultdict(dict)
 
-        if output_channels is None:
-            output_channels = hidden_channels
-
-        self.reset_parameters(
+        self.reset_message_passing_layers(
             hidden_channels,
             num_mp_layers,
-            output_channels,
             mp_class,
             edge_attr_size,
             act,
             message_layer_kwargs,
             edge_types,
         )
+        self.reset_update_layers(
+            hidden_channels,
+            num_mp_layers,
+            act,
+            node_types,
+            dropout=dropout,
+        )
 
-    def reset_parameters(
+    def reset_update_layers(
         self,
         hidden_channels: int,
         num_mp_layers: int,
-        output_channels: int,
+        act: str,
+        node_types: List[NodeType],
+        dropout: float = 0.0,
+    ):
+        self.update_layers = nn.ModuleList()
+        for _ in range(num_mp_layers):
+            self.update_layers.append(
+                NodeUpdate(hidden_channels, node_types, act, dropout)
+            )
+
+    def reset_message_passing_layers(
+        self,
+        hidden_channels: int,
+        num_mp_layers: int,
         mp_class: Type[EGNNMessageLayer],
         edge_attr_size: Mapping[EdgeType, int],
         act: Union[str, nn.Module],
         message_layer_kwargs: Dict[str, Any],
-        edge_types: Iterable[EdgeType],
+        edge_types: List[EdgeType],
     ):
         # create stacks of MP layers
         self.message_passing_layers = nn.ModuleList()
-        channels = [hidden_channels] * (num_mp_layers) + [output_channels]
+        channels = [hidden_channels] * (num_mp_layers + 1)
         for d_in, d_out in zip(channels[:-1], channels[1:]):
             self.message_passing_layers.append(
                 nn.ModuleDict(
@@ -344,35 +380,48 @@ class EGNN(nn.Module):
                 )
             )
 
-    def forward(self, data: HeteroData, node_embedding: NodeEmbedding) -> NodeEmbedding:
-        for mp_layer_dict in self.message_passing_layers:
-            new_node_embed = {nt: x.clone() for nt, x in node_embedding.items()}
-            for edge_type, layer in mp_layer_dict.items():
-                edge_type = tuple(edge_type.split("__"))
-                source_nt, _, target_nt = edge_type
-                edge_weight = data[edge_type].edge_weight
-                edge_attr = (
-                    data[edge_type].edge_attr
-                    if "edge_attr" in data[edge_type]
-                    else None
-                )
-                source_node_embed = node_embedding[source_nt]
-                target_node_embed = node_embedding[target_nt]
+    def compute_aggregated_messages(
+        self,
+        data: HeteroData,
+        node_embedding: NodeEmbedding,
+        message_passing: Dict[Any, nn.Module],
+    ) -> NodeEmbedding:
+        aggregated_messages = {
+            nt: x.new_zeros(x.size()) for nt, x in node_embedding.items()
+        }
+        for edge_type, layer in message_passing.items():
+            edge_type = tuple(edge_type.split("__"))
+            source_node_type, _, target_node_type = edge_type
+            edge_weight = data[edge_type].edge_weight
+            edge_attribute = (
+                data[edge_type].edge_attr if "edge_attr" in data[edge_type] else None
+            )
+            source_node_embed = node_embedding[source_node_type]
+            target_node_embed = node_embedding[target_node_type]
 
-                new_node_embed[target_nt] += layer(
-                    source_node_embed,
-                    target_node_embed,
-                    data[edge_type].edge_index,
-                    edge_attr,
-                    edge_weight,
-                    data[target_nt].batch,
-                )
-            node_embedding = new_node_embed
+            aggregated_messages[target_node_type] += layer(
+                source_node_embed,
+                target_node_embed,
+                data[edge_type].edge_index,
+                edge_attribute,
+                edge_weight,
+                data[target_node_type].batch,
+            )
+        return aggregated_messages
+
+    def forward(self, data: HeteroData, node_embedding: NodeEmbedding) -> NodeEmbedding:
+        for mp_layer_dict, node_update_module in zip(
+            self.message_passing_layers, self.update_layers
+        ):
+            aggregated_messages = self.compute_aggregated_messages(
+                data, node_embedding, mp_layer_dict
+            )
+            node_embedding = node_update_module(node_embedding, aggregated_messages)
 
         return node_embedding
 
 
-class REGNN(EGNN):
+class HeteroEGNNRel(HeteroEGNN):
     def assert_edge_attr_matches(
         self, edge_attr_size: Mapping[EdgeType, int]
     ) -> Mapping[RelationType, int]:
@@ -382,11 +431,10 @@ class REGNN(EGNN):
         assert all(len(size_set) == 1 for size_set in size_sets.values())
         return {relation: size_set.pop() for relation, size_set in size_sets.items()}
 
-    def reset_parameters(
+    def reset_message_passing_layers(
         self,
         hidden_channels: int,
         num_mp_layers: int,
-        output_channels: int,
         mp_class: Type[EGNNMessageLayer],
         edge_attr_size: Mapping[EdgeType, int],
         act: Union[str, nn.Module],
@@ -394,6 +442,7 @@ class REGNN(EGNN):
         edge_types: Iterable[EdgeType],
     ):
         self.edge_types = edge_types
+        relations = set([relation for _, relation, _ in self.edge_types])
         relation_edge_attr_size = self.assert_edge_attr_matches(edge_attr_size)
         relation_message_layer_kwargs = {
             relation: kwargs
@@ -407,39 +456,41 @@ class REGNN(EGNN):
                         relation: mp_class(
                             hidden_channels,
                             hidden_channels,
-                            _edge_attr_size,
+                            relation_edge_attr_size[relation],
                             1,
                             hidden_channels,
                             hidden_channels,
                             act=act,
                             **relation_message_layer_kwargs[relation],
                         )
-                        for relation, _edge_attr_size in relation_edge_attr_size.items()
+                        for relation in relations
                     }
                 )
             )
         pass
 
-    def forward(self, data: HeteroData, node_embedding: NodeEmbedding) -> NodeEmbedding:
-        for layer_dict in self.message_passing_layers:
-            new_node_embed = {nt: x.clone() for nt, x in node_embedding.items()}
-            for source_node_type, relation, target_node_type in self.edge_types:
-                edge_store = data[source_node_type, relation, target_node_type]
-                edge_weight = edge_store.edge_weight
-                edge_attribute = (
-                    edge_store.edge_attr if "edge_attr" in edge_store else None
-                )
-                source_node_embedding = node_embedding[source_node_type]
-                target_node_embedding = node_embedding[target_node_type]
-
-                message_passing_layer = layer_dict[relation]
-                new_node_embed[target_node_type] += message_passing_layer(
-                    source_node_embedding,
-                    target_node_embedding,
-                    edge_store.edge_index,
-                    edge_attribute,
-                    edge_weight,
-                    data[target_node_type].batch,
-                )
-            node_embedding = new_node_embed
-        return node_embedding
+    def compute_aggregated_messages(
+        self,
+        data: HeteroData,
+        node_embedding: NodeEmbedding,
+        message_passing: Dict[Any, nn.Module],
+    ) -> NodeEmbedding:
+        aggregated_messages = {
+            nt: x.new_zeros(x.size()) for nt, x in node_embedding.items()
+        }
+        for source_node_type, relation, target_node_type in self.edge_types:
+            edge_store = data[source_node_type, relation, target_node_type]
+            edge_weight = edge_store.edge_weight
+            edge_attribute = edge_store.edge_attr if "edge_attr" in edge_store else None
+            source_node_embedding = node_embedding[source_node_type]
+            target_node_embedding = node_embedding[target_node_type]
+            message_passing_layer = message_passing[relation]
+            aggregated_messages[target_node_type] += message_passing_layer(
+                source_node_embedding,
+                target_node_embedding,
+                edge_store.edge_index,
+                edge_attribute,
+                edge_weight,
+                data[target_node_type].batch,
+            )
+        return aggregated_messages

@@ -1,10 +1,10 @@
 from collections import defaultdict
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 import torch
 from torch import Tensor
 
 from torch_geometric.transforms import BaseTransform
-from torch_geometric.data import Data, HeteroData
+from torch_geometric.data import HeteroData
 from torch_geometric.utils import (
     remove_self_loops,
     to_dense_adj,
@@ -14,7 +14,7 @@ from torch_geometric.utils import (
 from torch_cluster import radius
 from itertools import product
 
-from kinodata.types import NodeType, EdgeType
+from kinodata.types import NodeType, EdgeType, RelationType
 
 
 def interactions_and_distances(
@@ -27,6 +27,7 @@ def interactions_and_distances(
 ) -> Tuple[Tensor, Tensor]:
     if pos_y is None:
         pos_y = pos_x
+        batch_y = batch_x
     y_ind, x_ind = radius(
         pos_x,
         pos_y,
@@ -69,6 +70,9 @@ class AddDistancesAndInteractions(BaseTransform):
             if self.subset:
                 itr = filter(lambda nt_pair: nt_pair in self.subset, itr)
             for nt_a, nt_b in itr:
+                relation_key = (
+                    RelationType.Intraacts if nt_a == nt_b else RelationType.Interacts
+                )
                 radius = self.radii[(nt_a, nt_b)]
                 edge_index, dist = interactions_and_distances(
                     data[nt_a].pos,
@@ -83,21 +87,21 @@ class AddDistancesAndInteractions(BaseTransform):
                     )
                     edge_index, dist = remove_self_loops(edge_index, dist)
 
-                if nt_a == nt_b and (nt_a, "bond", nt_b) in edge_types:
+                if nt_a == nt_b and (nt_a, RelationType.Covalent, nt_b) in edge_types:
                     num_nodes = data[nt_a].num_nodes
                     bond_adj = to_dense_adj(
-                        data[nt_a, "bond", nt_a].edge_index,
-                        edge_attr=data[nt_a, "bond", nt_a].edge_attr,
+                        data[nt_a, RelationType.Covalent, nt_a].edge_index,
+                        edge_attr=data[nt_a, RelationType.Covalent, nt_a].edge_attr,
                         max_num_nodes=num_nodes,
                     ).squeeze(0)
                     row, col = edge_index
-                    data[nt_a, "interacts", nt_b].edge_attr = bond_adj[row, col].to(
+                    data[nt_a, relation_key, nt_b].edge_attr = bond_adj[row, col].to(
                         torch.float
                     )
 
-                data[nt_a, "interacts", nt_b].edge_index = edge_index
+                data[nt_a, relation_key, nt_b].edge_index = edge_index
                 setattr(
-                    data[nt_a, "interacts", nt_b],
+                    data[nt_a, relation_key, nt_b],
                     self.distance_key,
                     dist.view(-1, 1).to(torch.float32),
                 )

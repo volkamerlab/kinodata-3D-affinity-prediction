@@ -10,8 +10,9 @@ class NodeType:
 
 
 class RelationType:
-    Bond = "bond"
-    Interacts = "interacts"
+    Covalent = "bond"
+    Interacts = "interacts"  # between different molecules
+    Intraacts = "intraacts"  # within a molecule, superset of covalent interactions
 
 
 Kwargs = Dict[str, Any]
@@ -19,12 +20,17 @@ NodeEmbedding = Dict[NodeType, Tensor]
 EdgeType = Tuple[NodeType, RelationType, NodeType]
 DataSplit = Dict[str, Subset]
 
-STRUCTURAL_EDGE_TYPES: List[EdgeType] = [
+INTERMOL_STRUCTURAL_EDGE_TYPES: List[EdgeType] = [
     (NodeType.Ligand, RelationType.Interacts, NodeType.Pocket),
-    (NodeType.Ligand, RelationType.Interacts, NodeType.Pocket),
+    (NodeType.Pocket, RelationType.Interacts, NodeType.Ligand),
+]
+
+INTRAMOL_STRUCTURAL_EDGE_TYPES: List[EdgeType] = [
+    (NodeType.Ligand, RelationType.Intraacts, NodeType.Ligand),
+    (NodeType.Pocket, RelationType.Intraacts, NodeType.Pocket),
 ]
 
 COVALENT_EDGE_TYPES: List[EdgeType] = [
-    (NodeType.Ligand, RelationType.Bond, NodeType.Ligand),
-    (NodeType.Pocket, RelationType.Bond, NodeType.Pocket),
+    (NodeType.Ligand, RelationType.Covalent, NodeType.Ligand),
+    (NodeType.Pocket, RelationType.Covalent, NodeType.Pocket),
 ]

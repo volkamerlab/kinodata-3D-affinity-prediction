@@ -11,11 +11,10 @@ sys.path.append("..")
 from functools import partial
 
 import torch
-from torch.nn import Embedding
 import wandb
 
 from kinodata import configuration
-from kinodata.model.egnn import EGNN, REGNN
+from kinodata.model.egnn import HeteroEGNN, HeteroEGNNRel
 from kinodata.model.shared.node_embedding import (
     HeteroEmbedding,
     AtomTypeEmbedding,
@@ -27,12 +26,12 @@ from kinodata.training import train
 from kinodata.types import (
     EdgeType,
     NodeType,
-    STRUCTURAL_EDGE_TYPES,
+    INTERMOL_STRUCTURAL_EDGE_TYPES,
+    INTRAMOL_STRUCTURAL_EDGE_TYPES,
     COVALENT_EDGE_TYPES,
 )
 from kinodata.data.featurization.atoms import AtomFeatures
 from kinodata.data.featurization.bonds import NUM_BOND_TYPES
-
 from wandb_utils import sweep
 
 
@@ -44,7 +43,9 @@ def infer_edge_attr_size(config: configuration.Config) -> Dict[EdgeType, int]:
     edge_attr_size = defaultdict(int)
     for edge_type in COVALENT_EDGE_TYPES:
         edge_attr_size[edge_type] = NUM_BOND_TYPES + docking_score_num
-    for edge_type in STRUCTURAL_EDGE_TYPES:
+    for edge_type in INTRAMOL_STRUCTURAL_EDGE_TYPES:
+        edge_attr_size[edge_type] = NUM_BOND_TYPES + docking_score_num
+    for edge_type in INTERMOL_STRUCTURAL_EDGE_TYPES:
         edge_attr_size[edge_type] = docking_score_num
 
     return edge_attr_size
@@ -53,41 +54,24 @@ def infer_edge_attr_size(config: configuration.Config) -> Dict[EdgeType, int]:
 def make_atom_embedding_cls(
     config: configuration.Config,
 ) -> Callable[..., HeteroEmbedding]:
-    # TODO
-    # somehow set this based on config?
-    shared_element_embedding = Embedding(100, config.hidden_channels)
+    # TODO derive inital embeddings from config?
     default_embeddings: Dict[NodeType, torch.nn.Module] = {
-        NodeType.Ligand: [
-            AtomTypeEmbedding(
-                NodeType.Ligand,
-                hidden_chanels=config.hidden_channels,
-                embedding=shared_element_embedding,
-            ),
-            FeatureEmbedding(
-                NodeType.Ligand,
-                in_channels=AtomFeatures.size,
-                hidden_channels=config.hidden_channels,
-                act=config.act,
-            ),
-        ],
-        NodeType.Pocket: [
-            AtomTypeEmbedding(
-                NodeType.Pocket,
-                hidden_chanels=config.hidden_channels,
-                embedding=shared_element_embedding,
-            ),
-            FeatureEmbedding(
-                NodeType.Pocket,
-                in_channels=AtomFeatures.size,
-                hidden_channels=config.hidden_channels,
-                act=config.act,
-            ),
-        ],
+        NodeType.Ligand: AtomTypeEmbedding(
+            NodeType.Ligand,
+            hidden_chanels=config.hidden_channels,
+            dropout=config.dropout,
+        ),
+        NodeType.Pocket: AtomTypeEmbedding(
+            NodeType.Pocket,
+            hidden_chanels=config.hidden_channels,
+            dropout=config.dropout,
+        ),
         NodeType.PocketResidue: FeatureEmbedding(
             NodeType.PocketResidue,
             in_channels=config.num_residue_features,
             hidden_channels=config.hidden_channels,
             act=config.act,
+            dropout=config.dropout,
         ),
     }
     return partial(
@@ -113,9 +97,9 @@ def make_egnn_model(config: configuration.Config) -> MessagePassingModel:
     edge_attr_size = infer_edge_attr_size(config)
 
     if config.model_type.lower() == "egnn":
-        EGNNCls = EGNN
+        EGNNCls = HeteroEGNN
     elif config.model_type.lower() == "rel-egnn":
-        EGNNCls = REGNN
+        EGNNCls = HeteroEGNNRel
     else:
         raise ValueError(config.model_type)
 
@@ -140,7 +124,9 @@ def main():
     wandb.init(project="kinodata-docked-rescore")
     config = configuration.get("data", "egnn", "training")
     config["node_types"] = [NodeType.Ligand, NodeType.Pocket]
-    config["edge_types"] = COVALENT_EDGE_TYPES + STRUCTURAL_EDGE_TYPES
+    config["edge_types"] = (
+        INTRAMOL_STRUCTURAL_EDGE_TYPES[:1] + INTERMOL_STRUCTURAL_EDGE_TYPES
+    )
 
     config["add_docking_scores"] = False
     config = config.update_from_file("config_regressor_local.yaml")

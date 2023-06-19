@@ -21,6 +21,11 @@ import torch
 import yaml
 import json
 
+from kinodata.types import (
+    INTRAMOL_STRUCTURAL_EDGE_TYPES,
+    INTERMOL_STRUCTURAL_EDGE_TYPES,
+)
+
 T = TypeVar("T")
 
 _ROOT = Path(__file__).parents[1]
@@ -149,18 +154,12 @@ def get(*config_names: str) -> Config:
     return config
 
 
-register("meta", model_type="egnn")
-
 register(
     "data",
     interaction_radius=5.0,
     residue_interaction_radius=12.0,
     node_types=["ligand", "pocket"],
-    edge_types=[
-        ("ligand", "interacts", "ligand"),
-        ("ligand", "interacts", "pocket"),
-        ("pocket", "interacts", "ligand"),
-    ],
+    edge_types=INTRAMOL_STRUCTURAL_EDGE_TYPES[:1] + INTERMOL_STRUCTURAL_EDGE_TYPES,
     seed=420,
     use_bonds=True,
     add_artificial_decoys=False,
@@ -171,25 +170,15 @@ register(
 
 register(
     "egnn",
+    model_type="egnn",
     num_mp_layers=3,
     hidden_channels=128,
     act="silu",
     final_act="softplus",
     mp_type="rbf",
     mp_reduce="sum",
-    rbf_size=128,
+    rbf_size=32,
     readout_aggregation_type="sum",
-)
-
-register(
-    "egin",
-    hidden_channels=128,
-    num_mp_layers=3,
-    d_cut=5.0,
-    edge_dim=None,
-    readout_aggregation_type="sum",
-    act="silu",
-    final_act="softplus",
 )
 
 register(
@@ -197,6 +186,7 @@ register(
     optim="adamw",
     lr=1e-4,
     weight_decay=3e-6,
+    dropout=0.2,
     batch_size=64,
     accumulate_grad_batches=1,
     epochs=300,

@@ -58,9 +58,9 @@ class LigandGNNBaseline(RegressionModel):
         x = self.initial_embedding(batch)
         h = self.encoder.forward(
             x,
-            batch[NodeType.Ligand, RelationType.Bond, NodeType.Ligand].edge_index,
+            batch[NodeType.Ligand, RelationType.Covalent, NodeType.Ligand].edge_index,
             edge_attr=batch[
-                NodeType.Ligand, RelationType.Bond, NodeType.Ligand
+                NodeType.Ligand, RelationType.Covalent, NodeType.Ligand
             ].edge_attr,
         )
         aggr = self.aggr.forward(h, index=batch[NodeType.Ligand].batch)
