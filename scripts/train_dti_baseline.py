@@ -36,5 +36,5 @@ if __name__ == "__main__":
     for key, value in config.items():
         print(f"{key}: {value}")
 
-    wandb.init(config=config, project="kinodata-docked-rescore", tags=["dti"])
+    wandb.init(config=config, project="kinodata-docked-rescore", tags=["dti", "less-features"])
     train(config, fn_model=make_dti_model)

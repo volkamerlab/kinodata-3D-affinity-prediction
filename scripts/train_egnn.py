@@ -121,7 +121,7 @@ def make_egnn_model(config: configuration.Config) -> MessagePassingModel:
 
 
 def main():
-    wandb.init(project="kinodata-docked-rescore")
+    wandb.init(project="kinodata-docked-rescore", tags=["egnn-new"])
     config = configuration.get("data", "egnn", "training")
     config["node_types"] = [NodeType.Ligand, NodeType.Pocket]
     config["edge_types"] = (
