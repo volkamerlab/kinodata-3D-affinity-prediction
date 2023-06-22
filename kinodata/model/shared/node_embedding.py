@@ -1,7 +1,10 @@
 from typing import List, Optional, Union
+
+import torch
 from torch_geometric.data import HeteroData
+from torch.nn import init
 from torch.nn import (
-    Embedding,
+    Parameter,
     Module,
     Linear,
     Dropout,
@@ -27,23 +30,21 @@ class CategoricalEmbedding(Module):
         category_key: str,
         max_num_categories: int = 100,
         # enable parameter sharing for different node types
-        embedding: Optional[Embedding] = None,
         dropout: float = 0.0,
     ) -> None:
         super().__init__()
         self.node_type = node_type
         self.category_key = category_key
-        self.embedding = (
-            Embedding(max_num_categories, hidden_chanels)
-            if embedding is None
-            else embedding
+        self.weight = Parameter(
+            torch.empty(max_num_categories, hidden_chanels), requires_grad=True
         )
         self.dropout = Dropout(dropout)
         self.ln = LayerNorm(hidden_chanels)
 
     def forward(self, data: HeteroData) -> Tensor:
         category = getattr(data[self.node_type], self.category_key)
-        return self.ln(self.dropout(self.embedding(category)))
+        weight = self.dropout(weight)
+        return self.ln(self.weight[category])
 
 
 class AtomTypeEmbedding(CategoricalEmbedding):
@@ -53,7 +54,6 @@ class AtomTypeEmbedding(CategoricalEmbedding):
         hidden_chanels: int,
         category_key: str = "z",
         max_num_categories: int = 100,
-        embedding: Optional[Embedding] = None,
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -61,7 +61,6 @@ class AtomTypeEmbedding(CategoricalEmbedding):
             hidden_chanels,
             category_key,
             max_num_categories,
-            embedding=embedding,
             dropout=dropout,
         )
 

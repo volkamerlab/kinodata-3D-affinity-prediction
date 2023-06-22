@@ -6,6 +6,8 @@ import torch.nn.functional as F
 from .bonds import BOND_TYPE_TO_IDX, NUM_BOND_TYPES
 from .atoms import AtomFeatures
 
+from kinodata.types import RelationType
+
 
 def atomic_numbers(mol) -> Tensor:
     z = torch.empty(mol.GetNumAtoms(), dtype=torch.long)
@@ -46,7 +48,7 @@ def add_bonds(mol, data: HeteroData, key: str) -> HeteroData:
 
     edge_index, edge_attr = to_undirected(edge_index, edge_attr, num_nodes)
 
-    data[key, "bond", key].edge_index = edge_index
-    data[key, "bond", key].edge_attr = edge_attr
+    data[key, RelationType.Covalent, key].edge_index = edge_index
+    data[key, RelationType.Covalent, key].edge_attr = edge_attr
 
     return data

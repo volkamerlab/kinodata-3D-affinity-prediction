@@ -166,6 +166,7 @@ register(
     data_split=_ROOT / "data" / "splits" / "random" / "seed_0.csv",
     need_distances=True,
     num_residue_features=6,
+    additional_atom_features=False,
 )
 
 register(

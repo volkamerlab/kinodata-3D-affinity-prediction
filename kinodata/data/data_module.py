@@ -13,6 +13,7 @@ from kinodata.configuration import Config
 from kinodata.data.data_split import Split
 from kinodata.data.dataset import KinodataDocked
 import kinodata.transform as T
+from kinodata.types import NodeType
 
 Kwargs = Dict[str, Any]
 
@@ -91,44 +92,32 @@ def make_kinodata_module(config: Config, transforms=None) -> LightningDataset:
 
     augmentations = []
 
-    if config.perturb_ligand_positions:
+    if config.perturb_ligand_positions and config.need_distances:
         augmentations.append(
-            T.PerturbAtomPositions("ligand", std=config.perturb_ligand_positions)
+            T.PerturbAtomPositions(NodeType.Ligand, std=config.perturb_ligand_positions)
         )
-    if config.perturb_pocket_positions:
+    if config.perturb_pocket_positions and config.need_distances:
         augmentations.append(
-            T.PerturbAtomPositions("pocket", std=config.perturb_pocket_positions)
+            T.PerturbAtomPositions(NodeType.Pocket, std=config.perturb_pocket_positions)
         )
 
     if config.need_distances:
         subset = list(product(config.node_types, config.node_types))
         subset = {
             nt_pair: config.residue_interaction_radius
-            if "pocket_residue" in nt_pair
+            if NodeType.PocketResidue in nt_pair
             else config.interaction_radius
             for nt_pair in subset
         }
-        if ("pocket", "pocket") in subset:
-            del subset[("pocket", "pocket")]
+        if (NodeType.Pocket, NodeType.Pocket) in subset:
+            del subset[(NodeType.Pocket, NodeType.Pocket)]
         transforms.append(
             T.AddDistancesAndInteractions(config.interaction_radius, edge_types=subset)
         )
 
     if config.add_docking_scores:
         assert config.need_distances
-        transforms.extend(
-            [
-                T.AddGlobalAttrToEdge(
-                    ("pocket", "interacts", "ligand"), ["docking_score", "posit_prob"]
-                ),
-                T.AddGlobalAttrToEdge(
-                    ("ligand", "interacts", "pocket"), ["docking_score", "posit_prob"]
-                ),
-                T.AddGlobalAttrToEdge(
-                    ("ligand", "interacts", "ligand"), ["docking_score", "posit_prob"]
-                ),
-            ]
-        )
+        raise NotImplementedError
 
     train_transform = compose(augmentations + transforms)
     val_transform = compose(transforms)

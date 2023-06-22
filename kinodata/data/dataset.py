@@ -8,13 +8,15 @@ import pandas as pd
 import requests  # type : ignore
 import torch
 from rdkit import RDLogger
-from rdkit.Chem import PandasTools, MolFromMol2File, Kekulize
+from rdkit.Chem import PandasTools, MolFromMol2File, Kekulize, AddHs
 from torch_geometric.data import HeteroData, InMemoryDataset
 from torch_geometric.transforms import Compose
 from tqdm import tqdm
 
+from kinodata.data.utils.pocket_sequence_klifs import add_pocket_sequence
 from kinodata.data.featurization.rdkit import add_atoms, add_bonds
-from kinodata.data.featurization.kissim import (
+from kinodata.data.featurization.residue import (
+    add_onehot_residues,
     add_kissim_fp,
     load_kissim,
     PHYSICOCHEMICAL,
@@ -25,7 +27,7 @@ from kinodata.transform.filter_activity import (
     FilterActivityType,
     FilterCombine,
 )
-from kinodata.types import NodeType, EdgeType
+from kinodata.types import NodeType, RelationType
 
 _DATA = Path(__file__).parents[2] / "data"
 
@@ -46,6 +48,10 @@ class KinodataDocked(InMemoryDataset):
         self.post_filter = post_filter
         super().__init__(root, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0])
+
+    @property
+    def pocket_sequence_file(self) -> Path:
+        return Path(self.raw_dir) / "pocket_sequences.csv"
 
     @property
     def raw_file_names(self) -> List[str]:
@@ -106,6 +112,21 @@ class KinodataDocked(InMemoryDataset):
         # backwards compatability
         df["ident"] = df.index
 
+        print("Adding pocket sequences", end=" ")
+        if self.pocket_sequence_file.exists():
+            print(f"from cached file {self.pocket_sequence_file}.")
+            pocket_sequences = pd.read_csv(self.pocket_sequence_file)
+            pocket_sequences["ident"] = pocket_sequences["ident"].astype(str)
+            df = pd.merge(df, pocket_sequences, left_on="ident", right_on="ident")
+        else:
+            print("from KLIFS.")
+            df = add_pocket_sequence(
+                df, pocket_sequence_key="structure.pocket_sequence"
+            )
+            df[["ident", "structure.pocket_sequence"]].to_csv(
+                self.pocket_sequence_file, index=False
+            )
+
         return df
 
     def process(self):
@@ -120,7 +141,7 @@ class KinodataDocked(InMemoryDataset):
 
         tasks = [
             (
-                ident,
+                row["ident"],
                 row["compound_structures.canonical_smiles"],
                 row["molecule"],
                 float(row["activities.standard_value"]),
@@ -129,8 +150,9 @@ class KinodataDocked(InMemoryDataset):
                 float(row["docking.chemgauss_score"]),
                 float(row["docking.posit_probability"]),
                 int(row["similar.klifs_structure_id"]),
+                row["structure.pocket_sequence"],
             )
-            for ident, row in tqdm(
+            for _, row in tqdm(
                 self.df.iterrows(),
                 desc="Creating PyG object tasks..",
                 total=len(self.df),
@@ -146,9 +168,9 @@ class KinodataDocked(InMemoryDataset):
             ident for ident, data in zip(self.df.index, data_list) if data is None
         ]
         data_list = [d for d in data_list if d is not None]
-        if len(skipped) > 0:
-            print(f"Skipped {len(skipped)} unprocessable entries.")
-            (Path(self.root) / "skipped_idents.log").write_text("\n".join(skipped))
+        # if len(skipped) > 0:
+        #     print(f"Skipped {len(skipped)} unprocessable entries.")
+        #     (Path(self.root) / "skipped_idents.log").write_text("\n".join(skipped))
 
         if self.pre_filter is not None:
             print("Applying pre filter..")
@@ -186,18 +208,23 @@ def process_idx(args):
         docking_score,
         posit_prob,
         structure_id,
+        pocket_sequence,
     ) = args
     data = HeteroData()
 
     try:
+        AddHs(ligand)
         Kekulize(ligand)
         data = add_atoms(ligand, data, NodeType.Ligand)
         data = add_bonds(ligand, data, NodeType.Ligand)
 
         pocket = MolFromMol2File(str(pocket_file))
+        AddHs(pocket)
         Kekulize(pocket)
         data = add_atoms(pocket, data, NodeType.Pocket)
         data = add_bonds(pocket, data, NodeType.Pocket)
+
+        data = add_onehot_residues(data, pocket_sequence)
     except Exception as e:
         print(e)
         return None
@@ -220,8 +247,7 @@ def process_idx(args):
 
 
 if __name__ == "__main__":
-    transforms = [AddDistances((NodeType.Pocket, EdgeType.Bond, NodeType.Ligand))]
-    dataset = KinodataDocked(transform=Compose(transforms))
-    print(dataset[3])
+    dataset = KinodataDocked()
+    print(dataset[100])
 
     pass

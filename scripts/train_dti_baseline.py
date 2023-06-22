@@ -1,3 +1,4 @@
+from functools import partial
 import sys
 
 # dirty
@@ -9,14 +10,27 @@ import kinodata.configuration as configuration
 from kinodata.model.dti import (
     DTIModel,
     GlobalSumDecoder,
-    KissimPocketTransformer,
+    ResidueTransformer,
+    KissimTransformer,
     LigandGINE,
 )
+from kinodata.data.featurization.residue import known_residues
 from kinodata.training import train
 
 
+class ResidueFeaturization:
+    Kissim = "kissim"
+    Onehot = "onehot"
+
+
 def make_dti_model(config):
-    return DTIModel(config, LigandGINE, KissimPocketTransformer, GlobalSumDecoder)
+    if config.residue_featurization == ResidueFeaturization.Onehot:
+        ResidueModel = ResidueTransformer
+        config["residue_size"] = len(known_residues) + 1
+    if config.residue_featurization == ResidueFeaturization.Kissim:
+        ResidueModel = KissimTransformer
+        config["residue_size"] = 6
+    return DTIModel(config, LigandGINE, ResidueModel, GlobalSumDecoder)
 
 
 if __name__ == "__main__":
@@ -26,7 +40,7 @@ if __name__ == "__main__":
         hidden_channels=128,
         act="silu",
         num_attention_blocks=2,
-        kissim_size=6,
+        residue_featurization=ResidueFeaturization.Onehot,
     )
 
     config = configuration.get("data", "training", "dti_baseline")
