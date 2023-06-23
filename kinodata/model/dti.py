@@ -19,6 +19,7 @@ from kinodata.model.resolve import resolve_act, resolve_loss
 from kinodata.model.shared import GINE, SetAttentionBlock
 from kinodata.types import NodeType, RelationType
 from torch_geometric.nn.pool import global_add_pool
+from torch_geometric.utils import to_dense_batch
 
 
 class Encoder(Protocol):
@@ -91,17 +92,19 @@ class LigandGINE(Module):
         return h, ligand_node_store.batch
 
 
-class KissimPocketTransformer(Module):
+class ResidueTransformer(Module):
     def __init__(
         self,
-        kissim_size: int,
+        residue_size: int,
         hidden_channels: int,
         num_attention_blocks: int,
         num_heads: int = 1,
     ) -> None:
         super().__init__()
-        self.lin1 = Sequential(
-            Linear(kissim_size, hidden_channels), SiLU(), LayerNorm(hidden_channels)
+        self.lin = Sequential(
+            Linear(residue_size, hidden_channels),
+            SiLU(),
+            LayerNorm(hidden_channels),
         )
         self.attention_blocks = ModuleList(
             [
@@ -110,11 +113,31 @@ class KissimPocketTransformer(Module):
             ]
         )
 
+    def get_residue_representation(self, batch):
+        x, _ = to_dense_batch(
+            batch[NodeType.PocketResidue].x, batch[NodeType.PocketResidue].batch
+        )
+        return x
+
     def forward(self, batch) -> Tuple[Tensor, Optional[Tensor]]:
-        x = self.lin1(batch.kissim_fp.float())
+        x = self.lin(self.get_residue_representation(batch))
         for attn in self.attention_blocks:
             x = attn(x)
         return x, None
+
+
+class KissimTransformer(ResidueTransformer):
+    def __init__(
+        self,
+        residue_size: int,
+        hidden_channels: int,
+        num_attention_blocks: int,
+        num_heads: int = 1,
+    ) -> None:
+        super().__init__(residue_size, hidden_channels, num_attention_blocks, num_heads)
+
+    def get_residue_representation(self, batch):
+        return batch.kissim_fp.float()
 
 
 def _sum_aggr(
@@ -139,12 +162,12 @@ class GlobalSumDecoder(Module):
         self.f_ligand = Sequential(
             Linear(hidden_channels, hidden_channels),
             self.act,
-            BatchNorm1d(hidden_channels),
+            LayerNorm(hidden_channels),
         )
         self.f_pocket = Sequential(
             Linear(hidden_channels, hidden_channels),
             self.act,
-            BatchNorm1d(hidden_channels),
+            LayerNorm(hidden_channels),
         )
         self.f_combined = Sequential(
             Linear(hidden_channels * 2, hidden_channels),

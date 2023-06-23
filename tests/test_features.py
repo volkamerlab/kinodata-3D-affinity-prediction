@@ -1,9 +1,12 @@
 import numpy as np
-from kinodata.data.featurization.rdkit import (
+from torch_geometric.data import HeteroData
+
+from kinodata.data.featurization.atoms import (
     AtomFeatures,
     FormalCharge,
     NumHydrogens,
 )
+from kinodata.data.featurization.residue import add_onehot_residues
 import rdkit.Chem as Chem
 
 
@@ -37,7 +40,16 @@ def test_combined():
     common_asserts(result)
 
 
+def test_residue():
+    data = HeteroData()
+    data = add_onehot_residues(data, "AAABBBCDD")
+    x = data["pocket_residue"].x
+    assert x is not None
+    assert (x.sum(dim=1) == 1).all()
+
+
 if __name__ == "__main__":
     test_charge()
     test_hydrogen()
     test_combined()
+    test_residue()
