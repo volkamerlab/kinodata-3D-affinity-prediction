@@ -29,7 +29,7 @@ def add_atoms(mol, data: HeteroData, key: str) -> HeteroData:
     return data
 
 
-def add_bonds(mol, data: HeteroData, key: str) -> HeteroData:
+def bond_tensors(mol):
     row, col = list(), list()
     bond_type_indices = []
     num_nodes = mol.GetNumAtoms()
@@ -47,8 +47,33 @@ def add_bonds(mol, data: HeteroData, key: str) -> HeteroData:
     edge_attr = F.one_hot(bond_type_indices, NUM_BOND_TYPES)
 
     edge_index, edge_attr = to_undirected(edge_index, edge_attr, num_nodes)
+    return edge_index, edge_attr
 
+
+def add_bonds(mol, data: HeteroData, key: str) -> HeteroData:
+
+    edge_index, edge_attr = bond_tensors(mol)
     data[key, RelationType.Covalent, key].edge_index = edge_index
     data[key, RelationType.Covalent, key].edge_attr = edge_attr
 
+    return data
+
+
+def append_atoms_and_bonds(mol, data: HeteroData, key: str) -> HeteroData:
+
+    old_num_nodes = data[key].z.size(0)
+
+    data[key].z = torch.cat((data[key].z, atomic_numbers(mol)), dim=0)
+    data[key].x = torch.cat(
+        (data[key].x, torch.from_numpy(AtomFeatures.compute(mol)).float()), dim=0
+    )
+    data[key].pos = torch.cat((data[key].pos, atom_positions(mol)), dim=0)
+
+    edge_index, edge_attr = bond_tensors(mol)
+    edge_index = edge_index + old_num_nodes
+
+    edge_store = data[key, RelationType.Covalent, key]
+
+    edge_store.edge_index = torch.cat((edge_store.edge_index, edge_index), dim=1)
+    edge_store.edge_attr = torch.cat((edge_store.edge_attr, edge_attr), dim=0)
     return data

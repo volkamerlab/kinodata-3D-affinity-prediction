@@ -14,7 +14,11 @@ from torch_geometric.transforms import Compose
 from tqdm import tqdm
 
 from kinodata.data.utils.pocket_sequence_klifs import add_pocket_sequence
-from kinodata.data.featurization.rdkit import add_atoms, add_bonds
+from kinodata.data.featurization.rdkit import (
+    add_atoms,
+    add_bonds,
+    append_atoms_and_bonds,
+)
 from kinodata.data.featurization.residue import (
     add_onehot_residues,
     add_kissim_fp,
@@ -43,8 +47,10 @@ class KinodataDocked(InMemoryDataset):
         post_filter: Callable = FilterCombine(
             [FilterActivityType(["pIC50"]), FilterActivityScore()]
         ),
+        hetero_complex: bool = False,
     ):
         self.remove_hydrogen = remove_hydrogen
+        self.hetero_complex = hetero_complex
         self.post_filter = post_filter
         super().__init__(root, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0])
@@ -60,7 +66,15 @@ class KinodataDocked(InMemoryDataset):
     @property
     def processed_file_names(self) -> List[str]:
         # TODO add preprocessed kssim fingerprints?
-        return ["kinodata_docked.pt"]
+        return [
+            f"kinodata_docked{self.suffix}.pt",
+        ]
+
+    @property
+    def suffix(self) -> str:
+        return (
+            f"_hetero:{int(self.hetero_complex)}_addh:{int(not self.remove_hydrogen)}"
+        )
 
     @property
     def pocket_dir(self) -> Path:
@@ -151,6 +165,7 @@ class KinodataDocked(InMemoryDataset):
                 float(row["docking.posit_probability"]),
                 int(row["similar.klifs_structure_id"]),
                 row["structure.pocket_sequence"],
+                self.remove_hydrogen,
             )
             for _, row in tqdm(
                 self.df.iterrows(),
@@ -159,8 +174,9 @@ class KinodataDocked(InMemoryDataset):
             )
         ]
 
+        fun = process_idx_hetero if self.hetero_complex else process_idx_complex
         with mp.Pool(os.cpu_count()) as pool:
-            data_list = pool.map(process_idx, tqdm(tasks))
+            data_list = pool.map(fun, tqdm(tasks))
 
         # data_list = list(map(process_idx, tqdm(tasks)))
 
@@ -194,10 +210,10 @@ class KinodataDocked(InMemoryDataset):
 
 
 def process_chunk(tasks) -> List:
-    return list(map(process_idx, tasks))
+    return list(map(process_idx_hetero, tasks))
 
 
-def process_idx(args):
+def process_idx_hetero(args):
     (
         ident,
         smiles,
@@ -209,17 +225,20 @@ def process_idx(args):
         posit_prob,
         structure_id,
         pocket_sequence,
+        remove_hydrogen,
     ) = args
     data = HeteroData()
 
     try:
-        AddHs(ligand)
+        if not remove_hydrogen:
+            AddHs(ligand)
         Kekulize(ligand)
         data = add_atoms(ligand, data, NodeType.Ligand)
         data = add_bonds(ligand, data, NodeType.Ligand)
 
         pocket = MolFromMol2File(str(pocket_file))
-        AddHs(pocket)
+        if not remove_hydrogen:
+            AddHs(pocket)
         Kekulize(pocket)
         data = add_atoms(pocket, data, NodeType.Pocket)
         data = add_bonds(pocket, data, NodeType.Pocket)
@@ -246,8 +265,57 @@ def process_idx(args):
     return data
 
 
+def process_idx_complex(args):
+    (
+        ident,
+        smiles,
+        ligand,
+        activity,
+        activity_type,
+        pocket_file,
+        docking_score,
+        posit_prob,
+        structure_id,
+        pocket_sequence,
+        remove_hydrogen,
+    ) = args
+    data = HeteroData()
+
+    try:
+        if not remove_hydrogen:
+            AddHs(ligand)
+        Kekulize(ligand)
+        data = add_atoms(ligand, data, NodeType.Complex)
+        data = add_bonds(ligand, data, NodeType.Complex)
+
+        pocket = MolFromMol2File(str(pocket_file))
+        if not remove_hydrogen:
+            AddHs(pocket)
+        Kekulize(pocket)
+        data = append_atoms_and_bonds(pocket, data, NodeType.Complex)
+    except Exception as e:
+        print(e)
+        return None
+    if data is None:
+        return None
+
+    data.y = torch.tensor(activity).view(1)
+    data.docking_score = torch.tensor(docking_score).view(1)
+    data.posit_prob = torch.tensor(posit_prob).view(1)
+    data.activity_type = activity_type
+    data.ident = ident
+    data.smiles = smiles
+
+    return data
+
+
 if __name__ == "__main__":
-    dataset = KinodataDocked()
-    print(dataset[100])
+    dataset = KinodataDocked(
+        pre_transform=AddDistancesAndInteractions(
+            edge_types={(NodeType.Complex, NodeType.Complex): 6.0},
+            max_num_neighbors=64,
+        )
+    )
+    print(dataset[42])
 
     pass

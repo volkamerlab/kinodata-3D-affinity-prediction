@@ -20,6 +20,7 @@ from collections import defaultdict
 from kinodata.types import NodeType, NodeEmbedding, Kwargs, RelationType
 from kinodata.types import EdgeType
 from kinodata.model.resolve import resolve_act
+from kinodata.model.shared.dist_embedding import GaussianDistEmbedding
 import numpy as np
 
 RawMessage = Tuple[Tensor, Tensor, Tensor, Tensor]
@@ -115,32 +116,6 @@ class EGNNMessageLayer(nn.Module):
         aggr_messages = torch.zeros_like(target_node)
         scatter(messages, i_target, 0, reduce=self.reduce, out=aggr_messages)
         return self.lin_out(aggr_messages)
-
-
-def gaussian(x, mean, std):
-    return torch.exp(-0.5 * (((x - mean) / std) ** 2)) / ((2 * np.pi**0.5) * std)
-
-
-class GaussianDistEmbedding(nn.Module):
-    def __init__(self, size: int, d_cut: float) -> None:
-        super().__init__()
-        self.size = size
-        self.d_cut = nn.parameter.Parameter(
-            torch.tensor([d_cut], dtype=torch.float32), requires_grad=False
-        )
-
-        means, stds = self._initial_params()
-        self.means = nn.Parameter(means)
-        self.stds = nn.Parameter(stds)
-
-    def _initial_params(self):
-        means = torch.linspace(0, self.d_cut.item(), self.size)
-        stds = torch.ones(self.size)
-        return means, stds
-
-    def forward(self, d: Tensor) -> Tensor:
-        return gaussian(d, self.means, self.stds)
-
 
 class RBFLayer(EGNNMessageLayer):
     def __init__(

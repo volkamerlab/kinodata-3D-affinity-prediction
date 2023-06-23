@@ -6,6 +6,7 @@ from torch.utils.data import Subset
 class NodeType:
     Ligand = "ligand"
     Pocket = "pocket"
+    Complex = "complex"
     PocketResidue = "pocket_residue"
 
 
