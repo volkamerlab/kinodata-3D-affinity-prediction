@@ -9,6 +9,7 @@ import wandb
 import kinodata.configuration as configuration
 from kinodata.training import train
 from kinodata.model.complex_transformer import ComplexTransformer
+from kinodata.types import NodeType, RelationType
 
 
 def make_model(config: configuration.Config):
@@ -19,6 +20,7 @@ def make_model(config: configuration.Config):
 if __name__ == "__main__":
     configuration.register(
         "sparse_transformer",
+        max_num_neighbors=16,
         hidden_channels=128,
         num_attention_blocks=3,
         num_heads=8,
@@ -32,6 +34,13 @@ if __name__ == "__main__":
     config = configuration.get("data", "training", "sparse_transformer")
     config = config.update_from_file("config_regressor_local.yaml")
     config["need_distances"] = False
+    config["perturb_ligand_positions"] = 0.0
+    config["perturb_pocket_positions"] = 0.0
+
+    config["node_types"] = [NodeType.Complex]
+    config["edge_types"] = [
+        (NodeType.Complex, RelationType.Intraacts, NodeType.Complex)
+    ]
 
     for key, value in config.items():
         print(f"{key}: {value}")

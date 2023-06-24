@@ -1,5 +1,5 @@
-from torch import Tensor
-from torch.nn import Module, Linear, LayerNorm, Sequential, Identity
+from torch import Tensor, tensor
+from torch.nn import Module, Linear, LayerNorm, Sequential, Identity, Parameter
 from torch_geometric.utils import softmax
 from torch_scatter import scatter_add
 
@@ -32,6 +32,10 @@ class SparseAttention(Module):
         )
         self.lin_out = Linear(
             self.projected_channels * self.num_heads, self.hidden_channels, bias=False
+        )
+        self.normalizer = Parameter(
+            tensor([self.projected_channels]).float().sqrt(),
+            requires_grad=True,
         )
 
     def forward(
@@ -85,7 +89,9 @@ class SparseAttention(Module):
         bias_add = bias_add.view(M, d, H)
 
         # (M * H, d)  -> (M * H,)
-        logit = (query * (key * (1 + bias_mul) + bias_add)).sum(dim=1)
+        logit = (query * (key * (1 + bias_mul) + bias_add)).sum(
+            dim=1
+        ) / self.normalizer.clamp(min=1.0, max=self.projected_channels)
         attention = softmax(logit, query_index, dim=0)
         result = scatter_add(attention.unsqueeze(1) * value, query_index, 0)
         result = result.view(N, -1)
