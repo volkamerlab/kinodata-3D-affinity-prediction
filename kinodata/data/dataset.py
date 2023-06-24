@@ -310,12 +310,7 @@ def process_idx_complex(args):
 
 
 if __name__ == "__main__":
-    dataset = KinodataDocked(
-        pre_transform=AddDistancesAndInteractions(
-            edge_types={(NodeType.Complex, NodeType.Complex): 6.0},
-            max_num_neighbors=64,
-        )
-    )
+    dataset = KinodataDocked()
     print(dataset[42])
 
     pass

@@ -1,6 +1,10 @@
+from typing import Tuple
 import torch
-from torch.nn import ModuleList, Embedding, Sequential, Linear, Module
+from torch import Tensor, cat
+from torch.nn import ModuleList, Embedding, Sequential, Linear, Module, Parameter
+from torch.nn.init import zeros_
 from torch_geometric.data import HeteroData
+from torch_geometric.data.storage import EdgeStorage
 from torch_geometric.nn.norm import GraphNorm
 from torch_geometric.nn.aggr import (
     SumAggregation,
@@ -9,6 +13,8 @@ from torch_geometric.nn.aggr import (
     MinAggregation,
     StdAggregation,
 )
+from torch_geometric.utils import coalesce
+from torch_cluster import radius_graph
 
 from ..types import NodeEmbedding, NodeType, RelationType
 from .shared.dist_embedding import GaussianDistEmbedding
@@ -44,6 +50,19 @@ class MultiAggr(Module):
         return self.lin_out(z)
 
 
+class InteractionModule(Module):
+    def __init__(self, interaction_radius: float) -> None:
+        super().__init__()
+        self.interaction_radius = interaction_radius
+
+    def forward(self, data: HeteroData) -> EdgeStorage:
+        pos = data[NodeType.Complex].pos
+        batch = data[NodeType.Complex].batch
+        edge_index = radius_graph(pos, self.interaction_radius, batch=batch)
+        distances = (pos[edge_index[0]] - pos[edge_index[1]]).pow(2).sum(dim=1).sqrt()
+        return EdgeStorage(edge_index=edge_index, edge_weight=distances, edge_attr=None)
+
+
 class ComplexTransformer(RegressionModel):
     def __init__(
         self,
@@ -58,11 +77,13 @@ class ComplexTransformer(RegressionModel):
         ln1: bool = True,
         ln2: bool = False,
         ln3: bool = True,
-        grap_norm: bool = True,
+        graph_norm: bool = True,
+        precomputed_distance: bool = False,
     ) -> None:
         super().__init__(config)
         self.act = resolve_act(act)
         self.d_cut = interaction_radius
+        self.interactions = InteractionModule(interaction_radius)
         self.atom_embedding = Embedding(max_atomic_number, hidden_channels)
         self.attention_blocks = ModuleList(
             [
@@ -70,7 +91,7 @@ class ComplexTransformer(RegressionModel):
                 for _ in range(num_attention_blocks)
             ]
         )
-        if grap_norm:
+        if graph_norm:
             self.norm_layers = ModuleList(
                 [GraphNorm(hidden_channels) for _ in range(num_attention_blocks)]
             )
@@ -78,15 +99,11 @@ class ComplexTransformer(RegressionModel):
             self.norm_layers = [lambda x, b: x] * num_attention_blocks
         self.dist_embedding = Sequential(
             GaussianDistEmbedding(hidden_channels, self.d_cut),
-            Linear(hidden_channels, hidden_channels),
-            self.act,
-            Linear(hidden_channels, hidden_channels * 2),
+            Linear(hidden_channels, hidden_channels, bias=False),
         )
-        self.covalent_embedding = Sequential(
-            Linear(edge_attr_size, hidden_channels),
-            self.act,
-            Linear(hidden_channels, hidden_channels),
-        )
+        self.covalent_embedding = Linear(edge_attr_size, hidden_channels, bias=False)
+        self.edge_bias = Parameter(torch.empty(hidden_channels), requires_grad=True)
+        zeros_(self.edge_bias)
 
         self.aggr = MultiAggr(
             ["min", "max", "mean"], hidden_channels, hidden_channels // 4
@@ -99,12 +116,19 @@ class ComplexTransformer(RegressionModel):
 
     def forward(self, data: HeteroData) -> NodeEmbedding:
         node_store = data[NodeType.Complex]
-        edge_store = data[NodeType.Complex, RelationType.Intraacts, NodeType.Complex]
+        bond_store = data[NodeType.Complex, RelationType.Covalent, NodeType.Complex]
+        intr_store = self.interactions(data)
         node_repr = self.atom_embedding(node_store.z)
-        edge_repr = self.covalent_embedding(edge_store.edge_attr)
-        add, mul = torch.chunk(self.dist_embedding(edge_store.edge_weight), 2, dim=1)
-        edge_repr = self.act((1 + mul) * edge_repr + add)
-        edge_index = edge_store.edge_index
+        bond_repr = self.covalent_embedding(bond_store.edge_attr.float())
+        dist_repr = self.dist_embedding(intr_store.edge_weight.view(-1, 1))
+
+        edge_index, edge_repr = coalesce(
+            cat((intr_store.edge_index, bond_store.edge_index), dim=1),
+            cat((dist_repr, bond_repr), dim=0),
+            reduce="add",
+        )
+        edge_repr = self.act(edge_repr + self.edge_bias)
+
         for sparse_attention_block, norm in zip(
             self.attention_blocks, self.norm_layers
         ):
