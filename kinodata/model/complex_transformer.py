@@ -14,7 +14,7 @@ from torch_geometric.nn.aggr import (
     StdAggregation,
 )
 from torch_geometric.utils import coalesce
-from torch_cluster import radius_graph
+from torch_cluster import knn_graph
 
 from ..types import NodeEmbedding, NodeType, RelationType
 from .shared.dist_embedding import GaussianDistEmbedding
@@ -51,15 +51,19 @@ class MultiAggr(Module):
 
 
 class InteractionModule(Module):
-    def __init__(self, interaction_radius: float) -> None:
+    def __init__(self, interaction_radius: float, max_num_neighbors: int) -> None:
         super().__init__()
+        self.max_num_neighbors = max_num_neighbors
         self.interaction_radius = interaction_radius
 
     def forward(self, data: HeteroData) -> EdgeStorage:
         pos = data[NodeType.Complex].pos
         batch = data[NodeType.Complex].batch
-        edge_index = radius_graph(pos, self.interaction_radius, batch=batch)
+        edge_index = knn_graph(pos, self.max_num_neighbors + 1, batch, loop=True)
         distances = (pos[edge_index[0]] - pos[edge_index[1]]).pow(2).sum(dim=1).sqrt()
+        mask = distances <= self.interaction_radius
+        edge_index = edge_index[:, mask]
+        distances = distances[mask]
         return EdgeStorage(edge_index=edge_index, edge_weight=distances, edge_attr=None)
 
 
@@ -71,6 +75,7 @@ class ComplexTransformer(RegressionModel):
         num_heads: int,
         num_attention_blocks: int,
         interaction_radius: float,
+        max_num_neighbors: int,
         act: str,
         max_atomic_number: int = 100,
         edge_attr_size: int = 4,
@@ -83,7 +88,11 @@ class ComplexTransformer(RegressionModel):
         super().__init__(config)
         self.act = resolve_act(act)
         self.d_cut = interaction_radius
-        self.interactions = InteractionModule(interaction_radius)
+        self.max_num_neighbors = max_num_neighbors
+        if precomputed_distance:
+            raise NotImplementedError
+        else:
+            self.interactions = InteractionModule(interaction_radius, max_num_neighbors)
         self.atom_embedding = Embedding(max_atomic_number, hidden_channels)
         self.attention_blocks = ModuleList(
             [
