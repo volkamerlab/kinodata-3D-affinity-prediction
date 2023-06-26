@@ -1,0 +1,15 @@
+universe = docker
+docker_image = gjoschka/massspec_with_wandb
+executable = train_template.sh
+arguments = train_sparse_transformer $(split)
+output = train_kinodata.$(ClusterId).$(ProcId).out
+error = train_kinodata.$(ClusterId).$(ProcId).err
+log = train_kinodata.$(ClusterId).log
+should_transfer_files   = YES
+when_to_transfer_output = ON_EXIT
+request_GPUs = 1
+request_CPUs = 32
+request_memory = 64G
+requirements = UidDomain == "cs.uni-saarland.de" && machine != "fulla.cs.uni-saarland.de"
++WantGPUHomeMounted = true
+queue 1 split in scaffold, pocket, random
