@@ -23,7 +23,7 @@ if __name__ == "__main__":
         max_num_neighbors=16,
         hidden_channels=128,
         num_attention_blocks=3,
-        num_heads=8,
+        num_heads=4,
         act="relu",
         edge_attr_size=4,
         ln1=True,
@@ -33,6 +33,7 @@ if __name__ == "__main__":
     )
     config = configuration.get("data", "training", "sparse_transformer")
     config = config.update_from_file("config_regressor_local.yaml")
+    config = config.update_from_args()
     config["need_distances"] = False
     config["perturb_ligand_positions"] = 0.0
     config["perturb_pocket_positions"] = 0.0
