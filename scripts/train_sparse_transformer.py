@@ -37,13 +37,14 @@ if __name__ == "__main__":
     config["need_distances"] = False
     config["perturb_ligand_positions"] = 0.0
     config["perturb_pocket_positions"] = 0.0
+    config["perturb_complex_positions"] = 0.1
 
     config["node_types"] = [NodeType.Complex]
     config["edge_types"] = [
         (NodeType.Complex, RelationType.Intraacts, NodeType.Complex)
     ]
 
-    for key, value in config.items():
+    for key, value in sorted(config.items(), key=lambda i: i[0]):
         print(f"{key}: {value}")
 
     wandb.init(config=config, project="kinodata-docked-rescore", tags=["transformer"])

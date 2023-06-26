@@ -1,4 +1,5 @@
 from copy import deepcopy
+from functools import partial
 from itertools import product
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -87,6 +88,8 @@ def compose(transforms: Optional[list]) -> Optional[Callable]:
 
 
 def make_kinodata_module(config: Config, transforms=None) -> LightningDataset:
+    dataset_cls = partial(KinodataDocked, remove_hydrogen=config.remove_hydrogen)
+
     if transforms is None:
         transforms = []
 
@@ -99,6 +102,12 @@ def make_kinodata_module(config: Config, transforms=None) -> LightningDataset:
     if config.perturb_pocket_positions and config.need_distances:
         augmentations.append(
             T.PerturbAtomPositions(NodeType.Pocket, std=config.perturb_pocket_positions)
+        )
+    if "perturb_complex_positions" in config and config.perturb_complex_positions > 0.0:
+        augmentations.append(
+            T.PerturbAtomPositions(
+                NodeType.Complex, std=config.perturb_complex_positions
+            )
         )
 
     if config.need_distances:
@@ -131,7 +140,7 @@ def make_kinodata_module(config: Config, transforms=None) -> LightningDataset:
     split.source_file = str(config.data_split)
     print(split)
     print("Remapping idents to dataset index..")
-    index_mapping = KinodataDocked().ident_index_map()
+    index_mapping = dataset_cls().ident_index_map()
     split = split.remap_index(index_mapping)
 
     print("Creating data module:")
@@ -142,7 +151,7 @@ def make_kinodata_module(config: Config, transforms=None) -> LightningDataset:
         split,
         config.batch_size,
         config.num_workers,
-        dataset_cls=KinodataDocked,
+        dataset_cls=dataset_cls,
         train_kwargs={"transform": train_transform},
         val_kwargs={"transform": val_transform},
         test_kwargs={"transform": val_transform},

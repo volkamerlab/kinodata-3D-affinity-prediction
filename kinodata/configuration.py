@@ -167,6 +167,7 @@ register(
     need_distances=True,
     num_residue_features=6,
     additional_atom_features=False,
+    remove_hydrogen=True,
 )
 
 register(

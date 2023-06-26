@@ -1,17 +1,27 @@
 from typing import Tuple
 import torch
 from torch import Tensor, cat
-from torch.nn import ModuleList, Embedding, Sequential, Linear, Module, Parameter
+from torch.nn import (
+    ModuleList,
+    Embedding,
+    Sequential,
+    Linear,
+    Module,
+    Parameter,
+    BatchNorm1d,
+)
 from torch.nn.init import zeros_
 from torch_geometric.data import HeteroData
 from torch_geometric.data.storage import EdgeStorage
 from torch_geometric.nn.norm import GraphNorm
 from torch_geometric.nn.aggr import (
+    Aggregation,
     SumAggregation,
     MaxAggregation,
     MeanAggregation,
     MinAggregation,
     StdAggregation,
+    SoftmaxAggregation,
 )
 from torch_geometric.utils import coalesce
 from torch_cluster import knn_graph
@@ -21,6 +31,7 @@ from .shared.dist_embedding import GaussianDistEmbedding
 from .sparse_transformer import SPAB
 from .regression import RegressionModel
 from .resolve import resolve_act
+from ..data.featurization.atoms import AtomFeatures
 
 aggr_cls = {
     "sum": SumAggregation,
@@ -67,6 +78,10 @@ class InteractionModule(Module):
         return EdgeStorage(edge_index=edge_index, edge_weight=distances, edge_attr=None)
 
 
+def FF(din, dout, act):
+    return Sequential(Linear(din, dout), act)
+
+
 class ComplexTransformer(RegressionModel):
     def __init__(
         self,
@@ -79,11 +94,13 @@ class ComplexTransformer(RegressionModel):
         act: str,
         max_atomic_number: int = 100,
         edge_attr_size: int = 4,
+        atom_attr_size: int = AtomFeatures.size,
         ln1: bool = True,
         ln2: bool = False,
         ln3: bool = True,
         graph_norm: bool = True,
         precomputed_distance: bool = False,
+        decoder_hidden_layers: int = 2,
     ) -> None:
         super().__init__(config)
         self.act = resolve_act(act)
@@ -93,7 +110,8 @@ class ComplexTransformer(RegressionModel):
             raise NotImplementedError
         else:
             self.interactions = InteractionModule(interaction_radius, max_num_neighbors)
-        self.atom_embedding = Embedding(max_atomic_number, hidden_channels)
+        self.atomic_num_embedding = Embedding(max_atomic_number, hidden_channels)
+        self.lin_atom_features = Linear(atom_attr_size, hidden_channels)
         self.attention_blocks = ModuleList(
             [
                 SPAB(hidden_channels, num_heads, self.act, ln1, ln2, ln3)
@@ -114,20 +132,26 @@ class ComplexTransformer(RegressionModel):
         self.edge_bias = Parameter(torch.empty(hidden_channels), requires_grad=True)
         zeros_(self.edge_bias)
 
-        self.aggr = MultiAggr(
-            ["min", "max", "mean"], hidden_channels, hidden_channels // 4
-        )
+        self.aggr = SoftmaxAggregation(learn=True, channels=hidden_channels)
         self.out = Sequential(
-            Linear(hidden_channels, hidden_channels),
-            self.act,
-            Linear(hidden_channels, 1),
+            *(
+                [BatchNorm1d(hidden_channels)]
+                + [
+                    FF(hidden_channels, hidden_channels, self.act)
+                    for _ in range(decoder_hidden_layers)
+                ]
+                + [Linear(hidden_channels, 1)]
+            )
         )
 
     def forward(self, data: HeteroData) -> NodeEmbedding:
         node_store = data[NodeType.Complex]
         bond_store = data[NodeType.Complex, RelationType.Covalent, NodeType.Complex]
         intr_store = self.interactions(data)
-        node_repr = self.atom_embedding(node_store.z)
+        node_repr = self.act(
+            self.atomic_num_embedding(node_store.z)
+            + self.lin_atom_features(node_store.x)
+        )
         bond_repr = self.covalent_embedding(bond_store.edge_attr.float())
         dist_repr = self.dist_embedding(intr_store.edge_weight.view(-1, 1))
 
@@ -146,5 +170,5 @@ class ComplexTransformer(RegressionModel):
             )
             node_repr = norm(node_repr, node_store.batch)
 
-        graph_repr = self.act(self.aggr(node_repr, node_store.batch))
+        graph_repr = self.aggr(node_repr, node_store.batch)
         return self.out(graph_repr)

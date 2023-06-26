@@ -10,7 +10,6 @@ import torch
 from rdkit import RDLogger
 from rdkit.Chem import PandasTools, MolFromMol2File, Kekulize, AddHs
 from torch_geometric.data import HeteroData, InMemoryDataset
-from torch_geometric.transforms import Compose
 from tqdm import tqdm
 
 from kinodata.data.utils.pocket_sequence_klifs import add_pocket_sequence
@@ -25,7 +24,6 @@ from kinodata.data.featurization.residue import (
     load_kissim,
     PHYSICOCHEMICAL,
 )
-from kinodata.transform.add_distances import AddDistances, AddDistancesAndInteractions
 from kinodata.transform.filter_activity import (
     FilterActivityScore,
     FilterActivityType,
@@ -310,7 +308,7 @@ def process_idx_complex(args):
 
 
 if __name__ == "__main__":
-    dataset = KinodataDocked()
+    dataset = KinodataDocked(remove_hydrogen=True)
     print(dataset[42])
 
     pass
