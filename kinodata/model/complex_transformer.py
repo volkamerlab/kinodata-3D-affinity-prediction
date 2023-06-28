@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import List, Optional, Protocol, Tuple
 import torch
 from torch import Tensor, cat
 from torch.nn import (
@@ -32,6 +32,7 @@ from .sparse_transformer import SPAB
 from .regression import RegressionModel
 from .resolve import resolve_act
 from ..data.featurization.atoms import AtomFeatures
+from ..data.featurization.bonds import NUM_BOND_TYPES
 
 aggr_cls = {
     "sum": SumAggregation,
@@ -40,6 +41,8 @@ aggr_cls = {
     "mean": MeanAggregation,
     "std": StdAggregation,
 }
+
+OptTensor = Optional[Tensor]
 
 
 def make_aggrs(*aggrs: str):
@@ -61,13 +64,82 @@ class MultiAggr(Module):
         return self.lin_out(z)
 
 
-class InteractionModule(Module):
-    def __init__(self, interaction_radius: float, max_num_neighbors: int) -> None:
-        super().__init__()
-        self.max_num_neighbors = max_num_neighbors
-        self.interaction_radius = interaction_radius
+def FF(din, dout, act):
+    return Sequential(Linear(din, dout), act)
 
-    def forward(self, data: HeteroData) -> EdgeStorage:
+
+class InteractionModule(Module):
+    hidden_channels: int
+
+    def __init__(
+        self, hidden_channels: int, act: str = "none", bias: bool = False
+    ) -> None:
+        super().__init__()
+        self.hidden_channels = hidden_channels
+        self.act = resolve_act(act)
+        self.bias = Parameter(torch.zeros(self.hidden_channels), requires_grad=bias)
+
+    def out(self, edge_repr: Tensor) -> Tensor:
+        return self.act(edge_repr + self.bias)
+
+    def interactions(self, data: HeteroData) -> Tuple[Tensor, OptTensor, OptTensor]:
+        ...
+
+    def process_attr(self, edge_attr: Tensor) -> Tensor:
+        ...
+
+    def process_weight(self, edge_weight: Tensor) -> Tensor:
+        ...
+
+    def forward(self, data: HeteroData) -> Tuple[Tensor, Tensor]:
+        edge_index, edge_attr, edge_weight = self.interactions(data)
+        edge_repr = torch.zeros(edge_index.size(1), self.hidden_channels)
+        if edge_attr is not None:
+            edge_repr = edge_repr + self.process_attr(edge_attr)
+        if edge_weight is not None:
+            edge_repr = edge_repr + self.process_weight(edge_weight)
+        return edge_index, self.out(edge_repr)
+
+
+class CovalentInteractions(InteractionModule):
+    def __init__(
+        self,
+        hidden_channels: int,
+        act: str = "none",
+        bias: bool = False,
+        node_type: str = None,
+    ) -> None:
+        super().__init__(hidden_channels, act, bias)
+        assert node_type is not None
+        self.node_type = node_type
+        self.lin = Linear(NUM_BOND_TYPES, hidden_channels)
+
+    def interactions(self, data: HeteroData) -> Tuple[Tensor, OptTensor, OptTensor]:
+        edge_store = data[self.node_type, RelationType.Covalent, self.node_type]
+        return edge_store.edge_index, edge_store.edge_attr, None
+
+    def process_attr(self, edge_attr: Tensor) -> Tensor:
+        return self.lin(edge_attr.float())
+
+
+class StructuralInteractions(InteractionModule):
+    def __init__(
+        self,
+        hidden_channels: int,
+        act: str = "none",
+        bias: bool = False,
+        interaction_radius: float = 8.0,
+        max_num_neighbors: int = 16,
+        rbf_size: int = None,
+    ) -> None:
+        super().__init__(hidden_channels, act, bias)
+        self.interation_radius = interaction_radius
+        self.max_num_neighbors = max_num_neighbors
+        self.rbf_size = rbf_size if rbf_size else hidden_channels
+        self.distance_embedding = GaussianDistEmbedding(rbf_size, interaction_radius)
+        self.lin = Linear(rbf_size, hidden_channels, bias=False)
+
+    def interactions(self, data: HeteroData) -> Tuple[Tensor, OptTensor, OptTensor]:
         pos = data[NodeType.Complex].pos
         batch = data[NodeType.Complex].batch
         edge_index = knn_graph(pos, self.max_num_neighbors + 1, batch, loop=True)
@@ -75,11 +147,27 @@ class InteractionModule(Module):
         mask = distances <= self.interaction_radius
         edge_index = edge_index[:, mask]
         distances = distances[mask]
-        return EdgeStorage(edge_index=edge_index, edge_weight=distances, edge_attr=None)
+        return edge_index, None, distances
+
+    def process_weight(self, edge_weight: Tensor) -> Tensor:
+        self.distance_embedding(edge_weight)
 
 
-def FF(din, dout, act):
-    return Sequential(Linear(din, dout), act)
+class CombinedInteractions(Module):
+    def __init__(self, interactions: List[InteractionModule], act: str) -> None:
+        self.interactions = ModuleList(interactions)
+        self.act = resolve_act(act)
+        assert (
+            len(set([intr.hidden_channels for intr in interactions])) == 1
+        ), "Interactions should not map edge representation to different number of hidden channels."
+        self.bias = Parameter(torch.zeros(interactions[0].hidden_channels))
+
+    def forward(self, data: HeteroData) -> Tuple[Tensor, Tensor]:
+        edge_indices, edge_reprs = zip(*[intr(data) for intr in self.interactions])
+        edge_index, edge_repr = coalesce(
+            torch.cat(edge_indices, 1), torch.cat(edge_reprs, 0), reduce="add"
+        )
+        return edge_index, self.act(edge_repr + self.bias)
 
 
 class ComplexTransformer(RegressionModel):
@@ -93,23 +181,43 @@ class ComplexTransformer(RegressionModel):
         max_num_neighbors: int,
         act: str,
         max_atomic_number: int = 100,
-        edge_attr_size: int = 4,
         atom_attr_size: int = AtomFeatures.size,
         ln1: bool = True,
         ln2: bool = False,
         ln3: bool = True,
         graph_norm: bool = True,
-        precomputed_distance: bool = False,
         decoder_hidden_layers: int = 2,
+        interaction_modes: List[str] = [],
     ) -> None:
         super().__init__(config)
+        assert len(config["node_types"]) == 1
+        assert config["node_types"][0] == NodeType.Complex
         self.act = resolve_act(act)
         self.d_cut = interaction_radius
         self.max_num_neighbors = max_num_neighbors
-        if precomputed_distance:
-            raise NotImplementedError
+        intr_bias = len(interaction_modes) == 1
+        intr = []
+        for mode in interaction_modes:
+            if mode == "covalent":
+                module = CovalentInteractions(
+                    hidden_channels, act, intr_bias, config["node_types"][0]
+                )
+            elif mode == "structural":
+                module = StructuralInteractions(
+                    hidden_channels,
+                    act,
+                    intr_bias,
+                    interaction_radius,
+                    max_num_neighbors,
+                )
+            else:
+                raise ValueError(mode)
+            intr.append(module)
+        if len(intr) > 1:
+            self.interaction_module = CombinedInteractions(intr, act)
         else:
-            self.interactions = InteractionModule(interaction_radius, max_num_neighbors)
+            self.interaction_module = intr[0]
+
         self.atomic_num_embedding = Embedding(max_atomic_number, hidden_channels)
         self.lin_atom_features = Linear(atom_attr_size, hidden_channels)
         self.attention_blocks = ModuleList(
@@ -124,14 +232,6 @@ class ComplexTransformer(RegressionModel):
             )
         else:
             self.norm_layers = [lambda x, b: x] * num_attention_blocks
-        self.dist_embedding = Sequential(
-            GaussianDistEmbedding(hidden_channels, self.d_cut),
-            Linear(hidden_channels, hidden_channels, bias=False),
-        )
-        self.covalent_embedding = Linear(edge_attr_size, hidden_channels, bias=False)
-        self.edge_bias = Parameter(torch.empty(hidden_channels), requires_grad=True)
-        zeros_(self.edge_bias)
-
         self.aggr = SoftmaxAggregation(learn=True, channels=hidden_channels)
         self.out = Sequential(
             *(
@@ -146,22 +246,11 @@ class ComplexTransformer(RegressionModel):
 
     def forward(self, data: HeteroData) -> NodeEmbedding:
         node_store = data[NodeType.Complex]
-        bond_store = data[NodeType.Complex, RelationType.Covalent, NodeType.Complex]
-        intr_store = self.interactions(data)
         node_repr = self.act(
             self.atomic_num_embedding(node_store.z)
             + self.lin_atom_features(node_store.x)
         )
-        bond_repr = self.covalent_embedding(bond_store.edge_attr.float())
-        dist_repr = self.dist_embedding(intr_store.edge_weight.view(-1, 1))
-
-        edge_index, edge_repr = coalesce(
-            cat((intr_store.edge_index, bond_store.edge_index), dim=1),
-            cat((dist_repr, bond_repr), dim=0),
-            reduce="add",
-        )
-        edge_repr = self.act(edge_repr + self.edge_bias)
-
+        edge_index, edge_repr = self.interaction_module(data)
         for sparse_attention_block, norm in zip(
             self.attention_blocks, self.norm_layers
         ):

@@ -2,10 +2,8 @@ from functools import partial
 import wandb
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, List
-import json
-from dataclasses import dataclass
-
+from typing import Any, Dict, List, Optional
+from datetime import datetime
 from argparse import ArgumentParser
 
 
@@ -99,9 +97,28 @@ class RunInfo:
         self.run.update()
 
     @classmethod
-    def fetch_all(cls, path="nextaids/kinodata-docked-rescore") -> List["RunInfo"]:
+    def fetch(
+        cls, 
+        path="nextaids/kinodata-docked-rescore",
+        since: Optional[datetime] = None,
+    ) -> List["RunInfo"]:
+        filters = list()
+        if since is not None:
+            filters.append({
+                "createdAt": {"$gt": str(since)}
+            })
+
         api = wandb.Api()
-        runs = api.runs(path)
+        if len(filters) == 1:
+            filters = filters[0] 
+        elif len(filters) > 1:
+            filters = {"$and": filters}
+        else:
+            filters=None
+        runs = api.runs(
+            path,
+            filters=filters
+        )
         return [cls.from_run(run) for run in runs]
 
 
