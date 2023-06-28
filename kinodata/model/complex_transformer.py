@@ -8,6 +8,7 @@ from torch.nn import (
     Linear,
     Module,
     Parameter,
+    Dropout,
     BatchNorm1d,
 )
 from torch.nn.init import zeros_
@@ -186,8 +187,9 @@ class ComplexTransformer(RegressionModel):
         ln2: bool = False,
         ln3: bool = True,
         graph_norm: bool = True,
-        decoder_hidden_layers: int = 2,
+        decoder_hidden_layers: int = 1,
         interaction_modes: List[str] = [],
+        dropout: float = 0.1,
     ) -> None:
         super().__init__(config)
         assert len(config["node_types"]) == 1
@@ -235,7 +237,7 @@ class ComplexTransformer(RegressionModel):
         self.aggr = SoftmaxAggregation(learn=True, channels=hidden_channels)
         self.out = Sequential(
             *(
-                [BatchNorm1d(hidden_channels)]
+                [Dropout(dropout), BatchNorm1d(hidden_channels)]
                 + [
                     FF(hidden_channels, hidden_channels, self.act)
                     for _ in range(decoder_hidden_layers)
