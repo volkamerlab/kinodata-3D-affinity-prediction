@@ -1,6 +1,6 @@
-from typing import List, Optional, Protocol, Tuple
+from typing import List, Optional, Tuple
 import torch
-from torch import Tensor, cat
+from torch import Tensor
 from torch.nn import (
     ModuleList,
     Embedding,
@@ -11,19 +11,9 @@ from torch.nn import (
     Dropout,
     BatchNorm1d,
 )
-from torch.nn.init import zeros_
 from torch_geometric.data import HeteroData
-from torch_geometric.data.storage import EdgeStorage
 from torch_geometric.nn.norm import GraphNorm
-from torch_geometric.nn.aggr import (
-    Aggregation,
-    SumAggregation,
-    MaxAggregation,
-    MeanAggregation,
-    MinAggregation,
-    StdAggregation,
-    SoftmaxAggregation,
-)
+from torch_geometric.nn.aggr import SoftmaxAggregation
 from torch_geometric.utils import coalesce
 from torch_cluster import knn_graph
 
@@ -35,34 +25,7 @@ from .resolve import resolve_act
 from ..data.featurization.atoms import AtomFeatures
 from ..data.featurization.bonds import NUM_BOND_TYPES
 
-aggr_cls = {
-    "sum": SumAggregation,
-    "min": MinAggregation,
-    "max": MaxAggregation,
-    "mean": MeanAggregation,
-    "std": StdAggregation,
-}
-
 OptTensor = Optional[Tensor]
-
-
-def make_aggrs(*aggrs: str):
-    return ModuleList([aggr_cls[aggr]() for aggr in aggrs])
-
-
-class MultiAggr(Module):
-    def __init__(self, aggrs, hidden_channels, aggr_channels) -> None:
-        super().__init__()
-        self.aggrs = make_aggrs(*aggrs)
-        self.lin_aggr = Linear(
-            hidden_channels, aggr_channels * len(self.aggrs), bias=False
-        )
-        self.lin_out = Linear(aggr_channels * len(self.aggrs), hidden_channels)
-
-    def forward(self, x, batch):
-        x = self.lin_aggr(x).chunk(len(self.aggrs), dim=1)
-        z = torch.cat([aggr(_x, batch) for aggr, _x in zip(self.aggrs, x)], dim=1)
-        return self.lin_out(z)
 
 
 def FF(din, dout, act):

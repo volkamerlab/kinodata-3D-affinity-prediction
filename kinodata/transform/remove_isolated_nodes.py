@@ -43,9 +43,8 @@ class RemoveIsolatedNodes:
 
     def __call__(self, data: HeteroData) -> HeteroData:
         num_nodes = data[self.node_type].num_nodes
-        edge_index: Tensor = data[
-            self.edge_type[0], self.edge_type[1], self.edge_type[2]
-        ].edge_index
+        edge_store = data[self.edge_type[0], self.edge_type[1], self.edge_type[2]]
+        edge_index: Tensor = edge_store.edge_index
         isolated_mask = compute_isolated_nodes(
             edge_index,
             num_nodes=num_nodes,
@@ -58,11 +57,15 @@ class RemoveIsolatedNodes:
         for name in self.node_level_keys:
             storage = getattr(data[self.node_type], name)
             setattr(data[self.node_type], name, storage[~isolated_mask])
+            
         relabeling = torch.empty(num_nodes, dtype=torch.long)
         relabeling[~isolated_mask] = torch.arange(num_nodes - num_isolated)
+        
         edge_index[self.index_dim] = relabeling[edge_index[self.index_dim]]
         data[
             self.edge_type[0], self.edge_type[1], self.edge_type[2]
         ].edge_index = edge_index
+        
+        if 
 
         return data
