@@ -24,6 +24,7 @@ from kinodata.data.featurization.residue import (
     load_kissim,
     PHYSICOCHEMICAL,
 )
+from kinodata.data.featurization.biopandas import add_pocket_information
 from kinodata.transform.filter_activity import (
     FilterActivityScore,
     FilterActivityType,
@@ -46,9 +47,11 @@ class KinodataDocked(InMemoryDataset):
             [FilterActivityType(["pIC50"]), FilterActivityScore()]
         ),
         hetero_complex: bool = False,
+        require_residue_positions: bool = False,
     ):
         self.remove_hydrogen = remove_hydrogen
         self.hetero_complex = hetero_complex
+        self.require_residue_positions = require_residue_positions
         self.post_filter = post_filter
         super().__init__(root, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0])
@@ -164,6 +167,7 @@ class KinodataDocked(InMemoryDataset):
                 int(row["similar.klifs_structure_id"]),
                 row["structure.pocket_sequence"],
                 self.remove_hydrogen,
+                self.require_residue_positions,
             )
             for _, row in tqdm(
                 self.df.iterrows(),
@@ -224,6 +228,7 @@ def process_idx_hetero(args):
         structure_id,
         pocket_sequence,
         remove_hydrogen,
+        require_pocket_pos,
     ) = args
     data = HeteroData()
 
@@ -241,7 +246,10 @@ def process_idx_hetero(args):
         data = add_atoms(pocket, data, NodeType.Pocket)
         data = add_bonds(pocket, data, NodeType.Pocket)
 
-        data = add_onehot_residues(data, pocket_sequence)
+        if not require_pocket_pos:
+            data = add_onehot_residues(data, pocket_sequence)
+        else:
+            data = add_pocket_information(data, pocket_file)
     except Exception as e:
         print(e)
         return None

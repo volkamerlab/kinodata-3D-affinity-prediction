@@ -11,6 +11,7 @@ from torch_geometric.utils import to_undirected
 import pandas as pd
 
 from kinodata.data.io import read_klifs_mol2
+from kinodata.types import NodeType, RelationType
 from .residue import sitealign_feature_lookup, amino_acid_to_int
 from rdkit.Chem import GetPeriodicTable
 
@@ -162,11 +163,13 @@ def add_pocket_information(
 
     # convert all features & positions to tensors and store them in the provided
     # pyg data object
-    data["pocket_residue"].z = torch.tensor(
+    data[NodeType.PocketResidue].z = torch.tensor(
         df_residue["residue.type_idx"].values, dtype=torch.long
     )
-    data["pocket_residue"].x = torch.tensor(residues_features.values, dtype=torch.float)
-    data["pocket_residue"].pos = torch.tensor(
+    data[NodeType.PocketResidue].x = torch.tensor(
+        residues_features.values, dtype=torch.float
+    )
+    data[NodeType.PocketResidue].pos = torch.tensor(
         residue_centers[["atom.x", "atom.y", "atom.z"]].values,
         dtype=torch.float,
     )
