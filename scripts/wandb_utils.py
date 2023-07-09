@@ -1,3 +1,5 @@
+import torch
+from pathlib import Path
 from functools import partial
 import wandb
 import json
@@ -57,6 +59,11 @@ class RunInfo:
             return "GIN"
         elif self.config.get("model_type", None) == "rel-egnn":
             return "REL-EGNN"
+        elif "transformer" in self.tags:
+            prefix = ""
+            if "interaction_modes" in self.config:
+                prefix = "Covalent "
+            return f"{prefix} Transformer" 
         elif self.is_egnn:
             suffix = ""
             if "pocket_residue" in self.config["node_types"]:
@@ -148,3 +155,20 @@ def sweepable(func, sweep_id=None):
 
 def sweep(sweep_id):
     return partial(sweepable, sweep_id=sweep_id)
+
+def retrieve_model_artifact(run, alias: str):
+    for artifact in run.logged_artifacts():
+        if artifact.type != "model":
+            continue
+        if alias in artifact.aliases:
+            return artifact
+    return None
+
+
+retrieve_best_model_artifact = partial(retrieve_model_artifact, alias="best_k")
+def load_state_dict(artifact):
+    artifact_dir = artifact.download()
+    ckpt = torch.load(
+        Path(artifact_dir) / "model.ckpt", map_location=torch.device("cpu")
+    )
+    return ckpt
