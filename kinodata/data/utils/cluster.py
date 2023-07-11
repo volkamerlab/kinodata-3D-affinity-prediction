@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from typing import Generic, Sequence, TypeVar
+from typing import Callable, Generic, Sequence, TypeVar
 
 import sklearn.cluster as cluster
 
@@ -9,14 +9,13 @@ T = TypeVar("T")
 
 class Clustering(Generic[T]):
     cluster_key: str = "cluster_index"
-    similarities: np.ndarray
     unique_items: Sequence[T]
 
     def __call__(
         self,
         data: pd.DataFrame,
         column_key: str,
-        similarities: np.ndarray,
+        fn_similarity: Callable[[Sequence[T]], np.ndarray],
     ) -> pd.DataFrame:
         """
         Wrapper around clustering.
@@ -26,8 +25,8 @@ class Clustering(Generic[T]):
         Parameters
         ----------
         data : pd.DataFrame
-        key : str
-        similarities : np.ndarray
+        column_key : str
+        fn_similarity: function that computes pairwise similarities.
 
         Returns
         -------
@@ -41,7 +40,7 @@ class Clustering(Generic[T]):
 
         # only cluster the unique data points
         self.unique_items: Sequence[T] = data[column_key].unique()
-        self.similarities = similarities
+        self.similarities = fn_similarity(self.unique_items)
         cluster_labels = self.solve()
         df_cluster = pd.DataFrame(
             {

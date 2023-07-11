@@ -26,4 +26,4 @@ class GaussianDistEmbedding(Module):
         return means, stds
 
     def forward(self, d: Tensor) -> Tensor:
-        return gaussian(d, self.means, self.stds)
+        return gaussian(d.view(-1, 1), self.means, self.stds)

@@ -106,6 +106,12 @@ class Split(Generic[IndexType]):
             df[df[split_key] == test_identifier][index_key].values.tolist(),
         )
 
+    @classmethod
+    def from_csv(cls, file, *args, **kwargs):
+        split = cls.from_data_frame(pd.read_csv(file), *args, **kwargs)
+        split.source_file = str(file)
+        return split
+
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}[{self.index_cls.__name__}](train={len(self.train_split)}, val={len(self.val_split)}, test={len(self.test_split)}, source={self.source_file})"
 

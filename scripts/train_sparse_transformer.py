@@ -33,7 +33,7 @@ if __name__ == "__main__":
         interaction_modes=["covalent"],
     )
     config = configuration.get("data", "training", "sparse_transformer")
-    config = config.update_from_file("config_regressor_local.yaml")
+    config = config.update_from_file()
     config = config.update_from_args()
     config["need_distances"] = False
     config["perturb_ligand_positions"] = 0.0

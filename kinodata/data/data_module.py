@@ -12,9 +12,11 @@ from torch_geometric.transforms import Compose
 
 from kinodata.configuration import Config
 from kinodata.data.data_split import Split
-from kinodata.data.dataset import KinodataDocked
+from kinodata.data.grouped_split import KinodataKFoldSplit
+from kinodata.data.dataset import KinodataDocked, Filtered
 import kinodata.transform as T
 from kinodata.types import NodeType
+
 
 Kwargs = Dict[str, Any]
 
@@ -87,8 +89,23 @@ def compose(transforms: Optional[list]) -> Optional[Callable]:
     return None if transforms is None else Compose(transforms)
 
 
+def load_precomputed_split(config) -> Split:
+    if not Path(config.data_split).exists():
+        raise FileNotFoundError(config.data_split)
+    print(f"Loading split from {config.data_split}..")
+    # split that assigns *idents* to train/val/test
+    split = Split.from_data_frame(pd.read_csv(config.data_split))
+    split.source_file = str(config.data_split)
+    return split
+
+
 def make_kinodata_module(config: Config, transforms=None) -> LightningDataset:
     dataset_cls = partial(KinodataDocked, remove_hydrogen=config.remove_hydrogen)
+
+    if config.filter_rmsd_max_value is not None:
+        dataset_cls = Filtered(
+            dataset_cls(), T.FilterDockingRMSD(config.filter_rmsd_max_value)
+        )
 
     if transforms is None:
         transforms = []
@@ -131,17 +148,18 @@ def make_kinodata_module(config: Config, transforms=None) -> LightningDataset:
     train_transform = compose(augmentations + transforms)
     val_transform = compose(transforms)
 
-    if not Path(config.data_split).exists():
-        raise FileNotFoundError(config.data_split)
-
-    print(f"Loading split from {config.data_split}..")
-    # split that assigns *idents* to train/val/test
-    split = Split.from_data_frame(pd.read_csv(config.data_split))
-    split.source_file = str(config.data_split)
-    print(split)
-    print("Remapping idents to dataset index..")
-    index_mapping = dataset_cls().ident_index_map()
-    split = split.remap_index(index_mapping)
+    dataset = dataset_cls()
+    if config.data_split is not None:
+        split = load_precomputed_split(config)
+        print(split)
+        print("Remapping idents to dataset index..")
+        index_mapping = dataset.ident_index_map()
+        split = split.remap_index(index_mapping)
+    else:
+        dataset = dataset_cls()
+        splitter = KinodataKFoldSplit(config.split_type, config.k_fold)
+        splits = splitter.split(dataset)
+        split = splits[config.split_index]
 
     print("Creating data module:")
     print(f"    split:{split}")

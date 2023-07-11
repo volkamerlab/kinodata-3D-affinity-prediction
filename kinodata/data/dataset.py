@@ -1,57 +1,74 @@
 import multiprocessing as mp
 import os
+import os.path as osp
+import re
+import warnings
+from copy import copy
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional, Sequence, Type
 
 import pandas as pd
 import requests  # type : ignore
 import torch
-from rdkit import RDLogger
-from rdkit.Chem import PandasTools, MolFromMol2File, Kekulize, AddHs
+from rdkit.Chem import AddHs, Kekulize, MolFromMol2File, PandasTools
 from torch_geometric.data import HeteroData, InMemoryDataset
 from tqdm import tqdm
+from rdkit import RDLogger
 
-from kinodata.data.utils.pocket_sequence_klifs import add_pocket_sequence
+from kinodata.data.featurization.biopandas import add_pocket_information
 from kinodata.data.featurization.rdkit import (
-    add_atoms,
-    add_bonds,
     append_atoms_and_bonds,
+    set_atoms,
+    set_bonds,
 )
 from kinodata.data.featurization.residue import (
-    add_onehot_residues,
-    add_kissim_fp,
-    load_kissim,
     PHYSICOCHEMICAL,
+    add_kissim_fp,
+    add_onehot_residues,
+    load_kissim,
 )
-from kinodata.data.featurization.biopandas import add_pocket_information
-from kinodata.transform.filter_activity import (
-    FilterActivityScore,
-    FilterActivityType,
-    FilterCombine,
-)
-from kinodata.types import NodeType, RelationType
+from kinodata.data.utils.pocket_sequence_klifs import add_pocket_sequence
+from kinodata.types import NodeType
+from kinodata.data.utils.scaffolds import mol_to_scaffold
 
 _DATA = Path(__file__).parents[2] / "data"
+
+
+def to_list(value: Any) -> Sequence:
+    if isinstance(value, Sequence) and not isinstance(value, str):
+        return value
+    else:
+        return [value]
+
+
+def _repr(obj: Any) -> str:
+    if obj is None:
+        return "None"
+    return re.sub("(<.*?)\\s.*(>)", r"\1\2", obj.__repr__())
 
 
 class KinodataDocked(InMemoryDataset):
     def __init__(
         self,
         root: str = str(_DATA),
-        remove_hydrogen: bool = False,
+        prefix: Optional[str] = None,
+        remove_hydrogen: bool = True,
         transform: Callable = None,
         pre_transform: Callable = None,
-        pre_filter: Callable = (lambda _: True),
-        post_filter: Callable = FilterCombine(
-            [FilterActivityType(["pIC50"]), FilterActivityScore()]
-        ),
-        hetero_complex: bool = False,
+        pre_filter: Callable = None,
+        post_filter: Callable = None,
+        heterogeneous_complex_repr: bool = False,
         require_residue_positions: bool = False,
+        require_kissim_residues: bool = True,
+        use_multiprocessing: bool = True,
     ):
         self.remove_hydrogen = remove_hydrogen
-        self.hetero_complex = hetero_complex
+        self._prefix = prefix
+        self.heterogeneous_complex_repr = heterogeneous_complex_repr
         self.require_residue_positions = require_residue_positions
+        self.require_kissim_residues = require_kissim_residues
+        self.use_multiprocessing = use_multiprocessing
         self.post_filter = post_filter
         super().__init__(root, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0])
@@ -62,20 +79,25 @@ class KinodataDocked(InMemoryDataset):
 
     @property
     def raw_file_names(self) -> List[str]:
-        return ["kinodata_docked_filtered.sdf.gz"]
+        return ["kinodata_docked_with_rmsd.sdf.gz"]
 
     @property
     def processed_file_names(self) -> List[str]:
         # TODO add preprocessed kssim fingerprints?
         return [
-            f"kinodata_docked{self.suffix}.pt",
+            f"kinodata_docked.pt",
         ]
 
     @property
-    def suffix(self) -> str:
-        return (
-            f"_hetero:{int(self.hetero_complex)}_addh:{int(not self.remove_hydrogen)}"
-        )
+    def processed_dir(self) -> str:
+        pdir = super().processed_dir
+        if self.prefix is not None:
+            pdir = osp.join(pdir, self.prefix)
+        return pdir
+
+    @property
+    def prefix(self) -> Optional[str]:
+        return self._prefix
 
     @property
     def pocket_dir(self) -> Path:
@@ -98,7 +120,9 @@ class KinodataDocked(InMemoryDataset):
         df.set_index("ID", inplace=True)
 
         print("Checking for missing pocket mol2 files...")
-        df["similar.klifs_structure_id"] = df["similar.klifs_structure_id"].astype(int)
+        df["similar.klifs_structure_id"] = (
+            df["similar.klifs_structure_id"].astype(float).astype(int)
+        )
         # get pocket mol2 files
         if not self.pocket_dir.exists():
             self.pocket_dir.mkdir(parents=True)
@@ -144,16 +168,22 @@ class KinodataDocked(InMemoryDataset):
 
         return df
 
-    def process(self):
+    def _process(self):
+        f = osp.join(self.processed_dir, "post_filter.pt")
+        if osp.exists(f) and torch.load(f) != _repr(self.post_filter):
+            warnings.warn(
+                f"The `post_filter` argument differs from the one used in "
+                f"the pre-processed version of this dataset. If you want to "
+                f"make use of another pre-fitering technique, make sure to "
+                f"delete '{self.processed_dir}' first"
+            )
+        super()._process()
+        path = osp.join(self.processed_dir, "post_filter.pt")
+        torch.save(_repr(self.post_filter), path)
 
-        # TODO
-        # <add kissim preprocessing> (?)
-
+    def make_data_list(self) -> List[HeteroData]:
         RDLogger.DisableLog("rdApp.*")
-
         data_list = []
-        skipped: List[str] = []
-
         tasks = [
             (
                 row["ident"],
@@ -166,8 +196,11 @@ class KinodataDocked(InMemoryDataset):
                 float(row["docking.posit_probability"]),
                 int(row["similar.klifs_structure_id"]),
                 row["structure.pocket_sequence"],
+                float(row["docking.predicted_rmsd"]),
                 self.remove_hydrogen,
                 self.require_residue_positions,
+                self.require_kissim_residues,
+                self.heterogeneous_complex_repr,
             )
             for _, row in tqdm(
                 self.df.iterrows(),
@@ -176,34 +209,35 @@ class KinodataDocked(InMemoryDataset):
             )
         ]
 
-        fun = process_idx_hetero if self.hetero_complex else process_idx_complex
-        with mp.Pool(os.cpu_count()) as pool:
-            data_list = pool.map(fun, tqdm(tasks))
+        if self.use_multiprocessing:
+            with mp.Pool(os.cpu_count()) as pool:
+                data_list = pool.map(process_idx, tqdm(tasks))
+        else:
+            data_list = list(map(process_idx, tqdm(tasks)))
 
-        # data_list = list(map(process_idx, tqdm(tasks)))
-
-        skipped = [
-            ident for ident, data in zip(self.df.index, data_list) if data is None
-        ]
         data_list = [d for d in data_list if d is not None]
-        # if len(skipped) > 0:
-        #     print(f"Skipped {len(skipped)} unprocessable entries.")
-        #     (Path(self.root) / "skipped_idents.log").write_text("\n".join(skipped))
+        return data_list
 
+    def filter_transform(self, data_list: List[HeteroData]) -> List[HeteroData]:
         if self.pre_filter is not None:
             print("Applying pre filter..")
             data_list = [data for data in data_list if self.pre_filter(data)]
-
         if self.pre_transform is not None:
             print("Applying pre transform..")
             data_list = [self.pre_transform(data) for data in data_list]
-
         if self.post_filter is not None:
             print("Applying post filter..")
             data_list = [data for data in data_list if self.post_filter(data)]
+        return data_list
 
+    def persist(self, data_list: List[HeteroData]):
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
+
+    def process(self):
+        data_list = self.make_data_list()
+        data_list = self.filter_transform(data_list)
+        self.persist(data_list)
 
     def ident_index_map(self) -> Dict[Any, int]:
         # this may be very slow if self.transform is computationally expensive
@@ -211,11 +245,64 @@ class KinodataDocked(InMemoryDataset):
         return dict(mapping)
 
 
-def process_chunk(tasks) -> List:
-    return list(map(process_idx_hetero, tasks))
+def _repr_filter(filter: Callable):
+    return (
+        repr(filter)
+        .lower()
+        .replace(" ", "_")
+        .replace(",", "")
+        .replace("(", "_")
+        .replace(")", "")
+    )
 
 
-def process_idx_hetero(args):
+def Filtered(dataset: KinodataDocked, filter: Callable) -> Type[KinodataDocked]:
+    """
+    Creates a new, filtered dataset class with its own processed directory
+    that caches the filtered data.
+
+    Parameters
+    ----------
+    dataset : KinodataDocked
+        original dataset
+    filter : Callable
+        filter, True means the item is not filtered.
+
+    Returns
+    -------
+    Type[KinodataDocked]
+    """
+
+    class FilteredDataset(KinodataDocked):
+        def __init__(self, **kwargs):
+            for attr in ("transform", "pre_transform", "pre_filter", "post_filter"):
+                if attr not in kwargs:
+                    kwargs[attr] = getattr(dataset, attr, None)
+
+            super().__init__(
+                root=dataset.root,
+                prefix=_repr_filter(filter),
+                remove_hydrogen=dataset.remove_hydrogen,
+                heterogeneous_complex_repr=dataset.heterogeneous_complex_repr,
+                require_residue_positions=dataset.require_residue_positions,
+                require_kissim_residues=dataset.require_kissim_residues,
+                use_multiprocessing=dataset.use_multiprocessing,
+                **kwargs,
+            )
+
+        def make_data_list(self) -> List[HeteroData]:
+            return [data for data in dataset]
+
+        def filter_transform(self, data_list: List[HeteroData]) -> List[HeteroData]:
+            filtered = [data for data in data_list if filter(data)]
+            log_file = Path(self.processed_dir) / "filter.log"
+            log_file.write_text(f"Source: {Path(dataset.processed_dir).absolute()}")
+            return filtered
+
+    return FilteredDataset
+
+
+def process_idx(args):
     (
         ident,
         smiles,
@@ -227,24 +314,35 @@ def process_idx_hetero(args):
         posit_prob,
         structure_id,
         pocket_sequence,
+        predicted_rmsd,
         remove_hydrogen,
         require_pocket_pos,
+        require_kissim_residues,
+        heterogeneous_complex_repr,
     ) = args
     data = HeteroData()
 
     try:
+        scaffold = mol_to_scaffold(ligand)
         if not remove_hydrogen:
             AddHs(ligand)
         Kekulize(ligand)
-        data = add_atoms(ligand, data, NodeType.Ligand)
-        data = add_bonds(ligand, data, NodeType.Ligand)
+        if heterogeneous_complex_repr:
+            data = set_atoms(ligand, data, NodeType.Ligand)
+            data = set_bonds(ligand, data, NodeType.Ligand)
+        else:
+            data = set_atoms(ligand, data, NodeType.Complex)
+            data = set_bonds(ligand, data, NodeType.Complex)
 
         pocket = MolFromMol2File(str(pocket_file))
         if not remove_hydrogen:
             AddHs(pocket)
         Kekulize(pocket)
-        data = add_atoms(pocket, data, NodeType.Pocket)
-        data = add_bonds(pocket, data, NodeType.Pocket)
+        if heterogeneous_complex_repr:
+            data = set_atoms(pocket, data, NodeType.Pocket)
+            data = set_bonds(pocket, data, NodeType.Pocket)
+        else:
+            data = append_atoms_and_bonds(pocket, data, NodeType.Complex)
 
         if not require_pocket_pos:
             data = add_onehot_residues(data, pocket_sequence)
@@ -256,58 +354,18 @@ def process_idx_hetero(args):
     if data is None:
         return None
 
-    kissim_fp = load_kissim(structure_id)
-    if kissim_fp is None:
-        return None
-    data = add_kissim_fp(data, kissim_fp, subset=PHYSICOCHEMICAL)
+    if require_kissim_residues:
+        kissim_fp = load_kissim(structure_id)
+        if kissim_fp is None:
+            return None
+        data = add_kissim_fp(data, kissim_fp, subset=PHYSICOCHEMICAL)
 
     data.y = torch.tensor(activity).view(1)
     data.docking_score = torch.tensor(docking_score).view(1)
     data.posit_prob = torch.tensor(posit_prob).view(1)
-    data.activity_type = activity_type
-    data.ident = ident
-    data.smiles = smiles
-
-    return data
-
-
-def process_idx_complex(args):
-    (
-        ident,
-        smiles,
-        ligand,
-        activity,
-        activity_type,
-        pocket_file,
-        docking_score,
-        posit_prob,
-        structure_id,
-        pocket_sequence,
-        remove_hydrogen,
-    ) = args
-    data = HeteroData()
-
-    try:
-        if not remove_hydrogen:
-            AddHs(ligand)
-        Kekulize(ligand)
-        data = add_atoms(ligand, data, NodeType.Complex)
-        data = add_bonds(ligand, data, NodeType.Complex)
-
-        pocket = MolFromMol2File(str(pocket_file))
-        if not remove_hydrogen:
-            AddHs(pocket)
-        Kekulize(pocket)
-        data = append_atoms_and_bonds(pocket, data, NodeType.Complex)
-    except Exception as e:
-        print(e)
-        return None
-    if data is None:
-        return None
-
-    data.y = torch.tensor(activity).view(1)
-    data.docking_score = torch.tensor(docking_score).view(1)
-    data.posit_prob = torch.tensor(posit_prob).view(1)
+    data.predicted_rmsd = torch.tensor(predicted_rmsd)
+    data.pocket_sequence = pocket_sequence
+    data.scaffold = scaffold
     data.activity_type = activity_type
     data.ident = ident
     data.smiles = smiles
@@ -318,5 +376,4 @@ def process_idx_complex(args):
 if __name__ == "__main__":
     dataset = KinodataDocked(remove_hydrogen=True)
     print(dataset[42])
-
     pass

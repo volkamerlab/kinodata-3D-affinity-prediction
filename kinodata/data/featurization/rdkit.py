@@ -22,7 +22,7 @@ def atom_positions(mol) -> Tensor:
     return torch.from_numpy(pos).to(torch.float)
 
 
-def add_atoms(mol, data: HeteroData, key: str) -> HeteroData:
+def set_atoms(mol, data: HeteroData, key: str) -> HeteroData:
     data[key].z = atomic_numbers(mol)
     data[key].x = torch.from_numpy(AtomFeatures.compute(mol)).float()
     data[key].pos = atom_positions(mol)
@@ -50,7 +50,7 @@ def bond_tensors(mol):
     return edge_index, edge_attr
 
 
-def add_bonds(mol, data: HeteroData, key: str) -> HeteroData:
+def set_bonds(mol, data: HeteroData, key: str) -> HeteroData:
 
     edge_index, edge_attr = bond_tensors(mol)
     data[key, RelationType.Covalent, key].edge_index = edge_index

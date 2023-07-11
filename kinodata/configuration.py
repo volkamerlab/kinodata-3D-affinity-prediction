@@ -15,11 +15,12 @@ import traceback
 from collections import defaultdict
 from pathlib import Path
 from warnings import warn
-from argparse import ArgumentParser, Namespace
+from argparse import ArgumentParser
 
 import torch
 import yaml
 import json
+import sys
 
 from kinodata.types import (
     INTRAMOL_STRUCTURAL_EDGE_TYPES,
@@ -29,6 +30,19 @@ from kinodata.types import (
 T = TypeVar("T")
 
 _ROOT = Path(__file__).parents[1]
+
+
+def _find_default_config_file():
+    try:
+        idx = sys.argv.index("--config")
+        fp = Path(sys.argv[idx + 1])
+        return fp
+    except ValueError:
+        fp = _ROOT
+        yaml_files = list(fp.glob("*.yaml"))
+        if len(yaml_files) == 1:
+            return yaml_files[0]
+    return None
 
 
 class Config(dict):
@@ -85,7 +99,16 @@ class Config(dict):
         }
         return self.update(updated_args)
 
-    def update_from_file(self, fp: Union[str, Path], verbose: bool = True) -> "Config":
+    def update_from_file(
+        self,
+        fp: Union[str, Path, None] = None,
+        verbose: bool = True,
+    ) -> "Config":
+        if fp is None:
+            fp = _find_default_config_file()
+        if fp is None:
+            warn("Unable to find a config file")
+            return self
         fp = Path(fp)
         if not fp.exists():
             warn(f"Config file does not exist: {fp}")
@@ -156,18 +179,22 @@ def get(*config_names: str) -> Config:
 
 register(
     "data",
-    interaction_radius=5.0,
+    interaction_radius=6.0,
     residue_interaction_radius=12.0,
     node_types=["ligand", "pocket"],
     edge_types=INTRAMOL_STRUCTURAL_EDGE_TYPES[:1] + INTERMOL_STRUCTURAL_EDGE_TYPES,
     seed=420,
     use_bonds=True,
     add_artificial_decoys=False,
-    data_split=_ROOT / "data" / "splits" / "random" / "seed_0.csv",
+    data_split=None,
     need_distances=True,
     num_residue_features=6,
     additional_atom_features=False,
     remove_hydrogen=True,
+    filter_rmsd_max_value=4.0,
+    split_type="scaffold-k-fold",
+    split_index=0,
+    k_fold=5,
 )
 
 register(

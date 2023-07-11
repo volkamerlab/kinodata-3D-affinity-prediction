@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from rdkit.Chem import AllChem, MolFromSmiles
 from rdkit.DataStructs.cDataStructs import BulkTanimotoSimilarity
+from tqdm import tqdm
 
 try:
     from biotite.sequence.align import SubstitutionMatrix
@@ -148,7 +149,7 @@ def sequence_similarity(sequence_1, sequence_2, substitution_matrix_df) -> float
 
 class BLOSUMSubstitutionSimilarity:
     """
-    Computes BLOSUM substitution similarity given protein? sequences.
+    Computes BLOSUM substitution similarity given protein sequences.
     See TeachopenCADD T028.
     """
 
@@ -165,7 +166,10 @@ class BLOSUMSubstitutionSimilarity:
         # initialize such that diagonal (self-similarity) is 1
         similarities = np.eye(len(sequences))
         # only computer upper/lower triangle
-        for (i, seq_i), (j, seq_j) in itr.combinations(enumerate(sequences), 2):
+        total = (len(sequences) * len(sequences - 1)) // 2
+        print(f"Computing {total} sequence similarities...")
+        pbar = tqdm(itr.combinations(enumerate(sequences), 2), total=total)
+        for (i, seq_i), (j, seq_j) in pbar:
             sim_ij = sequence_similarity(seq_i, seq_j, self.subst_matr_df)
             similarities[i, j] = sim_ij
             similarities[j, i] = sim_ij

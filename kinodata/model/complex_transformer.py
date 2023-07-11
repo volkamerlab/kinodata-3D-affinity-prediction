@@ -98,7 +98,7 @@ class StructuralInteractions(InteractionModule):
         rbf_size: int = None,
     ) -> None:
         super().__init__(hidden_channels, act, bias)
-        self.interation_radius = interaction_radius
+        self.interaction_radius = interaction_radius
         self.max_num_neighbors = max_num_neighbors
         self.rbf_size = rbf_size if rbf_size else hidden_channels
         self.distance_embedding = GaussianDistEmbedding(rbf_size, interaction_radius)
@@ -115,11 +115,12 @@ class StructuralInteractions(InteractionModule):
         return edge_index, None, distances
 
     def process_weight(self, edge_weight: Tensor) -> Tensor:
-        self.distance_embedding(edge_weight)
+        return self.distance_embedding(edge_weight)
 
 
 class CombinedInteractions(Module):
     def __init__(self, interactions: List[InteractionModule], act: str) -> None:
+        super().__init__()
         self.interactions = ModuleList(interactions)
         self.act = resolve_act(act)
         assert (
@@ -175,6 +176,7 @@ class ComplexTransformer(RegressionModel):
                     intr_bias,
                     interaction_radius,
                     max_num_neighbors,
+                    hidden_channels,
                 )
             else:
                 raise ValueError(mode)
