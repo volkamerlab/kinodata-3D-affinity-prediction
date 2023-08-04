@@ -87,18 +87,6 @@ class AddDistancesAndInteractions(BaseTransform):
                     )
                     edge_index, dist = remove_self_loops(edge_index, dist)
 
-                if nt_a == nt_b and (nt_a, RelationType.Covalent, nt_b) in edge_types:
-                    num_nodes = data[nt_a].num_nodes
-                    bond_adj = to_dense_adj(
-                        data[nt_a, RelationType.Covalent, nt_a].edge_index,
-                        edge_attr=data[nt_a, RelationType.Covalent, nt_a].edge_attr,
-                        max_num_nodes=num_nodes,
-                    ).squeeze(0)
-                    row, col = edge_index
-                    data[nt_a, relation_key, nt_b].edge_attr = bond_adj[row, col].to(
-                        torch.float
-                    )
-
                 data[nt_a, relation_key, nt_b].edge_index = edge_index
                 setattr(
                     data[nt_a, relation_key, nt_b],

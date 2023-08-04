@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Protocol
 import numpy as np
 from numpy.random import default_rng
 from sklearn.model_selection import GroupKFold, KFold
@@ -72,9 +72,7 @@ class KinodataKFoldSplit:
         if self.split_type == "scaffold-k-fold":
             scaffolds, idents = zip(*[(data.scaffold, data.ident) for data in dataset])
             scaffolds = np.array(scaffolds)
-            splits = group_k_fold_split(
-                group_index=scaffolds, k=self.k, data_index=np.array(idents)
-            )
+            splits = group_k_fold_split(group_index=scaffolds, k=self.k)
             return splits
         if self.split_type == "pocket-k-fold":
             pocket_sequences, idents = zip(
@@ -88,7 +86,6 @@ class KinodataKFoldSplit:
             return group_k_fold_split(
                 df_cluster_labels[self.pocket_clustering.cluster_key].values,
                 k=self.k,
-                data_index=df_cluster_labels["ident"].values,
             )
         if self.split_type == "random-k-fold":
             idents = [data.ident for data in dataset]
