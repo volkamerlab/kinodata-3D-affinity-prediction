@@ -31,6 +31,9 @@ def train(config, fn_data=make_kinodata_module, fn_model=None):
         callbacks=[validation_checkpoint, lr_monitor, early_stopping],
         gradient_clip_val=config.clip_grad_value,
     )
+    if config.dry_run:
+        print("Exiting: config.dry_run is set.")
+        exit()
 
     trainer.fit(model, datamodule=data_module)
     trainer.test(ckpt_path="best", datamodule=data_module)

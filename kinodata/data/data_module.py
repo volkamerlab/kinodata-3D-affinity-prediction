@@ -98,6 +98,18 @@ def load_precomputed_split(config) -> Split:
     split.source_file = str(config.data_split)
     return split
 
+def fix_split_for_batch_norm(split: Split, batch_size: int) -> Split:
+    def fix(a):
+        if len(a) % batch_size == 1:
+            a = a[:-1]
+        return a
+    if split.train_size > 0:
+        split.train_split = fix(split.train_split)
+    if split.val_size > 0:
+        split.val_split = fix(split.val_split)
+    if split.test_size > 0:
+        split.test_split = fix(split.test_split)
+    return split
 
 def make_kinodata_module(config: Config, transforms=None) -> LightningDataset:
     dataset_cls = partial(KinodataDocked, remove_hydrogen=config.remove_hydrogen)
@@ -160,6 +172,9 @@ def make_kinodata_module(config: Config, transforms=None) -> LightningDataset:
         splitter = KinodataKFoldSplit(config.split_type, config.k_fold)
         splits = splitter.split(dataset)
         split = splits[config.split_index]
+    
+    # dirty batchnorm fix
+    split = fix_split_for_batch_norm(split, config.batch_size)
 
     print("Creating data module:")
     print(f"    split:{split}")

@@ -166,7 +166,7 @@ class BLOSUMSubstitutionSimilarity:
         # initialize such that diagonal (self-similarity) is 1
         similarities = np.eye(len(sequences))
         # only computer upper/lower triangle
-        total = (len(sequences) * len(sequences - 1)) // 2
+        total = (len(sequences) * (len(sequences) - 1)) // 2
         print(f"Computing {total} sequence similarities...")
         pbar = tqdm(itr.combinations(enumerate(sequences), 2), total=total)
         for (i, seq_i), (j, seq_j) in pbar:
