@@ -1,0 +1,2 @@
+interaction_modes: ["covalent"]
+batch_size: 127

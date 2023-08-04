@@ -1,0 +1,3 @@
+interaction_modes: ["covalent", "structural"]
+batch_size: 42
+accumulate_grad_batches: 3
