@@ -191,8 +191,8 @@ register(
     num_residue_features=6,
     additional_atom_features=False,
     remove_hydrogen=True,
-    filter_rmsd_max_value=4.0,
-    split_type="scaffold-k-fold",
+    filter_rmsd_max_value=2.0,
+    split_type="pocket-k-fold",
     split_index=0,
     k_fold=5,
 )
@@ -230,4 +230,5 @@ register(
     perturb_pocket_positions=0.1,
     clip_grad_value=None,
     add_docking_scores=False,
+    dry_run=True,
 )
