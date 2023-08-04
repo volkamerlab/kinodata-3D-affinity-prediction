@@ -2,17 +2,10 @@ from typing import Any, Callable, Optional, Protocol, Tuple
 
 import torch
 from torch import Tensor
-from torch.nn import (
-    Linear,
-    Module,
-    ModuleList,
-    Sequential,
-    Embedding,
-    SiLU,
-    BatchNorm1d,
-    LayerNorm,
-)
+from torch.nn import Linear, Module, ModuleList, Sequential, SiLU, LayerNorm, Embedding
 
+
+from kinodata.data.featurization.bonds import NUM_BOND_TYPES
 from kinodata.configuration import Config
 from kinodata.model.regression import RegressionModel
 from kinodata.model.resolve import resolve_act, resolve_loss
@@ -71,27 +64,6 @@ class DTIModel(RegressionModel):
         return prediction
 
 
-class LigandGINE(Module):
-    def __init__(self, hidden_channels: int, num_layers: int, act: str) -> None:
-        super().__init__()
-        self.atom_embedding = Embedding(100, hidden_channels)
-        self.gine = GINE(hidden_channels, num_layers, edge_channels=4, act=act)
-
-    def forward(self, batch) -> Tuple[Tensor, Tensor]:
-        ligand_node_store = batch[NodeType.Ligand]
-        ligand_bond_store = batch[
-            NodeType.Ligand, RelationType.Covalent, NodeType.Ligand
-        ]
-        x = self.atom_embedding(ligand_node_store.z)
-        h = self.gine(
-            x=x,
-            edge_index=ligand_bond_store.edge_index,
-            edge_attr=ligand_bond_store.edge_attr,
-            batch=ligand_node_store.batch,
-        )
-        return h, ligand_node_store.batch
-
-
 class ResidueTransformer(Module):
     def __init__(
         self,
@@ -102,10 +74,9 @@ class ResidueTransformer(Module):
     ) -> None:
         super().__init__()
         self.lin = Sequential(
-            Linear(residue_size, hidden_channels),
-            SiLU(),
-            LayerNorm(hidden_channels),
+            Linear(residue_size, hidden_channels), SiLU(), LayerNorm(hidden_channels)
         )
+        self.positional_encoding = Embedding(85, hidden_channels)
         self.attention_blocks = ModuleList(
             [
                 SetAttentionBlock(hidden_channels, num_heads)
@@ -120,7 +91,10 @@ class ResidueTransformer(Module):
         return x
 
     def forward(self, batch) -> Tuple[Tensor, Optional[Tensor]]:
-        x = self.lin(self.get_residue_representation(batch))
+        x = (
+            self.lin(self.get_residue_representation(batch))
+            + self.positional_encoding.weight
+        )
         for attn in self.attention_blocks:
             x = attn(x)
         return x, None

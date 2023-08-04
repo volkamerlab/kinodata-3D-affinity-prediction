@@ -6,63 +6,82 @@ import json
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 from datetime import datetime
+from functools import cached_property
+
 from argparse import ArgumentParser
 
-
 @dataclass
+class Split:
+    type: str
+    index: int
+   
+    @classmethod 
+    def from_path(cls, path: str):
+        elements = path.split("/")
+        try:
+            if len(elements) > 0:
+                index = int(elements[-1].split("_")[-1].split(".")[0])
+        except:
+            index = -1
+        try:
+            type = elements[2]
+        except IndexError:
+            type = ""
+        return cls(type, index)
+        
+
 class RunInfo:
-    run: Any
-    name: str
-    split_path: List[str]
-    mp_type: str
-    tags: list
-    config: Dict[str, Any]
+    
+    def __init__(self, run) -> None:
+        self.run = run
 
     def __repr__(self) -> str:
         return f"{self.name}({self.run.id})"
+    
+    @property
+    def name(self) -> str:
+        return self.run.name
+   
+    @cached_property 
+    def config(self) -> Dict[str, Any]:
+        config = json.loads(self.run.json_config)
+        return config
+    
+    def get(self, key, default=None):
+        try:
+            return self.config[key]["value"]
+        except KeyError:
+            return default
 
-    @classmethod
-    def from_run(cls, run):
-        config = json.loads(run.json_config)
-        if "data_split" in config:
-            split = config["data_split"]["value"].split("/")
-        else:
-            split = []
-        if "mp_type" in config:
-            mp_type = config["mp_type"]["value"]
-        else:
-            mp_type = None
-        return cls(
-            run,
-            run.name,
-            split,
-            mp_type,
-            run.tags,
-            {key: obj["value"] for key, obj in json.loads(run.json_config).items()},
-        )
-
-    def has_likely_generic_name(self) -> bool:
-        return self.name.count("-") == 2
-
-    def split_known(self):
-        return len(self.split_path) > 0
+    @cached_property
+    def split(self) -> Split:
+        if "split_type" in self.config:
+            return Split(
+                self.config["split_type"]["value"],
+                self.config["split_index"]["value"],
+            )
+        if "data_split" in self.config:
+            split_path = self.config["data_split"]["value"]
+            return Split.from_path(split_path)
 
     @property
     def is_egnn(self) -> bool:
-        return self.mp_type == "rbf"
+        return self.config.get("mp_type") == "rbf"
 
     @property
     def model_name(self) -> str:
-        if "dti" in self.tags:
+        if "dti" in self.run.tags:
             return "DTI"
-        elif "ligand-only" in self.tags:
+        elif "ligand-only" in self.run.tags:
             return "GIN"
         elif self.config.get("model_type", None) == "rel-egnn":
             return "REL-EGNN"
-        elif "transformer" in self.tags:
+        elif "transformer" in self.run.tags:
             prefix = ""
             if "interaction_modes" in self.config:
-                prefix = "Covalent "
+                prefix = "Covalent"
+                if "structural" in self.get("interaction_modes"):
+                    prefix = "Structural"
             return f"{prefix} Transformer" 
         elif self.is_egnn:
             suffix = ""
@@ -72,30 +91,9 @@ class RunInfo:
                 else:
                     suffix = "(R)"
             return f"EGNN {suffix}"
-        elif "kissim_size" in self.run.config and self.run.config["kissim_size"] == 12:
+        elif "kissim_size" in self.config and self.config["kissim_size"] == 12:
             return "DTI"
         return ""
-
-    @property
-    def split_seed(self) -> int:
-        try:
-            if len(self.split_path) > 0:
-                return int(self.split_path[-1].split("_")[-1].split(".")[0])
-        except:
-            return None
-
-    @property
-    def split_type(self) -> str:
-        try:
-            return self.split_path[2]
-        except IndexError:
-            return None
-
-    @property
-    def new_name(self) -> str:
-        if not self.split_known():
-            raise ValueError(self)
-        return f"{self.model_name} ({self.split_type}/{self.split_seed})"
 
     def rename_run(self, name: str = None):
         if name is None:
@@ -126,7 +124,7 @@ class RunInfo:
             path,
             filters=filters
         )
-        return [cls.from_run(run) for run in runs]
+        return [cls(run) for run in runs]
 
 
 _sweep_parser = ArgumentParser()

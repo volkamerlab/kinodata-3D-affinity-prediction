@@ -72,11 +72,11 @@ class SparseAttention(Module):
             (M,)
         key_index : Tensor
             (M,)
-        paired_repr : Tensor
+        interaction_repr : Tensor | None
             (M, d)
         """
         N = query.size(0)
-        M = interaction_repr.size(0)
+        M = query_index.size(0)
         d = self.projected_channels
         H = self.num_heads
 
@@ -86,7 +86,7 @@ class SparseAttention(Module):
         key = key.view(N, d, H)
         value = value.view(N, d, H)
 
-        # (M,)
+        # (M, d, H)
         query = query[query_index]
         key = key[key_index]
         value = value[key_index]
@@ -99,7 +99,7 @@ class SparseAttention(Module):
             bias_mul = bias_mul.view(M, d, H)
             bias_add = bias_add.view(M, d, H)
 
-            # (M * H, d)  -> (M * H,)
+            # (M, d, H) -> (M, H)
             attention_logit = (query * (key * (1 + bias_mul) + bias_add)).sum(
                 dim=1
             ) / self.normalizer.clamp(min=1.0, max=self.projected_channels)

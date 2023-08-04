@@ -6,29 +6,26 @@ sys.path.append("..")
 
 import wandb
 
-from torch_geometric.nn.models import GIN
 from torch_geometric.nn.resolver import aggregation_resolver
 
+from kinodata.data.featurization.bonds import NUM_BOND_TYPES
 from kinodata.model.ligand_gin import LigandGNNBaseline
+from kinodata.model.shared.gine import LigandGINE
 from kinodata import configuration
 from kinodata.training import train
 
 
 def make_model(config) -> LigandGNNBaseline:
-    if config.gnn_type == "gin":
-        encoder = GIN(
-            in_channels=config.hidden_channels,
+    if config.gnn_type == "gine":
+        encoder = LigandGINE(
             hidden_channels=config.hidden_channels,
             num_layers=config.num_layers,
-            out_channels=config.hidden_channels,
             act=config.act,
-            norm="GraphNorm",
         )
     else:
         raise ValueError(config.gnn_type)
 
     readout = aggregation_resolver(config.readout_type)
-
     model = LigandGNNBaseline(config, encoder, readout)
     return model
 
@@ -36,8 +33,8 @@ def make_model(config) -> LigandGNNBaseline:
 if __name__ == "__main__":
     configuration.register(
         "ligand_gnn_baseline",
-        gnn_type="gin",
-        hidden_channels=64,
+        gnn_type="gine",
+        hidden_channels=128,
         num_layers=4,
         act="silu",
         readout_type="sum",

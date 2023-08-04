@@ -23,7 +23,7 @@ if __name__ == "__main__":
         max_num_neighbors=16,
         hidden_channels=256,
         num_attention_blocks=3,
-        num_heads=8,
+        num_heads=4,
         act="relu",
         edge_attr_size=4,
         ln1=True,

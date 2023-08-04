@@ -11,6 +11,7 @@ from torch.nn import (
     LayerNorm,
     ModuleDict,
     ModuleList,
+    init,
 )
 from torch import Tensor, cat
 
@@ -21,7 +22,7 @@ from kinodata.model.resolve import resolve_act
 class CategoricalEmbedding(Module):
     @property
     def out_channels(self) -> int:
-        return self.embedding.embedding_dim
+        return self.weight.data.size(1)
 
     def __init__(
         self,
@@ -38,12 +39,15 @@ class CategoricalEmbedding(Module):
         self.weight = Parameter(
             torch.empty(max_num_categories, hidden_chanels), requires_grad=True
         )
-        self.dropout = Dropout(dropout)
         self.ln = LayerNorm(hidden_chanels)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        self.ln.reset_parameters()
+        init.normal_(self.weight)
 
     def forward(self, data: HeteroData) -> Tensor:
         category = getattr(data[self.node_type], self.category_key)
-        weight = self.dropout(weight)
         return self.ln(self.weight[category])
 
 
