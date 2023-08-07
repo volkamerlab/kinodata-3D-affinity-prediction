@@ -8,11 +8,6 @@ from kinodata.types import NodeType, RelationType
 from kinodata.data.featurization.bonds import NUM_BOND_TYPES
 from kinodata.data.featurization.atoms import AtomFeatures
 
-from kinodata.model.shared.node_embedding import (
-    CombineSum,
-    AtomTypeEmbedding,
-    FeatureEmbedding,
-)
 from kinodata.model.resolve import resolve_act
 
 
@@ -42,33 +37,25 @@ class GINE(Module):
 class LigandGINE(Module):
     def __init__(self, hidden_channels: int, num_layers: int, act: str) -> None:
         super().__init__()
-        self.initial_embedding = CombineSum(
-            [
-                AtomTypeEmbedding(
-                    NodeType.Ligand,
-                    hidden_chanels=hidden_channels,
-                ),
-                FeatureEmbedding(
-                    NodeType.Ligand,
-                    in_channels=AtomFeatures.size,
-                    hidden_channels=hidden_channels,
-                    act=act,
-                ),
-            ]
+        self.atom_type_emb = Embedding(100, hidden_channels)
+        self.atom_feature_emb = Linear(AtomFeatures.size, hidden_channels)
+        self.act_norm_nodes = Sequential(
+            resolve_act(act),
+            LayerNorm(hidden_channels),
         )
         self.gine = GINE(
             hidden_channels, num_layers, edge_channels=NUM_BOND_TYPES, act=act
         )
 
     def forward(self, batch) -> Tuple[Tensor, Tensor]:
-        ligand_node_store = batch[NodeType.Ligand]
-        ligand_bond_store = batch[
-            NodeType.Ligand, RelationType.Covalent, NodeType.Ligand
-        ]
-        x = self.initial_embedding(batch)
+        ligand = batch[NodeType.Ligand]
+        ligand_bonds = batch[NodeType.Ligand, RelationType.Covalent, NodeType.Ligand]
+        x = self.act_norm_nodes(
+            self.atom_type_emb(ligand.z) + self.atom_feature_emb(ligand.x)
+        )
         h = self.gine(
             x=x,
-            edge_index=ligand_bond_store.edge_index,
-            edge_attr=ligand_bond_store.edge_attr,
+            edge_index=ligand_bonds.edge_index,
+            edge_attr=ligand_bonds.edge_attr,
         )
-        return h, ligand_node_store.batch
+        return h, ligand.batch
