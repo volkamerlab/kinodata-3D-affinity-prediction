@@ -50,7 +50,7 @@ class KinodataKFoldSplit:
     """
 
     pocket_clustering = AffinityPropagation()
-    pocket_similarity_measure = BLOSUMSubstitutionSimilarity()
+    pocket_similarity_measure = BLOSUMSubstitutionSimilarity
 
     def __init__(self, split_type: str, k: int) -> None:
         assert split_type in (
@@ -81,7 +81,7 @@ class KinodataKFoldSplit:
             df_cluster_labels = self.pocket_clustering(
                 pd.DataFrame({"pocket_sequence": pocket_sequences, "ident": idents}),
                 "pocket_sequence",
-                fn_similarity=self.pocket_similarity_measure,
+                fn_similarity=self.pocket_similarity_measure(),
             )
             return group_k_fold_split(
                 df_cluster_labels[self.pocket_clustering.cluster_key].values,
