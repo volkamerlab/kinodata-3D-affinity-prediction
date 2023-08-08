@@ -7,15 +7,17 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 from functools import cached_property
+import pandas as pd
 
 from argparse import ArgumentParser
+
 
 @dataclass
 class Split:
     type: str
     index: int
-   
-    @classmethod 
+
+    @classmethod
     def from_path(cls, path: str):
         elements = path.split("/")
         try:
@@ -28,25 +30,24 @@ class Split:
         except IndexError:
             type = ""
         return cls(type, index)
-        
+
 
 class RunInfo:
-    
     def __init__(self, run) -> None:
         self.run = run
 
     def __repr__(self) -> str:
         return f"{self.name}({self.run.id})"
-    
+
     @property
     def name(self) -> str:
         return self.run.name
-   
-    @cached_property 
+
+    @cached_property
     def config(self) -> Dict[str, Any]:
         config = json.loads(self.run.json_config)
         return config
-    
+
     def get(self, key, default=None):
         try:
             return self.config[key]["value"]
@@ -70,6 +71,8 @@ class RunInfo:
 
     @property
     def model_name(self) -> str:
+        """Don't judge me xdd"""
+
         if "dti" in self.run.tags:
             return "DTI"
         elif "ligand-only" in self.run.tags:
@@ -82,7 +85,7 @@ class RunInfo:
                 prefix = "Covalent"
                 if "structural" in self.get("interaction_modes"):
                     prefix = "Structural"
-            return f"{prefix} Transformer" 
+            return f"{prefix} Transformer"
         elif self.is_egnn:
             suffix = ""
             if "pocket_residue" in self.config["node_types"]:
@@ -101,29 +104,42 @@ class RunInfo:
         self.run.name = name
         self.run.update()
 
+    def retrieve_predictions(self) -> Optional[pd.DataFrame]:
+        artifacts = [
+            artifact
+            for artifact in self.run.logged_artifacts()
+            if "predictions" in artifact.name
+        ]
+        if len(artifacts) == 0:
+            return None
+        if len(artifacts) > 1:
+            raise ValueError("More than one prediction artifact.")
+        artifact_path = Path(artifacts[0].download()) / "predictions.table.json"
+        predictions_dict = json.loads(artifact_path.read_text())
+        predictions = pd.DataFrame(
+            data=predictions_dict["data"], columns=predictions_dict["columns"]
+        )
+        predictions["ident"] = predictions["ident"].astype(int)
+        return predictions
+
     @classmethod
     def fetch(
-        cls, 
+        cls,
         path="nextaids/kinodata-docked-rescore",
         since: Optional[datetime] = None,
     ) -> List["RunInfo"]:
         filters = list()
         if since is not None:
-            filters.append({
-                "createdAt": {"$gt": str(since)}
-            })
+            filters.append({"createdAt": {"$gt": str(since)}})
 
         api = wandb.Api()
         if len(filters) == 1:
-            filters = filters[0] 
+            filters = filters[0]
         elif len(filters) > 1:
             filters = {"$and": filters}
         else:
-            filters=None
-        runs = api.runs(
-            path,
-            filters=filters
-        )
+            filters = None
+        runs = api.runs(path, filters=filters)
         return [cls(run) for run in runs]
 
 
@@ -154,6 +170,7 @@ def sweepable(func, sweep_id=None):
 def sweep(sweep_id):
     return partial(sweepable, sweep_id=sweep_id)
 
+
 def retrieve_model_artifact(run, alias: str):
     for artifact in run.logged_artifacts():
         if artifact.type != "model":
@@ -164,6 +181,8 @@ def retrieve_model_artifact(run, alias: str):
 
 
 retrieve_best_model_artifact = partial(retrieve_model_artifact, alias="best_k")
+
+
 def load_state_dict(artifact):
     artifact_dir = artifact.download()
     ckpt = torch.load(
