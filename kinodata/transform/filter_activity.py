@@ -5,15 +5,14 @@ from torch_geometric.data import Data
 
 
 class ActivityTypes(Enum):
-    ic50 = "pIC50"
-    kd = "pKd"
-    ki = "pKi"
+    pic50 = "pIC50"
+    pkd = "pKd"
+    pki = "pKi"
 
 
 class FilterActivityType:
-    def __init__(self, allowed: Sequence[str]):
-        self.allowed = set(allowed)
-        assert self.allowed.issubset(set([at.value for at in ActivityTypes]))
+    def __init__(self, allowed: Sequence[ActivityTypes]):
+        self.allowed = set(at.value for at in allowed)
 
     def __call__(self, data: Data) -> bool:
         return data.activity_type in self.allowed
