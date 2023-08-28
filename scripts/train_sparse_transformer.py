@@ -8,8 +8,11 @@ import wandb
 
 import kinodata.configuration as configuration
 from kinodata.training import train
+from kinodata.data.data_module import make_kinodata_module
 from kinodata.model.complex_transformer import ComplexTransformer
-from kinodata.types import NodeType, RelationType
+from kinodata.types import NodeType
+from kinodata.data.dataset import apply_transform_instance_permament
+from kinodata.transform.to_complex_graph import TransformToComplexGraph
 
 
 def make_model(config: configuration.Config):
@@ -46,4 +49,16 @@ if __name__ == "__main__":
         print(f"{key}: {value}")
 
     wandb.init(config=config, project="kinodata-docked-rescore", tags=["transformer"])
-    train(config, fn_model=make_model)
+    train(
+        config,
+        fn_model=make_model,
+        fn_data=partial(
+            make_kinodata_module,
+            one_time_transform=partial(
+                apply_transform_instance_permament,
+                transform=TransformToComplexGraph(
+                    remove_heterogeneous_representation=True
+                ),
+            ),
+        ),
+    )

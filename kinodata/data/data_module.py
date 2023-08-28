@@ -13,7 +13,10 @@ from torch_geometric.transforms import Compose
 from kinodata.configuration import Config
 from kinodata.data.data_split import Split
 from kinodata.data.grouped_split import KinodataKFoldSplit
-from kinodata.data.dataset import KinodataDocked, Filtered
+from kinodata.data.dataset import (
+    KinodataDocked,
+    Filtered,
+)
 import kinodata.transform as T
 from kinodata.types import NodeType
 
@@ -39,6 +42,7 @@ def make_data_module(
     train_kwargs: Kwargs,
     val_kwargs: Optional[Kwargs] = None,
     test_kwargs: Optional[Kwargs] = None,
+    one_time_transform: Optional[Callable[[InMemoryDataset], InMemoryDataset]] = None,
     **kwargs,
 ) -> LightningDataset:
     assert_unique_value("pre_transform", train_kwargs, val_kwargs, test_kwargs)
@@ -49,16 +53,23 @@ def make_data_module(
     if split.test_split is not None and test_kwargs is None:
         test_kwargs = deepcopy(val_kwargs)
 
-    train_dataset = dataset_cls(**train_kwargs)[split.train_split]
-    val_dataset = (
-        dataset_cls(**val_kwargs)[split.val_split]
-        if split.val_split is not None
-        else None
+    def create_dataset(cls, kwargs, split, ott) -> Optional[InMemoryDataset]:
+        if split is None:
+            return None
+        dataset = cls(**kwargs)
+        if ott is not None:
+            dataset = ott(dataset)
+        return dataset[split]
+
+    train_dataset = create_dataset(
+        dataset_cls, train_kwargs, split.train_split, one_time_transform
     )
-    test_dataset = (
-        dataset_cls(**test_kwargs)[split.test_split]
-        if split.test_split is not None
-        else None
+    assert train_dataset is not None
+    val_dataset = create_dataset(
+        dataset_cls, val_kwargs, split.val_split, one_time_transform
+    )
+    test_dataset = create_dataset(
+        dataset_cls, test_kwargs, split.test_split, one_time_transform
     )
 
     return LightningDataset(
@@ -114,7 +125,9 @@ def fix_split_for_batch_norm(split: Split, batch_size: int) -> Split:
     return split
 
 
-def make_kinodata_module(config: Config, transforms=None) -> LightningDataset:
+def make_kinodata_module(
+    config: Config, transforms=None, one_time_transform=None
+) -> LightningDataset:
     dataset_cls = partial(KinodataDocked, remove_hydrogen=config.remove_hydrogen)
 
     if config.filter_rmsd_max_value is not None:
@@ -191,6 +204,7 @@ def make_kinodata_module(config: Config, transforms=None) -> LightningDataset:
         train_kwargs={"transform": train_transform},
         val_kwargs={"transform": val_transform},
         test_kwargs={"transform": val_transform},
+        one_time_transform=one_time_transform,
     )
 
     return data_module
