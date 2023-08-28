@@ -23,6 +23,7 @@ from kinodata.data.featurization.rdkit import (
 )
 from kinodata.data.featurization.residue import (
     PHYSICOCHEMICAL,
+    STRUCTURAL,
     add_kissim_fp,
     add_onehot_residues,
     load_kissim,
@@ -31,6 +32,7 @@ from kinodata.data.utils.pocket_sequence_klifs import add_pocket_sequence
 from kinodata.types import NodeType
 from kinodata.data.utils.scaffolds import mol_to_scaffold
 from kinodata.transform.to_complex_graph import TransformToComplexGraph
+from kinodata.transform.filter_activity import FilterActivityType, ActivityTypes
 
 _DATA = Path(__file__).parents[2] / "data"
 
@@ -56,7 +58,7 @@ class KinodataDocked(InMemoryDataset):
         remove_hydrogen: bool = True,
         transform: Optional[Callable] = None,
         pre_transform: Optional[Callable] = None,
-        pre_filter: Optional[Callable] = None,
+        pre_filter: Optional[Callable] = FilterActivityType([ActivityTypes.pic50]),
         post_filter: Optional[Callable] = None,
         residue_representation: Literal["sequence", "structural", None] = "sequence",
         require_kissim_residues: bool = True,
@@ -119,7 +121,37 @@ class KinodataDocked(InMemoryDataset):
             embedProps=True,
             removeHs=self.remove_hydrogen,
         )
+        df["activities.standard_value"] = df["activities.standard_value"].astype(float)
+        df["docking.predicted_rmsd"] = df["docking.predicted_rmsd"].astype(float)
+
+        print(f"Deduping data frame (current size: {df.shape[0]})...")
+        group_key = [
+            "compound_structures.canonical_smiles",
+            "UniprotID",
+            "activities.standard_type",
+        ]
+        mean_activity = (
+            df.groupby(group_key)
+            .agg({"activities.standard_value": "mean"})
+            .reset_index()
+        )
+        best_structure = (
+            df.sort_values(by="docking.predicted_rmsd", ascending=True)
+            .groupby(group_key)[group_key + ["docking.predicted_rmsd", "molecule"]]
+            .head(1)
+        )
+        deduped = pd.merge(mean_activity, best_structure, how="outer", on=group_key)
+        df = pd.merge(
+            df.drop_duplicates(group_key),
+            deduped,
+            how="left",
+            on=group_key,
+            suffixes=(".orig", None),
+        )
+        for col in ("activities.standard_value", "docking.predicted_rmsd", "molecule"):
+            del df[f"{col}.orig"]
         df.set_index("ID", inplace=True)
+        print(f"{df.shape[0]} complexes remain after deduplication.")
 
         print("Checking for missing pocket mol2 files...")
         df["similar.klifs_structure_id"] = (
@@ -302,6 +334,25 @@ def Filtered(dataset: KinodataDocked, filter: Callable) -> Type[KinodataDocked]:
     return FilteredDataset
 
 
+def apply_transform_instance_permament(
+    dataset: KinodataDocked, transform: Callable[[HeteroData], Optional[HeteroData]]
+):
+    desc = f"Applying permamnent transform {transform} to {dataset}..."
+    transformed_data_list = []
+    for index in tqdm(dataset.indices()):
+        data = dataset.get(index)
+        transformed_data = transform(data)
+        if transformed_data is None:
+            continue
+        transformed_data_list.append(transformed_data)
+    print("Done! Collating transformed data list...")
+    data, slices = dataset.collate(transformed_data_list)
+    dataset.data = data
+    dataset.slices = slices
+    dataset._data_list = None
+    return dataset
+
+
 def process_idx(args):
     (
         ident,
@@ -351,7 +402,7 @@ def process_idx(args):
         kissim_fp = load_kissim(structure_id)
         if kissim_fp is None:
             return None
-        data = add_kissim_fp(data, kissim_fp, subset=PHYSICOCHEMICAL)
+        data = add_kissim_fp(data, kissim_fp, subset=PHYSICOCHEMICAL + STRUCTURAL)
 
     data.y = torch.tensor(activity).view(1)
     data.docking_score = torch.tensor(docking_score).view(1)
@@ -369,8 +420,7 @@ def process_idx(args):
 if __name__ == "__main__":
     from torch_geometric.loader import DataLoader
 
-    dataset = KinodataDocked(remove_hydrogen=True)
+    dataset = KinodataDocked(remove_hydrogen=True, use_multiprocessing=True)
     print(dataset[0])
-
     batch = next(iter(DataLoader(dataset, batch_size=3, shuffle=True)))
     print(batch)
