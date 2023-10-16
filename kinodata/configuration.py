@@ -230,5 +230,5 @@ register(
     perturb_pocket_positions=0.1,
     clip_grad_value=None,
     add_docking_scores=False,
-    dry_run=True,
+    dry_run=False,
 )

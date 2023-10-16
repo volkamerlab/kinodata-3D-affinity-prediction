@@ -72,7 +72,7 @@ class AffinityPropagation(Clustering):
         return self.model.labels_
 
 
-# TODO implement hierarchical/agglomerative clustering for 'easier" splits?
+# TODO implement hierarchical/agglomerative clustering for "easier" splits?
 class HierarchicalClustering(Clustering):
     def __init__(self) -> None:
         super().__init__()

@@ -11,11 +11,11 @@ from .utils.similarity import BLOSUMSubstitutionSimilarity
 from .dataset import KinodataDocked
 
 
-def _split_random(a: np.ndarray, r: float, seed: int = 0):
+def _split_random(a: np.ndarray, percentile: float, seed: int = 0):
     rng = default_rng(seed)
-    k = int(a.shape[0] * r)
+    pivot_ = int(a.shape[0] * percentile)
     permuted = rng.permutation(a)
-    return permuted[:k], permuted[k:]
+    return permuted[:pivot_], permuted[pivot_:]
 
 
 def _generator_to_list(generator):
@@ -75,14 +75,18 @@ class KinodataKFoldSplit:
             splits = group_k_fold_split(group_index=scaffolds, k=self.k)
             return splits
         if self.split_type == "pocket-k-fold":
-            pocket_sequences, idents = zip(
-                *[(data.pocket_sequence, data.ident) for data in dataset]
+            pocket_data = pd.DataFrame(
+                {
+                    "index": np.arange(len(dataset.data.pocket_sequence)),
+                    "pocket_sequence": dataset.data.pocket_sequence,
+                }
             )
             df_cluster_labels = self.pocket_clustering(
-                pd.DataFrame({"pocket_sequence": pocket_sequences, "ident": idents}),
+                pocket_data,
                 "pocket_sequence",
                 fn_similarity=self.pocket_similarity_measure(),
-            )
+            ).sort_values(by="index", ascending=True)
+            assert df_cluster_labels.shape[0] == pocket_data.shape[0]
             return group_k_fold_split(
                 df_cluster_labels[self.pocket_clustering.cluster_key].values,
                 k=self.k,
