@@ -33,7 +33,7 @@ if __name__ == "__main__":
         ln2=True,
         ln3=True,
         graph_norm=False,
-        interaction_modes=["covalent"],
+        interaction_modes=["covalent", "structural"],
     )
     config = configuration.get("data", "training", "sparse_transformer")
     config = config.update_from_file()

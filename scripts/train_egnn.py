@@ -55,6 +55,17 @@ def make_atom_embedding_cls(
     config: configuration.Config,
 ) -> Callable[..., HeteroEmbedding]:
     # TODO derive inital embeddings from config?
+    def atom_embedder(node_type, config):
+        embedding = [
+            AtomTypeEmbedding(
+                node_type,
+                hidden_chanels=config.hidden_channels,
+                dropout=config.dropout,
+            ),
+        ]
+        if config.additional_atom_features:
+            ...
+
     default_embeddings: Dict[NodeType, torch.nn.Module] = {
         NodeType.Ligand: AtomTypeEmbedding(
             NodeType.Ligand,
