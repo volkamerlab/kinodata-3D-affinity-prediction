@@ -3,8 +3,6 @@
 Rescoring the docked kinodata set
 
 ## Setup/Installation
-**Current environment.yaml is oudated**
-
 Python environment
 ```
 mamba env create -f environment.yml
