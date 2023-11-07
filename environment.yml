@@ -1,19 +1,26 @@
-name: kinodata-docked-rescore
+name: kinodata
 channels:
   - conda-forge
 dependencies:
-  - pip
-  - requests
   - numpy
-  - python=3.9.13
-  - pytorch::pytorch=1.12.1
+  - pip
+  - python=3.10.8
+  - pytorch::pytorch
   - pyg::pyg
   - pandas
   - scipy
   - tqdm
   - rdkit
   - matplotlib
-  - pytorch-lightning
-  - wandb
+  - ipykernel
+  - ca-certificates
+  - certifi
+  - openssl
   - black
+  - wandb
+  - pytorch-lightning
+  - mypy
+  - seaborn
+  - cvxpy
   - biotite
+  - biopandas
