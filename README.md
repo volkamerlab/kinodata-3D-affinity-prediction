@@ -1,14 +1,22 @@
-# kinodata-docked-rescore
-Rescoring the docked kinodata set
+# Code for working with the Kinodata3D-docked dataset and training binding affinity prediction models
 
-## Setup/Installation
-Python environment
+## Setup
+### 1) Clone this repo
+### 2) Set up Python environment
+Use [mamba](https://mamba.readthedocs.io/en/latest/micromamba-installation.html#umamba-install) to set up a Python environment
 ```
 mamba env create -f environment.yml
 mamba activate kinodata
+```
+and install this package in editable/develop mode.
+```
 pip install -e .
 ```
-Preprocessed KiSSim fingerprints and data splits
+### Obtain aw data
+The raw data, docked poses and kinase pdb files, can be obtained [from Zenodo](todo). After downloading the archiven extract it in the
+root directory of this repository
 ```
-unzip data.zip
+cd PATH_TO_REPO
+unzip ...
 ```
+

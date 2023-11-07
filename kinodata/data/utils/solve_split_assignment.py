@@ -4,6 +4,7 @@ from typing import Dict, Sequence, TypeVar, Collection, Protocol
 from pathlib import Path
 
 
+# NOTE DEPRECATED/UNUSED
 def solve_random(
     dataset: pd.DataFrame,
     partition_key: str,

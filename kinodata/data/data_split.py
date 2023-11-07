@@ -6,7 +6,6 @@ import pandas as pd
 import numpy as np
 from numpy import ndarray
 from torch import Tensor
-from torch.utils.data import Dataset
 
 IndexLike = Union[Tensor, ndarray, List[int]]
 PathLike = Union[Path, str]
@@ -14,8 +13,6 @@ PathLike = Union[Path, str]
 from dataclasses import dataclass, field
 
 
-Kwargs = Dict[str, Any]
-PathLike = Union[Path, str]  # type: ignore
 IndexType = TypeVar("IndexType")
 OtherIndexType = TypeVar("OtherIndexType")
 
@@ -114,38 +111,3 @@ class Split(Generic[IndexType]):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}[{self.index_cls.__name__}](train={len(self.train_split)}, val={len(self.val_split)}, test={len(self.test_split)}, source={self.source_file})"
-
-
-class RandomSplit:
-    def __init__(
-        self,
-        train_size: float = 1.0,
-        val_size: float = 0.0,
-        test_size: float = 0.0,
-    ):
-        self.train_size = train_size
-        self.val_size = val_size
-        self.test_size = test_size
-
-    def __call__(self, dataset: Dataset, seed: int = 0) -> Split:
-        split_sizes = {"train": self.train_size}
-        if self.val_size > 0:
-            split_sizes["val"] = self.val_size
-        if self.test_size > 0:
-            split_sizes["test"] = self.test_size
-
-        for key, value in split_sizes.items():
-            split_sizes[key] = int(value * len(dataset))  # type: ignore
-
-        # make sure split is congruent
-        split_sizes["train"] -= sum(split_sizes.values()) - len(
-            dataset  # type : ignore
-        )
-
-        split = Split.random_split(
-            num_train=split_sizes["train"],
-            num_val=split_sizes["val"],
-            num_test=split_sizes["test"],
-            seed=seed,
-        )
-        return split

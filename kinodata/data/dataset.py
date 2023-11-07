@@ -10,7 +10,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Sequence, Type
 import pandas as pd
 import requests  # type : ignore
 import torch
-from rdkit.Chem import AddHs, Kekulize, MolFromMol2File, PandasTools
+from rdkit.Chem import AddHs, Kekulize, MolFromMol2File, PandasTools  # type: ignore
 from torch_geometric.data import HeteroData, InMemoryDataset
 from tqdm import tqdm
 from rdkit import RDLogger

@@ -169,14 +169,3 @@ class AddDistances(BaseTransform):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.edge_type})"
-
-
-if __name__ == "__main__":
-
-    x = torch.tensor([1.0, 2.1, 3.8]).float().unsqueeze(1)
-    y = torch.tensor([0, 3, 4.7]).float().unsqueeze(1)
-
-    edge_index, dist = interactions_and_distances(x, y, r=1.0)
-    print(edge_index, dist)
-    edge_index, dist = interactions_and_distances(y, x, r=1.0)
-    print(edge_index, dist)

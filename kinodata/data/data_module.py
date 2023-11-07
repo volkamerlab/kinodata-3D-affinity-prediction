@@ -82,20 +82,6 @@ def make_data_module(
     )
 
 
-class ComposedDatamodule(LightningDataset):
-    def __init__(self, data_modules: List[LightningDataset]):
-        self.data_modules = data_modules
-
-    def train_dataloader(self) -> DataLoader:
-        return [data_module.train_dataloader() for data_module in self.data_modules]
-
-    def val_dataloader(self) -> DataLoader:
-        return [data_module.val_dataloader() for data_module in self.data_modules]
-
-    def test_dataloader(self) -> DataLoader:
-        return [data_module.test_dataloader() for data_module in self.data_modules]
-
-
 def compose(transforms: Optional[list]) -> Optional[Callable]:
     return None if transforms is None else Compose(transforms)
 
@@ -200,7 +186,7 @@ def make_kinodata_module(
         split,
         config.batch_size,
         config.num_workers,
-        dataset_cls=dataset_cls,
+        dataset_cls=dataset_cls,  # type: ignore
         train_kwargs={"transform": train_transform},
         val_kwargs={"transform": val_transform},
         test_kwargs={"transform": val_transform},

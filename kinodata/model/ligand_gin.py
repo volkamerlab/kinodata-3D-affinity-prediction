@@ -8,12 +8,6 @@ from torch_geometric.nn import MLP
 from kinodata.model.resolve import resolve_loss
 from kinodata.model.regression import RegressionModel
 from kinodata.configuration import Config
-from kinodata.model.shared.node_embedding import (
-    FeatureEmbedding,
-    AtomTypeEmbedding,
-    CombineSum,
-)
-from kinodata.types import NodeType, RelationType
 from kinodata.model.dti import Encoder
 
 

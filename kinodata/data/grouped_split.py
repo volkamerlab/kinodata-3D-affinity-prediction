@@ -20,7 +20,7 @@ def _split_random(a: np.ndarray, percentile: float, seed: int = 0):
 
 def _generator_to_list(generator):
     splits = [
-        Split(train_index, *_split_random(test_index, 0.5))
+        Split(train_index, *_split_random(test_index, 0.5))  # type: ignore
         for train_index, test_index in generator
     ]
     return splits
@@ -88,7 +88,7 @@ class KinodataKFoldSplit:
             ).sort_values(by="index", ascending=True)
             assert df_cluster_labels.shape[0] == pocket_data.shape[0]
             return group_k_fold_split(
-                df_cluster_labels[self.pocket_clustering.cluster_key].values,
+                np.array(df_cluster_labels[self.pocket_clustering.cluster_key].values),
                 k=self.k,
             )
         if self.split_type == "random-k-fold":
