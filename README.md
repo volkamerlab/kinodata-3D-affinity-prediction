@@ -28,5 +28,5 @@ See [Kinodata-3D repo](add_repo_link) for more information and the code used to 
 
 ## Usage instructions
 - [Kinodata-3D Pytorch Geometric Dataset](examples/pyg_dataset.ipynb)
-- [Kinodata-3D data splits](examples/...)
-- [Kinodata-3D affinity prediction models](examples/...)
+- [Kinodata-3D data splits](examples/data_splits.ipynb)
+- [Kinodata-3D affinity prediction models](examples/models.ipynb)
