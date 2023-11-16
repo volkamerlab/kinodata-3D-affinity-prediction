@@ -185,16 +185,19 @@ register(
     edge_types=INTRAMOL_STRUCTURAL_EDGE_TYPES[:1] + INTERMOL_STRUCTURAL_EDGE_TYPES,
     seed=420,
     use_bonds=True,
-    add_artificial_decoys=False,
-    data_split=None,
+    data_split=None,  # deprecated
     need_distances=True,
-    num_residue_features=6,
+    num_residue_features=6,  # deprecated
     additional_atom_features=False,
     remove_hydrogen=True,
     filter_rmsd_max_value=2.0,
     split_type="pocket-k-fold",
     split_index=0,
     k_fold=5,
+    perturb_ligand_positions=0.1,
+    perturb_pocket_positions=0.1,
+    perturb_complex_positions=0.1,
+    add_docking_scores=False,
 )
 
 register(
@@ -226,9 +229,6 @@ register(
     lr_patience=8,
     early_stopping_patience=24,
     min_lr=1e-6,
-    perturb_ligand_positions=0.1,
-    perturb_pocket_positions=0.1,
     clip_grad_value=None,
-    add_docking_scores=False,
     dry_run=False,
 )

@@ -9,11 +9,11 @@ def gaussian(x, mean, std):
 
 
 class GaussianDistEmbedding(Module):
-    def __init__(self, size: int, d_cut: float) -> None:
+    def __init__(self, size: int, max_dist: float) -> None:
         super().__init__()
         self.size = size
         self.d_cut = Parameter(
-            torch.tensor([d_cut], dtype=torch.float32), requires_grad=False
+            torch.tensor([max_dist], dtype=torch.float32), requires_grad=False
         )
 
         means, stds = self._initial_params()
