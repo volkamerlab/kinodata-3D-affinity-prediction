@@ -1,2 +1,4 @@
+hidden_channels: 256
+act: "silu"
 interaction_modes: ["covalent"]
 batch_size: 127
