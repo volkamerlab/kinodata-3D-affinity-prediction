@@ -142,18 +142,7 @@ def make_kinodata_module(
         )
 
     if config.need_distances:
-        subset = list(product(config.node_types, config.node_types))
-        subset = {
-            nt_pair: config.residue_interaction_radius
-            if NodeType.PocketResidue in nt_pair
-            else config.interaction_radius
-            for nt_pair in subset
-        }
-        if (NodeType.Pocket, NodeType.Pocket) in subset:
-            del subset[(NodeType.Pocket, NodeType.Pocket)]
-        transforms.append(
-            T.AddDistancesAndInteractions(config.interaction_radius, edge_types=subset)
-        )
+        ...
 
     if config.add_docking_scores:
         assert config.need_distances

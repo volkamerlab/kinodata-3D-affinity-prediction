@@ -1,5 +1,6 @@
 from pathlib import Path
-from typing import List, Protocol
+from functools import singledispatchmethod
+from typing import List, Optional, Protocol
 import numpy as np
 from numpy.random import default_rng
 from sklearn.model_selection import GroupKFold, KFold
@@ -61,11 +62,28 @@ class KinodataKFoldSplit:
         self.k = k
         self.split_type = split_type
 
-    def cache_dir(self, dataset: KinodataDocked) -> Path:
+    @singledispatchmethod
+    def cache_dir(self, dataset) -> Path:
+        raise NotImplementedError(f"cahe_dir({type(dataset)})")
+
+    @cache_dir.register
+    def _(self, dataset: KinodataDocked) -> Path:
         return Path(dataset.processed_dir) / self.split_type
 
-    def split_files(self, dataset: KinodataDocked) -> List[Path]:
-        cache_dir = self.cache_dir(dataset)
+    @cache_dir.register
+    def _(self, dataset_dir: Path) -> Path:
+        return dataset_dir / self.split_type
+
+    def split_files(
+        self,
+        dataset: Optional[KinodataDocked] = None,
+        dataset_dir: Optional[Path] = None,
+    ) -> List[Path]:
+        if dataset_dir is not None:
+            cache_dir = self.cache_dir(dataset_dir)
+        if dataset is not None:
+            cache_dir = self.cache_dir(dataset)
+        assert cache_dir is not None
         return [cache_dir / f"{i}:{self.k}.csv" for i in range(1, self.k + 1)]
 
     def _split(self, dataset: KinodataDocked):
