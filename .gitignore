@@ -1,3 +1,6 @@
+# i dont even know
+conda_hack.py
+
 # raw kinodata
 /data
 /surface_data
@@ -7,6 +10,7 @@ lightning_logs
 wandb
 artifacts
 notebooks
+models
 
 # condor logs
 condor/*.log

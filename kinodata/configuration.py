@@ -97,6 +97,7 @@ class Config(dict):
         updated_args = {
             key: value for key, value in shared_args.items() if value is not None
         }
+        print(f"Updating config from args: {updated_args}")
         return self.update(updated_args)
 
     def update_from_file(
@@ -179,8 +180,8 @@ def get(*config_names: str) -> Config:
 
 register(
     "data",
-    interaction_radius=6.0,
-    residue_interaction_radius=12.0,
+    interaction_radius=5.0,
+    residue_interaction_radius=12.0,  # deprecated
     node_types=["ligand", "pocket"],
     edge_types=INTRAMOL_STRUCTURAL_EDGE_TYPES[:1] + INTERMOL_STRUCTURAL_EDGE_TYPES,
     seed=420,
@@ -194,12 +195,13 @@ register(
     split_type="pocket-k-fold",
     split_index=0,
     k_fold=5,
-    perturb_ligand_positions=0.1,
-    perturb_pocket_positions=0.1,
-    perturb_complex_positions=0.1,
+    perturb_ligand_positions=0.0,
+    perturb_pocket_positions=0.0,
+    perturb_complex_positions=0.0,
     add_docking_scores=False,
 )
 
+# deprecated
 register(
     "egnn",
     model_type="egnn",
