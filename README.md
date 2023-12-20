@@ -36,7 +36,7 @@ See the [Kinodata-3D repo](https://github.com/volkamerlab/kinodata-3D) for more 
 If you intend to reproduce our results, we strongly recommend that you use [our preprocessed version of the dataset and corresponding data splits](add_to_zenodo).
 
 ### (2) Model training and evaluation
-You can use the shell script `scripts/train_generic.sh` to train and test a model in one run, on one particular split.
+You can use the shell script `condor/train_generic.sh` to train and test a model in one run, on one particular split.
 Create a file `wandb_api_key` in the root directory of this repository and paste your [wandb](https://wandb.ai/) API key,
 if you want to sync results to Weight & Biases.
 Otherwise, run `wandb disable` in a terminal with the conda environment activated, before training.
