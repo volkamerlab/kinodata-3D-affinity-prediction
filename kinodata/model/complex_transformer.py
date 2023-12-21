@@ -1,3 +1,4 @@
+from functools import partial
 from typing import List, Optional, Tuple
 import torch
 from torch import Tensor
@@ -16,6 +17,8 @@ from torch_geometric.nn.norm import GraphNorm
 from torch_geometric.nn.aggr import SoftmaxAggregation
 from torch_geometric.utils import coalesce
 from torch_cluster import knn_graph
+
+from kinodata.configuration import Config
 
 from ..types import NodeEmbedding, NodeType, RelationType
 from .shared.dist_embedding import GaussianDistEmbedding
@@ -139,7 +142,7 @@ class CombinedInteractions(Module):
 class ComplexTransformer(RegressionModel):
     def __init__(
         self,
-        config,
+        config: Config,
         hidden_channels: int,
         num_heads: int,
         num_attention_blocks: int,
@@ -229,3 +232,8 @@ class ComplexTransformer(RegressionModel):
 
         graph_repr = self.aggr(node_repr, node_store.batch)
         return self.out(graph_repr)
+
+
+def make_model(config: Config):
+    cls = partial(ComplexTransformer, config)
+    return config.init(cls)

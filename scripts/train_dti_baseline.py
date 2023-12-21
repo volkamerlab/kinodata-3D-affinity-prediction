@@ -1,39 +1,13 @@
-from functools import partial
 import sys
 
 # dirty
 sys.path.append(".")
 sys.path.append("..")
-import wandb
-
 import kinodata.configuration as configuration
-from kinodata.model.dti import (
-    DTIModel,
-    GlobalSumDecoder,
-    ResidueTransformer,
-    KissimTransformer,
-)
-from kinodata.model.shared.gine import LigandGINE
-from kinodata.data.featurization.residue import known_residues
+from kinodata.model.dti import ResidueFeaturization, make_model
 from kinodata.training import train
 
-
-class ResidueFeaturization:
-    Kissim = "kissim"
-    Onehot = "onehot"
-
-
-def make_dti_model(config):
-    if config.residue_featurization == ResidueFeaturization.Onehot:
-        ResidueModel = ResidueTransformer
-        config["residue_size"] = len(known_residues) + 1
-    elif config.residue_featurization == ResidueFeaturization.Kissim:
-        ResidueModel = KissimTransformer
-        config["residue_size"] = 6
-    else:
-        raise ValueError(config.residue_featurization)
-    return DTIModel(config, LigandGINE, ResidueModel, GlobalSumDecoder)
-
+import wandb
 
 if __name__ == "__main__":
     configuration.register(
@@ -47,6 +21,7 @@ if __name__ == "__main__":
 
     config = configuration.get("data", "training", "dti_baseline")
     config = config.update_from_args()
+    config = config.update_from_file("dti.yaml")
     config["need_distances"] = False
 
     for key, value in config.items():
@@ -55,4 +30,4 @@ if __name__ == "__main__":
     wandb.init(
         config=config, project="kinodata-docked-rescore", tags=["dti", "less-features"]
     )
-    train(config, fn_model=make_dti_model)
+    train(config, fn_model=make_model)

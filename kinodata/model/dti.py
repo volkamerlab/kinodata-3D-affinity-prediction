@@ -1,16 +1,16 @@
 from typing import Any, Callable, Optional, Protocol, Tuple
 
 import torch
-from torch import Tensor
-from torch.nn import Linear, Module, ModuleList, Sequential, SiLU, LayerNorm, Embedding
-
-
-from kinodata.data.featurization.bonds import NUM_BOND_TYPES
 from kinodata.configuration import Config
+from kinodata.data.featurization.bonds import NUM_BOND_TYPES
+from kinodata.data.featurization.residue import known_residues
 from kinodata.model.regression import RegressionModel
 from kinodata.model.resolve import resolve_act, resolve_loss
-from kinodata.model.shared import GINE, SetAttentionBlock
-from kinodata.types import NodeType, RelationType
+from kinodata.model.shared import SetAttentionBlock
+from kinodata.model.shared.gine import LigandGINE
+from kinodata.types import NodeType
+from torch import Tensor
+from torch.nn import Embedding, LayerNorm, Linear, Module, ModuleList, Sequential, SiLU
 from torch_geometric.nn.pool import global_add_pool
 from torch_geometric.utils import to_dense_batch
 
@@ -161,3 +161,20 @@ class GlobalSumDecoder(Module):
         pocket_repr = self.f_pocket(_sum_aggr(pocket_embeddings, pocket_batch))
         combined_repr = torch.cat((ligand_repr, pocket_repr), dim=self.feature_dim)
         return self.f_combined(combined_repr)
+
+
+class ResidueFeaturization:
+    Kissim = "kissim"
+    Onehot = "onehot"
+
+
+def make_model(config):
+    if config.residue_featurization == ResidueFeaturization.Onehot:
+        ResidueModel = ResidueTransformer
+        config["residue_size"] = len(known_residues) + 1
+    elif config.residue_featurization == ResidueFeaturization.Kissim:
+        ResidueModel = KissimTransformer
+        config["residue_size"] = 6
+    else:
+        raise ValueError(config.residue_featurization)
+    return DTIModel(config, LigandGINE, ResidueModel, GlobalSumDecoder)
