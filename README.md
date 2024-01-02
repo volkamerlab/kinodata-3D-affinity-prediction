@@ -1,7 +1,7 @@
 ## Kinodata-3D dataset and models
 This repository contains a [pyg](https://pytorch-geometric.readthedocs.io/en/latest/)-based interface
 to the [Kinodata-3D dataset](https://github.com/volkamerlab/kinodata-3D) and the code used to train and evaluate the models
-presented in the [Kinodata-3D publication](add_paper_link)
+presented in the [Kinodata-3D publication](https://chemrxiv.org/engage/chemrxiv/article-details/658441f7e9ebbb4db96d98e8)
 ![](_static/dataset_generation.png)
 ##
 ## Installation
@@ -18,7 +18,7 @@ and install this package in editable/develop mode
 pip install -e .
 ```
 ### (3) Obtain raw data
-The raw data, docked poses and kinase pdb files, can be obtained [from Zenodo](add_zenodo_link). 
+The raw data, docked poses and kinase pdb files, can be obtained [from Zenodo](https://zenodo.org/records/10410259). 
 After downloading the archives, extract them in the root directory of this repository.
 ```
 cd PATH_TO_REPO
@@ -33,7 +33,8 @@ See the [Kinodata-3D repo](https://github.com/volkamerlab/kinodata-3D) for more 
 
 ## Reproducing results
 ### (1) Acquire exact dataset and data split versions
-If you intend to reproduce our results, we strongly recommend that you use [our preprocessed version of the dataset and corresponding data splits](add_to_zenodo).
+If you intend to reproduce our results, we strongly recommend that you use [our preprocessed version of the dataset and corresponding data splits]([add_to_zenodo](https://zenodo.org/records/10410594)).
+After downloading, extract the dataset `kinodata3d_preprocessed.zip` archive in this repositories root directory.
 
 ### (2) Model training and evaluation
 You can use the shell script `condor/train_generic.sh` to train and test a model in one run, on one particular split.
