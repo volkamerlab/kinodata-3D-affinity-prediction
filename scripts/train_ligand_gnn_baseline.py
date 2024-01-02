@@ -44,7 +44,6 @@ if __name__ == "__main__":
     config = config.update_from_file()
     config = config.update_from_args()
     config["need_distances"] = False
-    config["filter_rmsd_max_value"] = None
 
     for key, value in config.items():
         print(f"{key}: {value}")

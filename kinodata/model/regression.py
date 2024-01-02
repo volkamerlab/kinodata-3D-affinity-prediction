@@ -36,6 +36,7 @@ def cat_many(
 
 class RegressionModel(pl.LightningModule):
     log_scatter_plot: bool = False
+    log_test_predictions: bool = False
 
     def __init__(
         self,
@@ -79,6 +80,7 @@ class RegressionModel(pl.LightningModule):
         ]
 
     def define_metrics(self):
+        wandb.init()
         wandb.define_metric("val/mae", summary="min")
         wandb.define_metric("val/corr", summary="max")
 
@@ -139,11 +141,12 @@ class RegressionModel(pl.LightningModule):
         self.log("test/mae", mae)
         self.log("test/corr", corr)
 
-        test_predictions = wandb.Artifact("test_predictions", type="predictions")
-        data = cat_many(outputs, subset=["pred", "ident"])
-        values = [t.detach().cpu() for t in data.values()]
-        values = torch.stack(values, dim=1)
-        table = wandb.Table(columns=list(data.keys()), data=values.tolist())
-        test_predictions.add(table, "predictions")
-        wandb.log_artifact(test_predictions)
-        pass
+        if self.log_test_predictions:
+            test_predictions = wandb.Artifact("test_predictions", type="predictions")
+            data = cat_many(outputs, subset=["pred", "ident"])
+            values = [t.detach().cpu() for t in data.values()]
+            values = torch.stack(values, dim=1)
+            table = wandb.Table(columns=list(data.keys()), data=values.tolist())
+            test_predictions.add(table, "predictions")
+            wandb.log_artifact(test_predictions)
+            pass
