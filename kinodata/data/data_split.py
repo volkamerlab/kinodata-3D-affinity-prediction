@@ -19,7 +19,6 @@ OtherIndexType = TypeVar("OtherIndexType")
 
 @dataclass(repr=False)
 class Split(Generic[IndexType]):
-
     train_split: List[IndexType]
     val_split: List[IndexType] = field(default_factory=list)  # type: ignore
     test_split: List[IndexType] = field(default_factory=list)  # type: ignore
