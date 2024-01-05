@@ -21,7 +21,6 @@ pt = GetPeriodicTable()
 def prepare_pocket_information(
     pocket_mol2_file: Union[str, Path],
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-
     # prepare pocket data frame
     # each row corresponds to one atom
     df_atom, df_bond = read_klifs_mol2(pocket_mol2_file)

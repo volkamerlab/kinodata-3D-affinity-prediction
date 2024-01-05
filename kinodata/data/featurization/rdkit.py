@@ -51,7 +51,6 @@ def bond_tensors(mol):
 
 
 def set_bonds(mol, data: HeteroData, key: str) -> HeteroData:
-
     edge_index, edge_attr = bond_tensors(mol)
     data[key, RelationType.Covalent, key].edge_index = edge_index
     data[key, RelationType.Covalent, key].edge_attr = edge_attr
@@ -60,7 +59,6 @@ def set_bonds(mol, data: HeteroData, key: str) -> HeteroData:
 
 
 def append_atoms_and_bonds(mol, data: HeteroData, key: str) -> HeteroData:
-
     old_num_nodes = data[key].z.size(0)
 
     data[key].z = torch.cat((data[key].z, atomic_numbers(mol)), dim=0)

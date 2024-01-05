@@ -182,7 +182,7 @@ def pairwise_tanimoto_similarity(
     mols = [MolFromSmiles(sm) for sm in smiles]
     fps = [AllChem.GetMorganFingerprintAsBitVect(m, 2, nbits) for m in mols]
     similarities = np.eye(len(smiles))
-    for (i, fp) in enumerate(fps):
+    for i, fp in enumerate(fps):
         similarities_i = BulkTanimotoSimilarity(fp, fps[i:])
         similarities[i, i:] = similarities_i
         similarities[i:, i] = similarities_i

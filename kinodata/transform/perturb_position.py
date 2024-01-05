@@ -63,7 +63,6 @@ class PerturbAtomPositions(BaseTransform):
 
 
 if __name__ == "__main__":
-
     perturb = PerturbAtomPositions("...")
 
     pos = torch.rand(100, 3)
