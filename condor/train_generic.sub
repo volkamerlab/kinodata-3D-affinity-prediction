@@ -1,7 +1,7 @@
 universe = docker
 docker_image = gjoschka/massspec_with_wandb
 executable = train_generic.sh
-arguments = train_ligand_gnn_baseline $(split) $(rmsd) $(model) $(index)
+arguments = $(script) --split_type $(split) --filter_rmsd_max_value $(rmsd) --split_index $(index) --config $(model)
 output = train_kinodata.$(ClusterId).$(ProcId).out
 error = train_kinodata.$(ClusterId).$(ProcId).err
 log = train_kinodata.$(ClusterId).log
@@ -9,53 +9,18 @@ should_transfer_files   = YES
 when_to_transfer_output = ON_EXIT
 request_GPUs = 1
 request_CPUs = 32
-request_memory = 90G
-requirements = UidDomain == "cs.uni-saarland.de" && machine != "fulla.cs.uni-saarland.de"
+request_memory = 128G
+requirements = UidDomain == "cs.uni-saarland.de"
 +WantGPUHomeMounted = true
-queue split, index, rmsd, model from (
-   scaffold-k-fold, 0, 2, ligand_gin.yaml,
-   scaffold-k-fold, 1, 2, ligand_gin.yaml,
-   scaffold-k-fold, 2, 2, ligand_gin.yaml,
-   scaffold-k-fold, 3, 2, ligand_gin.yaml,
-   scaffold-k-fold, 4, 2, ligand_gin.yaml,
-   pocket-k-fold, 0, 2, ligand_gin.yaml,
-   pocket-k-fold, 1, 2, ligand_gin.yaml,
-   pocket-k-fold, 2, 2, ligand_gin.yaml,
-   pocket-k-fold, 3, 2, ligand_gin.yaml,
-   pocket-k-fold, 4, 2, ligand_gin.yaml,
-   random-k-fold, 0, 2, ligand_gin.yaml,
-   random-k-fold, 1, 2, ligand_gin.yaml,
-   random-k-fold, 2, 2, ligand_gin.yaml,
-   random-k-fold, 3, 2, ligand_gin.yaml,
-   random-k-fold, 4, 2, ligand_gin.yaml,
-   scaffold-k-fold, 0, 4, ligand_gin.yaml,
-   scaffold-k-fold, 1, 4, ligand_gin.yaml,
-   scaffold-k-fold, 2, 4, ligand_gin.yaml,
-   scaffold-k-fold, 3, 4, ligand_gin.yaml,
-   scaffold-k-fold, 4, 4, ligand_gin.yaml,
-   pocket-k-fold, 0, 4, ligand_gin.yaml,
-   pocket-k-fold, 1, 4, ligand_gin.yaml,
-   pocket-k-fold, 2, 4, ligand_gin.yaml,
-   pocket-k-fold, 3, 4, ligand_gin.yaml,
-   pocket-k-fold, 4, 4, ligand_gin.yaml,
-   random-k-fold, 0, 4, ligand_gin.yaml,
-   random-k-fold, 1, 4, ligand_gin.yaml,
-   random-k-fold, 2, 4, ligand_gin.yaml,
-   random-k-fold, 3, 4, ligand_gin.yaml,
-   random-k-fold, 4, 4, ligand_gin.yaml,
-   scaffold-k-fold, 0, 6, ligand_gin.yaml,
-   scaffold-k-fold, 1, 6, ligand_gin.yaml,
-   scaffold-k-fold, 2, 6, ligand_gin.yaml,
-   scaffold-k-fold, 3, 6, ligand_gin.yaml,
-   scaffold-k-fold, 4, 6, ligand_gin.yaml,
-   pocket-k-fold, 0, 6, ligand_gin.yaml,
-   pocket-k-fold, 1, 6, ligand_gin.yaml,
-   pocket-k-fold, 2, 6, ligand_gin.yaml,
-   pocket-k-fold, 3, 6, ligand_gin.yaml,
-   pocket-k-fold, 4, 6, ligand_gin.yaml,
-   random-k-fold, 0, 6, ligand_gin.yaml,
-   random-k-fold, 1, 6, ligand_gin.yaml,
-   random-k-fold, 2, 6, ligand_gin.yaml,
-   random-k-fold, 3, 6, ligand_gin.yaml,
-   random-k-fold, 4, 6, ligand_gin.yaml,
+queue index, model, rmsd, script, split from (
+   0, cgnn.yaml, 2, train_sparse_sparse_transformer, pocket-k-fold
+   0, cgnn.yaml, 2, train_sparse_sparse_transformer, scaffold-k-fold
+   1, cgnn.yaml, 2, train_sparse_sparse_transformer, pocket-k-fold
+   1, cgnn.yaml, 2, train_sparse_sparse_transformer, scaffold-k-fold
+   2, cgnn.yaml, 2, train_sparse_sparse_transformer, pocket-k-fold
+   2, cgnn.yaml, 2, train_sparse_sparse_transformer, scaffold-k-fold
+   3, cgnn.yaml, 2, train_sparse_sparse_transformer, pocket-k-fold
+   3, cgnn.yaml, 2, train_sparse_sparse_transformer, scaffold-k-fold
+   4, cgnn.yaml, 2, train_sparse_sparse_transformer, pocket-k-fold
+   4, cgnn.yaml, 2, train_sparse_sparse_transformer, scaffold-k-fold
 )

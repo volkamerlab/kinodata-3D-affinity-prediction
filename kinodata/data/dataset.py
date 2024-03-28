@@ -3,6 +3,7 @@ import multiprocessing as mp
 import os
 import os.path as osp
 import re
+from time import sleep
 import warnings
 from functools import cached_property, partial
 from pathlib import Path
@@ -39,10 +40,13 @@ from kinodata.data.featurization.residue import (
     add_onehot_residues,
     load_kissim,
 )
-from kinodata.data.utils.pocket_sequence_klifs import add_pocket_sequence
+from kinodata.data.utils.pocket_sequence_klifs import (
+    add_pocket_sequence,
+    get_pocket_sequence,
+    CachedSequences,
+)
 from kinodata.types import NodeType
 from kinodata.data.utils.scaffolds import mol_to_scaffold
-from kinodata.transform.to_complex_graph import TransformToComplexGraph
 from kinodata.transform.filter_activity import FilterActivityType, ActivityTypes
 
 _DATA = Path(__file__).parents[2] / "data"
@@ -63,10 +67,11 @@ def _repr(obj: Any) -> str:
 
 def process_raw_data(
     raw_dir: Path,
-    file_name: str = "kinodata_docked_with_rmsd.sdf.gz",
+    file_name: str = "kinodata_docked_v2.sdf.gz",
     remove_hydrogen: bool = True,
     pocket_dir: Optional[Path] = None,
     pocket_sequence_file: Optional[Path] = None,
+    activity_type_subset: Optional[List[str]] = None,
 ) -> pd.DataFrame:
     if pocket_dir is None:
         pocket_dir = raw_dir / "mol2" / "pocket"
@@ -81,6 +86,8 @@ def process_raw_data(
         embedProps=True,
         removeHs=remove_hydrogen,
     )
+    if activity_type_subset is not None:
+        df = df.query("activities.standard_type in @activity_type_subset")
     df["activities.standard_value"] = df["activities.standard_value"].astype(float)
     df["docking.predicted_rmsd"] = df["docking.predicted_rmsd"].astype(float)
 
@@ -108,7 +115,7 @@ def process_raw_data(
     )
     for col in ("activities.standard_value", "docking.predicted_rmsd", "molecule"):
         del df[f"{col}.orig"]
-    df.set_index("ID", inplace=True)
+    # df.set_index("ID", inplace=True)
     print(f"{df.shape[0]} complexes remain after deduplication.")
 
     print("Checking for missing pocket mol2 files...")
@@ -142,18 +149,38 @@ def process_raw_data(
     # backwards compatability
     df["ident"] = df.index
 
-    print("Adding pocket sequences", end=" ")
-    if pocket_sequence_file.exists():
-        print(f"from cached file {pocket_sequence_file}.")
-        pocket_sequences = pd.read_csv(pocket_sequence_file)
-        pocket_sequences["ident"] = pocket_sequences["ident"].astype(str)
-        df = pd.merge(df, pocket_sequences, left_on="ident", right_on="ident")
-    else:
-        print("from KLIFS.")
-        df = add_pocket_sequence(df, pocket_sequence_key="structure.pocket_sequence")
-        df[["ident", "structure.pocket_sequence"]].to_csv(
-            pocket_sequence_file, index=False
-        )
+    print("Adding pocket sequences...")
+    # KLIFS API now sometimes decides to timeout
+    print(df.shape)
+    while True:
+        try:
+            with CachedSequences(pocket_sequence_file) as sequence_cache:
+                klifs_ids = df["similar.klifs_structure_id"].tolist()
+                for klifs_id in tqdm(klifs_ids):
+                    if klifs_id in sequence_cache:
+                        continue
+                    sequence = get_pocket_sequence([klifs_id])
+                    sequence_cache[klifs_id] = sequence
+                df_sequences = sequence_cache.to_data_frame()
+                df = pd.merge(df, df_sequences, on="similar.klifs_structure_id")
+            break
+        except Exception as e:
+            print(f"Querying KLIFS for sequence from structure id raised {e}")
+            print("Retrying..")
+            sleep(10)
+    print(df.shape)
+
+    # if pocket_sequence_file.exists():
+    #     print(f"from cached file {pocket_sequence_file}.")
+    #     pocket_sequences = pd.read_csv(pocket_sequence_file)
+    #     pocket_sequences["ident"] = pocket_sequences["ident"].astype(str)
+    #     df = pd.merge(df, pocket_sequences, left_on="ident", right_on="ident")
+    # else:
+    #     print("from KLIFS.")
+    #     df = add_pocket_sequence(df, pocket_sequence_key="structure.pocket_sequence")
+    #     df[["ident", "structure.pocket_sequence", "similar.klifs_structure_id"]].to_csv(
+    #         pocket_sequence_file, index=False
+    #     )
 
     return df
 
@@ -275,13 +302,13 @@ class KinodataDocked(InMemoryDataset):
 
     @property
     def raw_file_names(self) -> List[str]:
-        return ["kinodata_docked_with_rmsd.sdf.gz"]
+        return ["kinodata_docked_v2.sdf.gz"]
 
     @property
     def processed_file_names(self) -> List[str]:
         # TODO add preprocessed kssim fingerprints?
         return [
-            f"kinodata_docked.pt",
+            f"kinodata_docked_v2.pt",
         ]
 
     @property
@@ -311,6 +338,7 @@ class KinodataDocked(InMemoryDataset):
             self.remove_hydrogen,
             self.pocket_dir,
             self.pocket_sequence_file,
+            activity_type_subset=["pIC50"],
         )
 
     def _process(self):
@@ -377,7 +405,7 @@ class KinodataDocked(InMemoryDataset):
         return dict(mapping)
 
 
-def _repr_filter(filter: Callable):
+def repr_filter(filter: Callable):
     return (
         repr(filter)
         .lower()
@@ -413,7 +441,7 @@ def Filtered(dataset: KinodataDocked, filter: Callable) -> Type[KinodataDocked]:
 
             super().__init__(
                 root=dataset.root,
-                prefix=_repr_filter(filter),
+                prefix=repr_filter(filter),
                 remove_hydrogen=dataset.remove_hydrogen,
                 residue_representation=dataset.residue_representation,  # type: ignore
                 require_kissim_residues=dataset.require_kissim_residues,

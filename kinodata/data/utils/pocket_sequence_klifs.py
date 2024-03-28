@@ -1,8 +1,76 @@
-from typing import Iterable, List
+from typing import Iterable, List, Optional, Union
 import requests
 import json
 import pandas as pd
 from tqdm import tqdm
+from rdkit.Chem import PandasTools as PD
+from pathlib import Path
+
+
+def klifs_structure_ids(cache: Path, raw_data_fp: Path) -> list[str]:
+    cache = Path(cache)
+    if not cache.exists():
+        print("Reading data frame...")
+        df = PD.LoadSDF(
+            str(raw_data_fp),
+            molColName=None,
+            smilesName=None,
+            embedProps=True,
+        )
+        print(df.head())
+        df[["similar.klifs_structure_id"]].to_csv(cache)
+    return pd.read_csv(cache)["similar.klifs_structure_id"].unique().tolist()
+
+
+class CachedSequences:
+    def __init__(
+        self,
+        sequence_file: Union[str, Path],
+    ) -> None:
+        sequence_file = Path(sequence_file)
+        self.sequence_file = sequence_file
+
+    def __setitem__(self, klifs_id, sequence: Optional[str] = None):
+        assert isinstance(sequence, str)
+        if sequence is None:
+            sequence = get_pocket_sequence([klifs_id])[0]
+        if not hasattr(self, "sequences"):
+            raise RuntimeError(
+                "Must enter context managed sequence cache before adding sequences."
+            )
+        self.sequences[klifs_id] = sequence
+
+    def write_to_cache(self):
+        self.to_data_frame().to_csv(self.sequence_file, index=False)
+
+    def to_data_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "similar.klifs_structure_id": list(self.sequences.keys()),
+                "structure.pocket_sequence": list(self.sequences.values()),
+            }
+        )
+
+    def __contains__(self, klifs_id):
+        if not hasattr(self, "sequences"):
+            raise RuntimeError("Must enter context managed sequence cache first.")
+        return klifs_id in self.sequences
+
+    def __enter__(self):
+        self.sequences = dict()
+        if self.sequence_file.exists():
+            df = pd.read_csv(self.sequence_file)
+            self.sequences = {
+                klifs_id: klifs_sequence
+                for klifs_id, klifs_sequence in zip(
+                    df["similar.klifs_structure_id"], df["structure.pocket_sequence"]
+                )
+            }
+        return self
+
+    def __exit__(self, *args):
+        self.write_to_cache()
+        print(f"Exiting with {len(self.sequences)} cached sequences.")
 
 
 def get_pocket_sequence(structure_ids: Iterable[int]) -> List[str]:
