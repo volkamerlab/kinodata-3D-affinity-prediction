@@ -4,14 +4,8 @@ from pathlib import Path
 
 
 if __name__ == "__main__":
-    dataset = KinodataDocked()
-    print(dataset[420])
-    cls_dataset_2 = Filtered(dataset, FilterDockingRMSD(2.0))
-    dataset_2 = cls_dataset_2()
-    print(len(dataset_2))
-    cls_dataset_4 = Filtered(dataset, FilterDockingRMSD(4.0))
-    dataset_4 = cls_dataset_4()
-    print(len(dataset_4))
-    cls_dataset_6 = Filtered(dataset, FilterDockingRMSD(6.0))
-    dataset_6 = cls_dataset_6()
-    print(len(dataset_6))
+    full_dataset = KinodataDocked()
+    for rmsd_cutoff in [2.0, 4.0, 6.0, 100.0]:
+        cls_dataset = Filtered(full_dataset, FilterDockingRMSD(rmsd_cutoff))
+        dataset = cls_dataset()
+        print(f"RMSD cutoff: {rmsd_cutoff} -- Dataset size: {len(dataset)}")

@@ -21,10 +21,6 @@ def skippable(
 
 if __name__ == "__main__":
     dataset = KinodataDocked()
-    all = Filtered(dataset, FilterDockingRMSD(100.0))()
-    split = KinodataKFoldSplit("pocket-k-fold", 5)
-    _ = split.split(all)
-    exit()
     split_types = (
         "random-k-fold",
         "scaffold-k-fold",
@@ -35,7 +31,7 @@ if __name__ == "__main__":
         splitter = KinodataKFoldSplit(split_type, 5)
         splits = splitter.split(dataset)
 
-    for rmsd_cutoff in (2.0, 4.0, 6.0):
+    for rmsd_cutoff in (2.0, 4.0, 6.0, 100.0):
         if all(skippable(rmsd_cutoff, split_type) for split_type in split_types):
             print(f"Skipping {rmsd_cutoff}")
             continue
