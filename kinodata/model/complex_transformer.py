@@ -99,7 +99,6 @@ class StructuralInteractions(InteractionModule):
         interaction_radius: float = 8.0,
         max_num_neighbors: int = 16,
         rbf_size: int = None,
-        node_type
     ) -> None:
         super().__init__(hidden_channels, act, bias)
         self.interaction_radius = interaction_radius
@@ -182,8 +181,6 @@ class ComplexTransformer(RegressionModel):
                     max_num_neighbors,
                     hidden_channels,
                 )
-            elif mode == "ligand-structural":
-                
             else:
                 raise ValueError(mode)
             intr.append(module)
