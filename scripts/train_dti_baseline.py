@@ -21,7 +21,7 @@ if __name__ == "__main__":
 
     config = configuration.get("data", "training", "dti_baseline")
     config = config.update_from_args()
-    config = config.update_from_file("dti.yaml")
+    config = config.update_from_file()
     config["need_distances"] = False
 
     for key, value in config.items():
