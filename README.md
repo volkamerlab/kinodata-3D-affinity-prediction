@@ -18,7 +18,7 @@ and install this package in editable/develop mode
 pip install -e .
 ```
 ### (3) Obtain raw data
-The raw data, docked poses and kinase pdb files, can be obtained [from Zenodo](https://zenodo.org/records/10886085). 
+The raw data, docked poses and kinase pdb files, can be obtained [from Zenodo](https://zenodo.org/records/10852507). 
 After downloading the archives, extract them in the root directory of this repository.
 ```
 cd PATH_TO_REPO
