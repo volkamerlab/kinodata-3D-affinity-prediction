@@ -107,6 +107,8 @@ class StructuralInteractions(InteractionModule):
         self.distance_embedding = GaussianDistEmbedding(rbf_size, interaction_radius)
         self.lin = Linear(rbf_size, hidden_channels, bias=False)
 
+        self.hacky_mask = None
+
     def interactions(self, data: HeteroData) -> Tuple[Tensor, OptTensor, OptTensor]:
         pos = data[NodeType.Complex].pos
         batch = data[NodeType.Complex].batch
@@ -115,6 +117,9 @@ class StructuralInteractions(InteractionModule):
         mask = distances <= self.interaction_radius
         edge_index = edge_index[:, mask]
         distances = distances[mask]
+        if self.hacky_mask is not None:
+            edge_index = edge_index.T[self.hacky_mask].T
+            distances = distances[self.hacky_mask]
         return edge_index, None, distances
 
     def process_weight(self, edge_weight: Tensor) -> Tensor:
