@@ -15,14 +15,10 @@ from typing import Any
 import torch
 
 import kinodata.configuration as cfg
-from kinodata.model import ComplexTransformer, DTIModel, RegressionModel
+from kinodata.model import RegressionModel
 from kinodata.model.complex_transformer import make_model as make_complex_transformer
 from kinodata.model.dti import make_model as make_dti_baseline
-from kinodata.data.data_module import make_kinodata_module
 from kinodata.transform import TransformToComplexGraph
-
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 import pandas as pd
 import tqdm
@@ -153,15 +149,19 @@ def main():
         print(" > loading model...")
         cgnn_3d = load_from_checkpoint(2, split, fold, "CGNN-3D")
         cgnn_3d.train(False)
-        for data in tqdm.tqdm(test_data, desc=" > inference..."):
+        n = 0
+        pbar = tqdm.tqdm(test_data)
+        for data in pbar:
+            pbar.set_description(f" > inference (df size = {n})")
             deltas = inference(data, cgnn_3d)
             deltas["fold"] = fold
             if all_deltas is None:
                 all_deltas = deltas
             else:
                 all_deltas = pd.concat((all_deltas, deltas), axis="index")
+            n = all_deltas.shape[0]
     all_deltas["split_type"] = split
-    all_deltas
+    all_deltas.to_csv(f"crocodoc_{split.replace('-','_')}.csv")
 
 if __name__ == "__main__":
     main()

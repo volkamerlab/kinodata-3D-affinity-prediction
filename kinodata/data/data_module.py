@@ -1,13 +1,13 @@
 from copy import deepcopy
 from functools import partial
-from itertools import product
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Optional, Type, Union
 
 import pandas as pd
+import numpy as np
 from torch_geometric.data import InMemoryDataset
 from torch_geometric.data.lightning_datamodule import LightningDataset
-from torch_geometric.loader.dataloader import DataLoader
+from torch_geometric.data.dataset import IndexType
 from torch_geometric.transforms import Compose
 
 from kinodata.configuration import Config
@@ -34,6 +34,19 @@ def assert_unique_value(key: str, *kwarg_dicts: Optional[Kwargs], msg: str = "")
     assert len(set(values)) <= 1, msg
 
 
+def create_dataset(
+    cls: Type[InMemoryDataset],
+    kwargs: Kwargs,
+    split: Union[int, np.integer, IndexType, None],
+    one_time_transform: Callable[[InMemoryDataset], InMemoryDataset],
+) -> Optional[InMemoryDataset]:
+    if split is None:
+        return None
+    dataset = cls(**kwargs)
+    if one_time_transform is not None:
+        dataset = one_time_transform(dataset)
+    return dataset[split]
+
 def make_data_module(
     split: Split,
     batch_size: int,
@@ -52,14 +65,6 @@ def make_data_module(
 
     if split.test_split is not None and test_kwargs is None:
         test_kwargs = deepcopy(val_kwargs)
-
-    def create_dataset(cls, kwargs, split, ott) -> Optional[InMemoryDataset]:
-        if split is None:
-            return None
-        dataset = cls(**kwargs)
-        if ott is not None:
-            dataset = ott(dataset)
-        return dataset[split]
 
     train_dataset = create_dataset(
         dataset_cls, train_kwargs, split.train_split, one_time_transform

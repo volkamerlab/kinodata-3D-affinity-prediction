@@ -87,7 +87,14 @@ def process_raw_data(
         removeHs=remove_hydrogen,
     )
     if activity_type_subset is not None:
-        df = df.query("activities.standard_type in @activity_type_subset")
+        mask = None
+        for atype in activity_type_subset:
+            is_type = df["activities.standard_type"] == atype
+            if mask is None:
+                mask = is_type
+            else:
+                mask = is_type | mask
+        df = df[mask]
     df["activities.standard_value"] = df["activities.standard_value"].astype(float)
     df["docking.predicted_rmsd"] = df["docking.predicted_rmsd"].astype(float)
 
