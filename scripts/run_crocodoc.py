@@ -35,7 +35,7 @@ config = config.update_from_args()
 # transform concatenates pocket and ligand nodes (in that order)
 transform = TransformToComplexGraph() # pocket - ligand
 
-def prepare_data(split_fold):
+def prepare_data(split_fold, relevant_klifs_ids):
     rmsd_filter = FilterDockingRMSD(config["filter_rmsd_max_value"])
     data_cls = Filtered(
         KinodataDocked(),
@@ -49,7 +49,20 @@ def prepare_data(split_fold):
         split.test_split,
         None,
     )
-    return test_data
+    def is_relevant(data):
+        try:
+            ident = data["ident"].item()
+            relevant_klifs_ids.loc[ident]
+            return True
+        except KeyError:
+            return False
+    
+    data_list = [data for data in test_data if is_relevant(data)]
+    for data in data_list:
+        ident = data["ident"].item()
+        data["similar.klifs_structure_id"] = relevant_klifs_ids.loc[ident]["similar.klifs_structure_id"]
+    return data_list
+    
 
 model_dir = Path("models")
 assert model_dir.exists(), (model_dir, Path().absolute())
@@ -91,6 +104,7 @@ def load_from_checkpoint(
     model.load_state_dict(ckp["state_dict"])
     return model
 
+@torch.no_grad()
 def inference(
     data,
     model,
@@ -108,23 +122,22 @@ def inference(
     source_nodes = []
     target_nodes = []
 
-    with torch.no_grad():
-        graf = transform(data)
-        graf[NodeType.Complex].batch = torch.zeros(graf[NodeType.Complex].x.shape[0]).type(torch.int64)
-        structural_interactions.hacky_mask = None
-        edges, _ = structural_interactions(graf)
-        structural_interactions.hacky_mask = torch.ones(len(edges.T)).type(torch.bool)
-        edge_index, pl_edges, pl_edge_idcs = get_pl_edges(graf)
-        
-        reference_prediction = model(graf)
-        for candidate_edge in pl_edge_idcs:
-            # Compute change against reference prediction
-            structural_interactions.hacky_mask[candidate_edge] = False
-            deltas.append((reference_prediction - model(graf)[0]).item())
-            structural_interactions.hacky_mask[candidate_edge] = True
-            source_node, target_node = edge_index.T[candidate_edge]
-            source_nodes.append(source_node.item())
-            target_nodes.append(target_node.item())
+    graf = transform(data)
+    graf[NodeType.Complex].batch = torch.zeros(graf[NodeType.Complex].x.shape[0]).type(torch.int64)
+    structural_interactions.hacky_mask = None
+    edges, _ = structural_interactions(graf)
+    structural_interactions.hacky_mask = torch.ones(len(edges.T)).type(torch.bool)
+    edge_index, pl_edges, pl_edge_idcs = get_pl_edges(graf)
+    
+    reference_prediction = model(graf)
+    for candidate_edge in pl_edge_idcs:
+        # Compute change against reference prediction
+        structural_interactions.hacky_mask[candidate_edge] = False
+        deltas.append((reference_prediction - model(graf)[0]).item())
+        structural_interactions.hacky_mask[candidate_edge] = True
+        source_node, target_node = edge_index.T[candidate_edge]
+        source_nodes.append(source_node.item())
+        target_nodes.append(target_node.item())
             
     deltas = pd.DataFrame({
         'delta': deltas, 
@@ -141,27 +154,23 @@ def inference(
 
 def main():
     split = config.get("split_type")
-    all_deltas = None
-    for fold in range(5):
+    relevant_klifs_ids = pd.read_csv("data/crocodoc_relevant_klifs_ids.csv").set_index("ident")
+    for fold in [0,1,2,3,4]:
         print(f"Crocodoc for split/5-fold-cv {split}/{fold}")
         print(" > loading data...")
-        test_data = prepare_data(fold)
+        test_data = prepare_data(fold, relevant_klifs_ids)
         print(" > loading model...")
         cgnn_3d = load_from_checkpoint(2, split, fold, "CGNN-3D")
         cgnn_3d.train(False)
-        n = 0
         pbar = tqdm.tqdm(test_data)
         for data in pbar:
-            pbar.set_description(f" > inference (df size = {n})")
+            ident = data["ident"].item()
+            pbar.set_description(f" > inference")
             deltas = inference(data, cgnn_3d)
             deltas["fold"] = fold
-            if all_deltas is None:
-                all_deltas = deltas
-            else:
-                all_deltas = pd.concat((all_deltas, deltas), axis="index")
-            n = all_deltas.shape[0]
-    all_deltas["split_type"] = split
-    all_deltas.to_csv(f"crocodoc_{split.replace('-','_')}.csv")
+            deltas["klifs_structure_id"] = data["similar.klifs_structure_id"]
+            deltas.to_csv(f"data/crocodoc_out/delta_{ident}.csv", index=False)
+            
 
 if __name__ == "__main__":
     main()

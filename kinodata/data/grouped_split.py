@@ -64,7 +64,7 @@ class KinodataKFoldSplit:
 
     @singledispatchmethod
     def cache_dir(self, dataset) -> Path:
-        raise NotImplementedError(f"cahe_dir({type(dataset)})")
+        raise NotImplementedError(f"cache_dir({type(dataset)})")
 
     @cache_dir.register
     def _(self, dataset: KinodataDocked) -> Path:
