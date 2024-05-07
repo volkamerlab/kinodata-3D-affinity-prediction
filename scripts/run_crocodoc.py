@@ -155,6 +155,8 @@ def inference(
 def main():
     split = config.get("split_type")
     relevant_klifs_ids = pd.read_csv("data/crocodoc_relevant_klifs_ids.csv").set_index("ident")
+    
+    # TODO Michael run folds 2,3,4
     for fold in [0,1,2,3,4]:
         print(f"Crocodoc for split/5-fold-cv {split}/{fold}")
         print(" > loading data...")
