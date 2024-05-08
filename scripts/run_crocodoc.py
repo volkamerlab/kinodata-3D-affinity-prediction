@@ -118,7 +118,18 @@ def inference(
         pl_edge_idcs = torch.where(pl_edges)[0]
         return edges, pl_edges, pl_edge_idcs
     
+    
+    def get_reverse_edge_idc(edges, edge):
+        row, col = edges
+        rev_edges = torch.stack((col, row))
+        idx = torch.where((rev_edges.T == edge).prod(1))[0]
+        if idx.numel() == 0:
+            return None
+        assert torch.allclose(edge, rev_edges.T[idx])
+        return idx
+        
     deltas = []
+    directed = []
     source_nodes = []
     target_nodes = []
 
@@ -130,17 +141,33 @@ def inference(
     edge_index, pl_edges, pl_edge_idcs = get_pl_edges(graf)
     
     reference_prediction = model(graf)
-    for candidate_edge in pl_edge_idcs:
-        # Compute change against reference prediction
-        structural_interactions.hacky_mask[candidate_edge] = False
-        deltas.append((reference_prediction - model(graf)[0]).item())
-        structural_interactions.hacky_mask[candidate_edge] = True
-        source_node, target_node = edge_index.T[candidate_edge]
+    done = set()
+    for candidate_edge_idc in pl_edge_idcs:
+        # Get edges
+        if candidate_edge_idc.item() in done:
+            continue
+        edge = edge_index.T[candidate_edge_idc]
+        source_node, target_node = edge
         source_nodes.append(source_node.item())
         target_nodes.append(target_node.item())
+        rev_edge_idc = get_reverse_edge_idc(edge_index, edge)
+        # Compute change against reference prediction
+        structural_interactions.hacky_mask[candidate_edge_idc] = False
+        if rev_edge_idc is not None:
+            directed.append(False)
+            structural_interactions.hacky_mask[rev_edge_idc] = False
+        else:
+            directed.append(True)
+        deltas.append((reference_prediction - model(graf)[0]).item())
+        structural_interactions.hacky_mask[candidate_edge_idc] = True
+        done.add(candidate_edge_idc.item())
+        if rev_edge_idc is not None:
+            structural_interactions.hacky_mask[rev_edge_idc] = True
+            done.add(rev_edge_idc.item())
             
     deltas = pd.DataFrame({
-        'delta': deltas, 
+        'delta': deltas,
+        "directed": directed,
         "source_node": source_nodes,
         "target_node": target_nodes,
     })
@@ -157,7 +184,7 @@ def main():
     relevant_klifs_ids = pd.read_csv("data/crocodoc_relevant_klifs_ids.csv").set_index("ident")
     
     # TODO Michael run folds 2,3,4
-    for fold in [0,1,2,3,4]:
+    for fold in [0,1]:
         print(f"Crocodoc for split/5-fold-cv {split}/{fold}")
         print(" > loading data...")
         test_data = prepare_data(fold, relevant_klifs_ids)
