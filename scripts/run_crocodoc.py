@@ -23,11 +23,16 @@ from kinodata.transform import TransformToComplexGraph
 import pandas as pd
 import tqdm
 
+HAS_GPU = torch.cuda.is_available()
+FORCE_CPU = False
+DEVICE = "cpu" if FORCE_CPU or not HAS_GPU else "cuda:0"
+
 cfg.register(
     "crocodoc",
     split_type="scaffold-k-fold",
     remove_hydrogen=True,
     filter_rmsd_max_value=2.0,
+    split_index=0,
 )
 config = cfg.get("crocodoc")
 config = config.update_from_args()
@@ -97,7 +102,7 @@ def load_from_checkpoint(
     p = path_to_model(rmsd_threshold, split_type, fold, model_type)
     model_ckpt = list(p.glob("**/*.ckpt"))[0]
     model_config = p / "config.json"
-    ckp = torch.load(model_ckpt, map_location="cpu")
+    ckp = torch.load(model_ckpt, map_location=DEVICE)
     config = cfg.Config(load_wandb_config(model_config))
     model = cls(config)
     assert isinstance(model, RegressionModel)
@@ -158,6 +163,7 @@ def inference(
             structural_interactions.hacky_mask[rev_edge_idc] = False
         else:
             directed.append(True)
+        graf = graf.to(DEVICE)
         deltas.append((reference_prediction - model(graf)[0]).item())
         structural_interactions.hacky_mask[candidate_edge_idc] = True
         done.add(candidate_edge_idc.item())
@@ -180,25 +186,24 @@ def inference(
 # TODO ligand node idx, pocket node idx, reference prediction, ident, delta
 
 def main():
+    config.update_from_args()
     split = config.get("split_type")
+    fold = config.get("split_index")
     relevant_klifs_ids = pd.read_csv("data/crocodoc_relevant_klifs_ids.csv").set_index("ident")
-    
-    # TODO Michael run folds 2,3,4
-    for fold in [0,1]:
-        print(f"Crocodoc for split/5-fold-cv {split}/{fold}")
-        print(" > loading data...")
-        test_data = prepare_data(fold, relevant_klifs_ids)
-        print(" > loading model...")
-        cgnn_3d = load_from_checkpoint(2, split, fold, "CGNN-3D")
-        cgnn_3d.train(False)
-        pbar = tqdm.tqdm(test_data)
-        for data in pbar:
-            ident = data["ident"].item()
-            pbar.set_description(f" > inference")
-            deltas = inference(data, cgnn_3d)
-            deltas["fold"] = fold
-            deltas["klifs_structure_id"] = data["similar.klifs_structure_id"]
-            deltas.to_csv(f"data/crocodoc_out/delta_{ident}.csv", index=False)
+    print(f"Crocodoc for split/5-fold-cv {split}/{fold}")
+    print(" > loading data...")
+    test_data = prepare_data(fold, relevant_klifs_ids)
+    print(" > loading model...")
+    cgnn_3d = load_from_checkpoint(2, split, fold, "CGNN-3D")
+    cgnn_3d.train(False)
+    pbar = tqdm.tqdm(test_data)
+    for data in pbar:
+        ident = data["ident"].item()
+        pbar.set_description(f" > inference")
+        deltas = inference(data, cgnn_3d)
+        deltas["fold"] = fold
+        deltas["klifs_structure_id"] = data["similar.klifs_structure_id"]
+        deltas.to_csv(f"data/crocodoc_out/delta_{ident}.csv", index=False)
             
 
 if __name__ == "__main__":
