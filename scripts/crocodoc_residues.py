@@ -131,7 +131,7 @@ def load_residue_atom_index(idents, parallelize = True):
 if __name__ == "__main__":
     config = make_config()
     print("Creating data list...")
-    data_list = prepare_data(config, 0)
+    data_list = prepare_data(config, config["split_index"])
    
     print("Checking data...") 
     for data in tqdm(data_list):
@@ -154,18 +154,35 @@ if __name__ == "__main__":
     print("Preparing residue masking transform...")
     transform = MaskResidues(index)
     
-    model = load_from_checkpoint(2, config["split_type"], 0, "CGNN-3D")
+    model = load_from_checkpoint(2, config["split_type"], config["split_index"], "CGNN-3D")
     trainer = Trainer(
         auto_select_gpus=True,
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
     )
+    predictions = trainer.predict(model, DataLoader(data_list, batch_size=32))
+    predictions = cat_many(predictions) 
+    meta = cat_many([{
+        "ident": data["ident"],
+    } for data in data_list])
+    df = pd.DataFrame({
+        "ident": meta["ident"].cpu().numpy(),
+        "reference_pred": predictions["pred"].cpu().numpy(),
+        "target": predictions["target"].cpu().numpy(),
+    })
+    split_type = config["split_type"].split("-")[0]
+    fold = int(config["split_index"])
+    df.to_csv(
+        _DATA / "crocodoc_out" / f"reference_{split_type}_{fold}.csv",
+        index=False
+    )
+    
     part = 0
     while True:
         print(len(transform))
         pre_filter = [data for data in data_list if transform.filter(data)]
         transformed_data_list = [transform(copy.copy(data)) for data in pre_filter]
         transformed_data_list = transformed_data_list
-        predictions = trainer.predict(model, DataLoader(transformed_data_list, batch_size=128))
+        predictions = trainer.predict(model, DataLoader(transformed_data_list, batch_size=32))
         predictions = cat_many(predictions) 
         meta = cat_many([{
             "ident": data["ident"],
@@ -174,8 +191,7 @@ if __name__ == "__main__":
         df = pd.DataFrame({
             "ident": meta["ident"].cpu().numpy(),
             "masked_residue": meta["masked_residue"].cpu().numpy(),
-            "pred": predictions["pred"].cpu().numpy(),
-            "target": predictions["target"].cpu().numpy(),
+            "masked_pred": predictions["pred"].cpu().numpy(),
         })
         df.to_csv(
            _DATA / "crocodoc_out" / f"residue_delta_part_{part}.csv",
