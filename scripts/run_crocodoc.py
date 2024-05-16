@@ -107,6 +107,7 @@ def load_from_checkpoint(
     model = cls(config)
     assert isinstance(model, RegressionModel)
     model.load_state_dict(ckp["state_dict"])
+    model = model.to(DEVICE)
     return model
 
 @torch.no_grad()
@@ -114,7 +115,7 @@ def inference(
     data,
     model,
 ) -> pd.DataFrame:
-    structural_interactions = model.interaction_module.interactions[1]
+    structural_interactions = model.interaction_module.interactions[1].to(DEVICE)
     def get_pl_edges(data):
         edges, _ = structural_interactions(data)
         n_pocket = data[NodeType.Pocket].z.shape[0]
@@ -140,11 +141,12 @@ def inference(
 
     graf = transform(data)
     graf[NodeType.Complex].batch = torch.zeros(graf[NodeType.Complex].x.shape[0]).type(torch.int64)
+    graf = graf.to(DEVICE)
     structural_interactions.hacky_mask = None
     edges, _ = structural_interactions(graf)
     structural_interactions.hacky_mask = torch.ones(len(edges.T)).type(torch.bool)
     edge_index, pl_edges, pl_edge_idcs = get_pl_edges(graf)
-    
+
     reference_prediction = model(graf)
     done = set()
     for candidate_edge_idc in pl_edge_idcs:
@@ -163,7 +165,6 @@ def inference(
             structural_interactions.hacky_mask[rev_edge_idc] = False
         else:
             directed.append(True)
-        graf = graf.to(DEVICE)
         deltas.append((reference_prediction - model(graf)[0]).item())
         structural_interactions.hacky_mask[candidate_edge_idc] = True
         done.add(candidate_edge_idc.item())

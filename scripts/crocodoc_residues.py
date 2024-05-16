@@ -164,8 +164,8 @@ if __name__ == "__main__":
         print(len(transform))
         pre_filter = [data for data in data_list if transform.filter(data)]
         transformed_data_list = [transform(copy.copy(data)) for data in pre_filter]
-        transformed_data_list = transformed_data_list[:4]
-        predictions = trainer.predict(model, DataLoader(transformed_data_list, batch_size=2))
+        transformed_data_list = transformed_data_list
+        predictions = trainer.predict(model, DataLoader(transformed_data_list, batch_size=128))
         predictions = cat_many(predictions) 
         meta = cat_many([{
             "ident": data["ident"],
