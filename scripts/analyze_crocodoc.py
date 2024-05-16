@@ -23,15 +23,13 @@ from kinodata.data.data_module import make_kinodata_module
 from kinodata.transform import TransformToComplexGraph
 from kinodata.data.io.read_klifs_mol2 import read_klifs_mol2
 
-import matplotlib.pyplot as plt
-import seaborn as sns
-
 import pandas as pd
 import numpy as np
 import tqdm
+import wandb
 
 pocketfile = (
-    lambda ident: f'../data/raw/mol2/pocket/{df.loc[ident]["similar.klifs_structure_id"]}_pocket.mol2'
+    lambda ident: f'data/raw/mol2/pocket/{df.loc[ident]["similar.klifs_structure_id"]}_pocket.mol2'
 )
 
 bitvec = lambda mask: np.array([c == "1" for c in mask])
@@ -71,7 +69,7 @@ def klifs_ifp(klifs_id):
 def ligand_atom_histogram(
     dataset: KinodataDocked,
     meta: pd.DataFrame,
-    key: KinodataChemblKey(),
+    key: KinodataChemblKey,
     identaids: pd.DataFrame,
 ):
     all_deltas = list()
@@ -83,7 +81,7 @@ def ligand_atom_histogram(
             n_ligand = len(demo_data["ligand"]["z"])
 
             ident_ = identaids.set_index("activities.activity_id").loc[ident]["ident"]
-            deltas = pd.read_csv(f"../data/crocodoc_out/delta_{ident_}.csv")
+            deltas = pd.read_csv(f"data/crocodoc_out/delta_{ident_}.csv")
             deltas["ligand_node"] = [
                 max(row["source_node"], row["target_node"]) - n_pocket
                 for _, row in deltas.iterrows()
@@ -99,13 +97,13 @@ def ligand_atom_histogram(
             all_deltas.append(deltas)
         except:
             pass
-    pd.concat(all_deltas).to_csv("../data/ligand_atom_deltas.csv")
+    pd.concat(all_deltas).to_csv("data/ligand_atom_deltas.csv")
 
 
-def ligand_atom_histogram(
+def pl_deltas(
     dataset: KinodataDocked,
     meta: pd.DataFrame,
-    key: KinodataChemblKey(),
+    key: KinodataChemblKey,
     identaids: pd.DataFrame,
 ):
     all_deltas = list()
@@ -117,7 +115,7 @@ def ligand_atom_histogram(
             n_ligand = len(demo_data["ligand"]["z"])
 
             ident_ = identaids.set_index("activities.activity_id").loc[ident]["ident"]
-            deltas = pd.read_csv(f"../data/crocodoc_out/delta_{ident_}.csv")
+            deltas = pd.read_csv(f"data/crocodoc_out/delta_{ident_}.csv")
             deltas["ligand_node"] = [
                 max(row["source_node"], row["target_node"]) - n_pocket
                 for _, row in deltas.iterrows()
@@ -155,20 +153,25 @@ def ligand_atom_histogram(
             all_deltas.append(deltas)
         except:
             pass
-    pd.concat(all_deltas).to_csv("../data/pl_deltas.csv")
+    pd.concat(all_deltas).to_csv("data/pl_deltas.csv")
 
 
 def main():
+    wandb.init(mode="disabled")
     dataset = KinodataDocked()
+    print('reading meta data')
     df = pd.read_csv(
-        "../data/raw/kinodata3d_meta.csv", index_col="activities.activity_id"
+        "data/raw/kinodata3d_meta.csv", index_col="activities.activity_id"
     )
     key = KinodataChemblKey(dataset)
-    identaids = pd.read_csv("../data/processed/ident_aids.csv")
+    identaids = pd.read_csv("data/processed/ident_aids.csv")
     crocodoc_done = pd.read_csv(
-        "../data/crocodoc_done.csv", header=None, names=["ident"]
+        "data/crocodoc_done.csv", header=None, names=["ident"]
     )
     identaids = identaids.merge(crocodoc_done, how="inner")
+    print('start analysis')
+    ligand_atom_histogram(dataset, df, key, identaids)
+    pl_deltas(dataset, df, key, identaids)
 
 
 if __name__ == "__main__":
