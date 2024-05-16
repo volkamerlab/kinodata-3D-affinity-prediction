@@ -52,5 +52,7 @@ class TransformToComplexGraph(BaseTransform):
             del data[NodeType.Pocket]
             del data[NodeType.Ligand, RelationType.Covalent, NodeType.Ligand]
             del data[NodeType.Pocket, RelationType.Covalent, NodeType.Pocket]
+        
+        assert data[NodeType.Complex].x.size(0) > data[NodeType.Complex, RelationType.Covalent, NodeType.Complex].edge_index.max()
 
         return data
