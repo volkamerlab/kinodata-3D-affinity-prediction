@@ -172,7 +172,7 @@ if __name__ == "__main__":
     split_type = config["split_type"].split("-")[0]
     fold = int(config["split_index"])
     df.to_csv(
-        _DATA / "crocodoc_out" / f"reference_{split_type}_{fold}.csv",
+        _DATA / "crocodoc_out" / "residue" / f"reference_{split_type}_{fold}.csv",
         index=False
     )
     
@@ -194,7 +194,7 @@ if __name__ == "__main__":
             "masked_pred": predictions["pred"].cpu().numpy(),
         })
         df.to_csv(
-           _DATA / "crocodoc_out" / f"residue_delta_part_{part}.csv",
+           _DATA / "crocodoc_out" / "residue" / f"residue_delta_{split_type}_{fold}_part_{part}.csv",
            index=False
         )
         part += 1
