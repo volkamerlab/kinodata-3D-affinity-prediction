@@ -158,6 +158,7 @@ if __name__ == "__main__":
     
     model = load_from_checkpoint(2, config["split_type"], config["split_index"], "CGNN-3D")
     trainer = Trainer(
+        logger=None,
         auto_select_gpus=True,
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
     )
