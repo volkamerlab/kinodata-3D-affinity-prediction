@@ -40,6 +40,7 @@ def make_config():
         remove_hydrogen=True,
         filter_rmsd_max_value=2.0,
         split_index=0,
+        edges_only=True,
     )
     config = cfg.get("crocodoc")
     config = config.update_from_args()
@@ -152,7 +153,7 @@ if __name__ == "__main__":
         del index[k]
     
     print("Preparing residue masking transform...")
-    transform = MaskResidues(index)
+    transform = MaskResidues(index, edges_only=config["edges_only"])
     
     model = load_from_checkpoint(2, config["split_type"], config["split_index"], "CGNN-3D")
     trainer = Trainer(
@@ -193,8 +194,11 @@ if __name__ == "__main__":
             "masked_residue": meta["masked_residue"].cpu().numpy(),
             "masked_pred": predictions["pred"].cpu().numpy(),
         })
+        file_name = f"residue_delta_{split_type}_{fold}_part_{part}"
+        if config["edges_only"]:
+            file_name += "_edges_only"
         df.to_csv(
-           _DATA / "crocodoc_out" / "residue" / f"residue_delta_{split_type}_{fold}_part_{part}.csv",
+           _DATA / "crocodoc_out" / "residue" / f"{file_name}.csv",
            index=False
         )
         part += 1

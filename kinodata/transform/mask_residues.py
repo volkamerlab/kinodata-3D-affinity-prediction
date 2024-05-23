@@ -11,7 +11,8 @@ from ..types import NodeType, RelationType
 def mask_any_one_residue(
     data: HeteroData,
     open_list: Dict[int, Set[int]],
-    residue_to_atom: Dict[int, Dict[int, List[int]]]
+    residue_to_atom: Dict[int, Dict[int, List[int]]],
+    edges_only: bool = True,
 ) -> Optional[HeteroData]:
     ident = int(data["ident"].item())
     open_residues = open_list[ident]
@@ -27,12 +28,20 @@ def mask_any_one_residue(
     edge_index, edge_attr = edge_store.edge_index, edge_store.edge_attr
     
     num_nodes = x.size(0)
-    mask = full((num_nodes,), 1, dtype=torch.bool)
-    mask[residue_atoms] = False
-    x = x[mask]
-    z = z[mask]
-    pos = pos[mask]
-    edge_index, edge_attr = subgraph(mask, edge_index, edge_attr, relabel_nodes=True)
+   
+    if edges_only:
+        residue_atoms = torch.tensor(residue_atoms)
+        row, col = edge_index
+        is_residue_pl_edge = torch.logical_or(torch.isin(row, residue_atoms), torch.isin(col, residue_atoms))
+        edge_index = torch.stack((row[~is_residue_pl_edge], col[~is_residue_pl_edge]))
+        edge_attr = edge_attr[~is_residue_pl_edge]
+    else:
+        mask = full((num_nodes,), 1, dtype=torch.bool)
+        mask[residue_atoms] = False
+        x = x[mask]
+        z = z[mask]
+        pos = pos[mask]
+        edge_index, edge_attr = subgraph(mask, edge_index, edge_attr, relabel_nodes=True)
     
     data.masked_residue = torch.tensor([int(residue_idx)])
     data[NodeType.Complex].x = x
@@ -46,8 +55,9 @@ class MaskResidues(BaseTransform):
     open_list: Dict[int, Set[int]]
     residue_to_atom: Dict[int, Dict[int, List[int]]]
     
-    def __init__(self, residue_to_atom: Dict[int, Dict[int, List[int]]]) -> None:
+    def __init__(self, residue_to_atom: Dict[int, Dict[int, List[int]]], edges_only: bool) -> None:
         super().__init__()
+        self.edges_only = edges_only
         self.residue_to_atom = residue_to_atom
         self.open_list = {
             ident: set(index.keys())
@@ -67,6 +77,7 @@ class MaskResidues(BaseTransform):
         return mask_any_one_residue(
             data,
             self.open_list,
-            self.residue_to_atom
+            self.residue_to_atom,
+            edges_only=self.edges_only
         )
     
