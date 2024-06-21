@@ -34,6 +34,7 @@ if __name__ == "__main__":
     config = config.update_from_file()
     config = config.update_from_args()
     config["need_distances"] = False
+    config["mask_pl_edges"] = True
     config["perturb_ligand_positions"] = 0.0
     config["perturb_pocket_positions"] = 0.0
     config["perturb_complex_positions"] = 0.1

@@ -57,6 +57,7 @@ class InteractionModule(Module):
 
     def process_weight(self, edge_weight: Tensor) -> Tensor:
         ...
+    
 
     def forward(self, data: HeteroData) -> Tuple[Tensor, Tensor]:
         edge_index, edge_attr, edge_weight = self.interactions(data)
@@ -99,11 +100,13 @@ class StructuralInteractions(InteractionModule):
         interaction_radius: float = 8.0,
         max_num_neighbors: int = 16,
         rbf_size: int = None,
+        mask_pl_edges: bool = False,
     ) -> None:
         super().__init__(hidden_channels, act, bias)
         self.interaction_radius = interaction_radius
         self.max_num_neighbors = max_num_neighbors
         self.rbf_size = rbf_size if rbf_size else hidden_channels
+        self.mask_pl_edges = mask_pl_edges
         self.distance_embedding = GaussianDistEmbedding(rbf_size, interaction_radius)
         self.lin = Linear(rbf_size, hidden_channels, bias=False)
 
@@ -117,6 +120,14 @@ class StructuralInteractions(InteractionModule):
         mask = distances <= self.interaction_radius
         edge_index = edge_index[:, mask]
         distances = distances[mask]
+        row, col = edge_index
+        if self.mask_pl_edges:
+            is_pl_egde = torch.logical_xor(
+                data[NodeType.Complex].is_pocket_atom[row].squeeze(),
+                data[NodeType.Complex].is_pocket_atom[col].squeeze()
+            )
+            self.hacky_mask = is_pl_egde
+            
         if self.hacky_mask is not None:
             edge_index = edge_index.T[self.hacky_mask].T
             distances = distances[self.hacky_mask]
@@ -163,6 +174,7 @@ class ComplexTransformer(RegressionModel):
         decoder_hidden_layers: int = 1,
         interaction_modes: List[str] = [],
         dropout: float = 0.1,
+        mask_pl_edges: bool = False,
     ) -> None:
         super().__init__(config)
         assert len(config["node_types"]) == 1
@@ -185,6 +197,7 @@ class ComplexTransformer(RegressionModel):
                     interaction_radius,
                     max_num_neighbors,
                     hidden_channels,
+                    mask_pl_edges,
                 )
             else:
                 raise ValueError(mode)
@@ -220,13 +233,22 @@ class ComplexTransformer(RegressionModel):
             )
         )
 
-    def forward(self, data: HeteroData) -> NodeEmbedding:
+    def initial_embed_nodes(self, data: HeteroData) -> Tensor:
         node_store = data[NodeType.Complex]
         node_repr = self.act(
             self.atomic_num_embedding(node_store.z)
             + self.lin_atom_features(node_store.x)
         )
+        return node_repr
+    
+    def initial_embed_edges(self, data: HeteroData):
         edge_index, edge_repr = self.interaction_module(data)
+        return edge_index, edge_repr
+        
+    def forward(self, data: HeteroData) -> Tensor:
+        node_store = data[NodeType.Complex]
+        node_repr = self.initial_embed_nodes(data)
+        edge_index, edge_repr = self.initial_embed_edges(data)
         for sparse_attention_block, norm in zip(
             self.attention_blocks, self.norm_layers
         ):
