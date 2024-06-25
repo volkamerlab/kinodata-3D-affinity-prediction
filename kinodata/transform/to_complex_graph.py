@@ -25,9 +25,9 @@ class TransformToComplexGraph(BaseTransform):
         is_pocket_atom = torch.zeros(
             (x.size(0), 1),
             device=x.device,
-            dtype=torch.int,
+            dtype=torch.bool,
         )
-        is_pocket_atom[:pocket_store.x.size(0)] = 1
+        is_pocket_atom[:pocket_store.x.size(0)] = True
         
         edge_index = torch.cat(
             (
