@@ -174,7 +174,7 @@ def make_model(config):
         config["residue_size"] = len(known_residues) + 1
     elif config.residue_featurization == ResidueFeaturization.Kissim:
         ResidueModel = KissimTransformer
-        config["residue_size"] = 6
+        config["residue_size"] = 12
     else:
         raise ValueError(config.residue_featurization)
     return DTIModel(config, LigandGINE, ResidueModel, GlobalSumDecoder)

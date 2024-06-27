@@ -59,7 +59,7 @@ amino_acid_to_int = {aa: idx for idx, aa in enumerate(sitealign_feature_lookup.i
 
 # we precomputed kissim fps
 def load_kissim(structure_id: int) -> pd.DataFrame:
-    path = _DATA / "processed" / "kissim" / f"{structure_id}.csv"
+    path = _DATA / "processed" / "kissim" / f"kissim_{structure_id}.csv"
     if path.exists():
         return pd.read_csv(path)
     return None
@@ -74,10 +74,13 @@ def add_kissim_fp(
     fp: pd.DataFrame,
     subset: Optional[List[str]] = None,
 ) -> Data:
-    if subset is not None:
-        fp = fp[list(set(subset))]
-    fp = torch.from_numpy(fp.values)
-    data.kissim_fp = fp.unsqueeze(0)
+    if fp is None:
+        fp = torch.zeros(85, 12)
+    else:
+        if subset is not None:
+            fp = fp[list(set(subset))]
+        fp = torch.from_numpy(fp.values)
+    data.kissim_fp = fp.unsqueeze(0).float()
     return data
 
 
