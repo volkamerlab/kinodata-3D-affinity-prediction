@@ -2,9 +2,9 @@ from typing import Dict, List, Optional
 
 import matplotlib.pyplot as plt
 import torch
+from torch import nn
 from torch import Tensor
 import wandb
-from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import pytorch_lightning as pl
 
@@ -32,7 +32,6 @@ def cat_many(
         key: torch.cat([ensure_tensor(sub_data, key) for sub_data in data], dim=dim)
         for key in subset
     }
-
 
 class RegressionModel(pl.LightningModule):
     log_scatter_plot: bool = False

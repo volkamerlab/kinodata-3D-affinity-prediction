@@ -5,6 +5,7 @@ import sys
 sys.path.append(".")
 sys.path.append("..")
 import wandb
+from torch_geometric.transforms import Compose
 
 import kinodata.configuration as configuration
 from kinodata.training import train
@@ -13,6 +14,7 @@ from kinodata.model.complex_transformer import ComplexTransformer, make_model
 from kinodata.types import NodeType
 from kinodata.data.dataset import apply_transform_instance_permament
 from kinodata.transform.to_complex_graph import TransformToComplexGraph
+from kinodata.transform.ligand_only import ToLigandOnlyComplex
 
 
 if __name__ == "__main__":
@@ -34,6 +36,8 @@ if __name__ == "__main__":
     config = config.update_from_file()
     config = config.update_from_args()
     config["need_distances"] = False
+    config["mask_pl_edges"] = False
+    config["ligand_only_3d"] = True
     config["perturb_ligand_positions"] = 0.0
     config["perturb_pocket_positions"] = 0.0
     config["perturb_complex_positions"] = 0.1
@@ -42,6 +46,11 @@ if __name__ == "__main__":
 
     for key, value in sorted(config.items(), key=lambda i: i[0]):
         print(f"{key}: {value}")
+    
+    ott = TransformToComplexGraph(remove_heterogeneous_representation=True) 
+    if config.get("ligand_only_3d", None) is not None:
+        ott = Compose([ott, ToLigandOnlyComplex()])
+
 
     wandb.init(config=config, project="kinodata-docked-rescore", tags=["transformer"])
     train(
@@ -51,9 +60,7 @@ if __name__ == "__main__":
             make_kinodata_module,
             one_time_transform=partial(
                 apply_transform_instance_permament,
-                transform=TransformToComplexGraph(
-                    remove_heterogeneous_representation=True
-                ),
+                transform=ott,
             ),
         ),
     )
