@@ -40,7 +40,7 @@ def make_config():
         remove_hydrogen=True,
         filter_rmsd_max_value=2.0,
         split_index=0,
-        edges_only=True,
+        edges_only=False,
     )
     config = cfg.get("crocodoc")
     config = config.update_from_args()
@@ -163,6 +163,7 @@ if __name__ == "__main__":
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
     )
     fold = int(config["split_index"])
+    split_type = config["split_type"].split("-")[0]
     if predict_reference:
         predictions = trainer.predict(model, DataLoader(data_list, batch_size=32))
         predictions = cat_many(predictions) 
@@ -174,7 +175,6 @@ if __name__ == "__main__":
             "reference_pred": predictions["pred"].cpu().numpy(),
             "target": predictions["target"].cpu().numpy(),
         })
-        split_type = config["split_type"].split("-")[0]
         df.to_csv(
             _DATA / "crocodoc_out" / "residue" / f"reference_{split_type}_{fold}.csv",
             index=False
