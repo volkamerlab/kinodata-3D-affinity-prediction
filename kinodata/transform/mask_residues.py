@@ -7,6 +7,31 @@ from torch_geometric.data import HeteroData
 
 from ..types import NodeType, RelationType
 
+protein_letters_3to1 = {
+  "ALA": "A",
+  "CYS": "C",
+  "ASP": "D",
+  "GLU": "E",
+  "PHE": "F",
+  "GLY": "G",
+  "HIS": "H",
+  "ILE": "I",
+  "LYS": "K",
+  "LEU": "L",
+  "MET": "M",
+  "ASN": "N",
+  "PRO": "P",
+  "GLN": "Q",
+  "ARG": "R",
+  "SER": "S",
+  "THR": "T",
+  "VAL": "V",
+  "TRP": "W",
+  "TYR": "Y",
+}
+
+protein_letters_1to3 = {v: k for k,v in protein_letters_3to1.items()}
+
 
 def mask_any_one_residue(
     data: HeteroData,
@@ -20,6 +45,8 @@ def mask_any_one_residue(
         data["masked_residue"] = torch.tensor([-1])
         return data
     residue_idx = open_residues.pop()
+    res_letter = data.pocket_sequence[int(residue_idx) - 1]
+    res_name = protein_letters_1to3[res_letter] if res_letter in protein_letters_1to3 else "???"
     residue_atoms = residue_to_atom[ident][residue_idx]
     
     node_store = data[NodeType.Complex]
@@ -44,6 +71,8 @@ def mask_any_one_residue(
         edge_index, edge_attr = subgraph(mask, edge_index, edge_attr, relabel_nodes=True)
     
     data.masked_residue = torch.tensor([int(residue_idx)])
+    data.masked_resname = res_name
+    data.masked_res_letter = res_letter
     data[NodeType.Complex].x = x
     data[NodeType.Complex].z = z
     data[NodeType.Complex].pos = pos

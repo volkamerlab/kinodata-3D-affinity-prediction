@@ -40,7 +40,7 @@ def make_config():
         remove_hydrogen=True,
         filter_rmsd_max_value=2.0,
         split_index=0,
-        edges_only=True,
+        edges_only=False,
     )
     config = cfg.get("crocodoc")
     config = config.update_from_args()
@@ -102,7 +102,12 @@ def prepare_data(config, split_fold):
         split.test_split,
         None,
     )
-    return [to_cplx(data) for data in test_data]
+    forbidden_seq = set(['KALGKGLFSMVIRITLKVVGLRILNLPHLILEYCKAKDIIRFLQQKNFLLLINWGIR',
+ 'LIGKGDSARLDYLVVGRLLQLVREP',
+ 'LIIGKGDFGKVELSALKVVDIIRLILDYLVVGRLLQLVRE',
+ 'NKMGEGGFGVVYKVAVKKLQFDQEIKVMAKCQENLVELLGFCLVYVYMPNGSLLDRLSCFLHENHHIHRDIKSANILLISDFGLA',
+ '_ALNVLDMSQKLYLLSSLDPYLLEMYSYLILEAPEGEIFNLLRQYLHSAMIIYRDLKPHNVLFIAA'])
+    return [to_cplx(data) for data in test_data if data.pocket_sequence not in forbidden_seq]
 
 def load_single_index(file: Path):
     with open(file, "r") as f:
@@ -186,16 +191,20 @@ if __name__ == "__main__":
         pre_filter = [data for data in data_list if transform.filter(data)]
         transformed_data_list = [transform(copy.copy(data)) for data in pre_filter]
         transformed_data_list = transformed_data_list
-        predictions = trainer.predict(model, DataLoader(transformed_data_list, batch_size=32))
+        predictions = trainer.predict(model, DataLoader(transformed_data_list, batch_size=32, shuffle=False))
         predictions = cat_many(predictions) 
         meta = cat_many([{
             "ident": data["ident"],
-            "masked_residue": data.masked_residue
+            "masked_residue": data.masked_residue,
         } for data in transformed_data_list])
+        masked_resname = [data.masked_resname for data in transformed_data_list]
+        masked_res_letter = [data.masked_res_letter for data in transformed_data_list]
         df = pd.DataFrame({
             "ident": meta["ident"].cpu().numpy(),
             "masked_residue": meta["masked_residue"].cpu().numpy(),
             "masked_pred": predictions["pred"].cpu().numpy(),
+            "masked_resname": masked_resname,
+            "masked_res_letter": masked_res_letter,
         })
         file_name = f"residue_delta_{split_type}_{fold}_part_{part}"
         if config["edges_only"]:
