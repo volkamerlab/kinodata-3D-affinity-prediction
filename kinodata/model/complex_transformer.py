@@ -99,6 +99,7 @@ class StructuralInteractions(InteractionModule):
         interaction_radius: float = 8.0,
         max_num_neighbors: int = 16,
         rbf_size: int = None,
+        interacting_node_type = NodeType.Complex: NodeType,
     ) -> None:
         super().__init__(hidden_channels, act, bias)
         self.interaction_radius = interaction_radius
@@ -106,10 +107,11 @@ class StructuralInteractions(InteractionModule):
         self.rbf_size = rbf_size if rbf_size else hidden_channels
         self.distance_embedding = GaussianDistEmbedding(rbf_size, interaction_radius)
         self.lin = Linear(rbf_size, hidden_channels, bias=False)
+        self.interacting_node_type = interacting_node_type
 
     def interactions(self, data: HeteroData) -> Tuple[Tensor, OptTensor, OptTensor]:
-        pos = data[NodeType.Complex].pos
-        batch = data[NodeType.Complex].batch
+        pos = data[self.interacting_node_type].pos
+        batch = data[self.interacting_node_type].batch
         edge_index = knn_graph(pos, self.max_num_neighbors + 1, batch, loop=True)
         distances = (pos[edge_index[0]] - pos[edge_index[1]]).pow(2).sum(dim=1).sqrt()
         mask = distances <= self.interaction_radius
@@ -161,7 +163,7 @@ class ComplexTransformer(RegressionModel):
     ) -> None:
         super().__init__(config)
         assert len(config["node_types"]) == 1
-        assert config["node_types"][0] == NodeType.Complex
+        self.node_type = config["node_types"]
         self.act = resolve_act(act)
         self.d_cut = interaction_radius
         self.max_num_neighbors = max_num_neighbors
@@ -170,7 +172,7 @@ class ComplexTransformer(RegressionModel):
         for mode in interaction_modes:
             if mode == "covalent":
                 module = CovalentInteractions(
-                    hidden_channels, act, intr_bias, config["node_types"][0]
+                    hidden_channels, act, intr_bias, self.node_type,
                 )
             elif mode == "structural":
                 module = StructuralInteractions(
@@ -180,6 +182,7 @@ class ComplexTransformer(RegressionModel):
                     interaction_radius,
                     max_num_neighbors,
                     hidden_channels,
+                    interacting_node_type = self.node_type,
                 )
             else:
                 raise ValueError(mode)
@@ -216,7 +219,7 @@ class ComplexTransformer(RegressionModel):
         )
 
     def forward(self, data: HeteroData) -> NodeEmbedding:
-        node_store = data[NodeType.Complex]
+        node_store = data[self.node_type]
         node_repr = self.act(
             self.atomic_num_embedding(node_store.z)
             + self.lin_atom_features(node_store.x)
