@@ -74,7 +74,7 @@ def remove_hydrogens(
 
     df_atom = df_atom[~is_h_mask]
     df_bond = df_bond[~is_h_bond]
-    df_atom.loc[:, "atom.id"] = relabeling[df_atom["atom.id"].values]
+    df_atom.loc[:, "atom.id"] = relabeling[df_atom["atom.id"].values].astype(np.int32)
     df_bond.loc[:, "source_atom_id"] = relabeling[df_bond["source_atom_id"].values]
     df_bond.loc[:, "target_atom_id"] = relabeling[df_bond["target_atom_id"].values]
 
@@ -173,8 +173,8 @@ def add_pocket_information(
     )
 
     if not residue_only:
-        data["pocket"].residue = torch.from_numpy(df_atom["residue.type_idx"].values)
-        data["ligand"].residue = 20 * torch.ones(data["ligand"].x.shape[0])
+        data[NodeType.Pocket].residue = torch.from_numpy(df_residue["residue.type_idx"].values)
+        data[NodeType.Ligand].residue = 20 * torch.ones(data["ligand"].x.shape[0])
 
         # # set element/atomic number feature
         # data["pocket"].z = torch.tensor(
