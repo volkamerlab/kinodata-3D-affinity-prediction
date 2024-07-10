@@ -14,9 +14,9 @@ class AddResidueType(BaseTransform):
         ligand_store = data[NodeType.Ligand]
         pocket_store = data[NodeType.Pocket]
 
-        lig_residue = one_hot(data[NodeType.Ligand].residue, num_classes=21)
+        lig_residue = one_hot(data[NodeType.Ligand].residue.to(torch.int64), num_classes=21)
         data[NodeType.Ligand].x = torch.cat(
-            [data[NodeType.Ligand].x, lig_residues], dim=1
+            [data[NodeType.Ligand].x, lig_residue], dim=1
         )
         pocket_residue = one_hot(data[NodeType.Pocket].residue, num_classes=21)
         data[NodeType.Pocket].x = torch.cat(

@@ -43,6 +43,9 @@ def prepare_pocket_information(
     df_residue["residue.type_idx"] = df_residue["residue.type"].apply(
         amino_acid_to_int.get
     )
+    df_atom["residue.type_idx"] = df_atom["residue.type"].apply(
+        amino_acid_to_int.get
+    )
 
     # set categorical integer feature for atom type / element
     # based on atomic numbers
@@ -173,7 +176,7 @@ def add_pocket_information(
     )
 
     if not residue_only:
-        data[NodeType.Pocket].residue = torch.from_numpy(df_residue["residue.type_idx"].values)
+        data[NodeType.Pocket].residue = torch.from_numpy(df_atom["residue.type_idx"].values)
         data[NodeType.Ligand].residue = 20 * torch.ones(data["ligand"].x.shape[0])
 
         # # set element/atomic number feature
