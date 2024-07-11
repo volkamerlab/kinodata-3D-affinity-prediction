@@ -75,13 +75,11 @@ def remove_hydrogens(
     relabeling = np.empty(df_atom.shape[0], dtype=int)
     relabeling[~is_h_mask] = np.arange(num_heavy)
 
-    df_atom = df_atom[~is_h_mask]
-    df_bond = df_bond[~is_h_bond]
-    df_atom.loc[:, "atom.id"] = relabeling[df_atom["atom.id"].values].astype(np.int32)
-    df_bond.loc[:, "source_atom_id"] = relabeling[df_bond["source_atom_id"].values]
-    df_bond.loc[:, "target_atom_id"] = relabeling[df_bond["target_atom_id"].values]
+    df_atom.loc[~is_h_mask, "atom.id"] = relabeling[df_atom[~is_h_mask]["atom.id"].values].astype(np.int32)
+    df_bond.loc[~is_h_bond, "source_atom_id"] = relabeling[df_bond[~is_h_bond]["source_atom_id"].values]
+    df_bond.loc[~is_h_bond, "target_atom_id"] = relabeling[df_bond[~is_h_bond]["target_atom_id"].values]
 
-    return df_atom, df_bond
+    return df_atom[~is_h_mask], df_bond[~is_h_bond]
 
 
 def longrange_to_onehot(

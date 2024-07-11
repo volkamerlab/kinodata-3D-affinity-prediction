@@ -521,6 +521,8 @@ def process_pyg(
         logging.warning(f"Exception: {e} when processing {complex}")
         return None
 
+    if data is None:
+        return None
     if require_kissim_residues:
         kissim_fp = load_kissim(complex.klifs_structure_id)
         if kissim_fp is None:
