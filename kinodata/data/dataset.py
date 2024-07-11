@@ -87,7 +87,8 @@ def process_raw_data(
         removeHs=remove_hydrogen,
     )
     if activity_type_subset is not None:
-        df = df.query("activities.standard_type in @activity_type_subset")
+        # df = df.query("activities.standard_type in @activity_type_subset")
+        df = df[df["activities.standard_type"].isin(activity_type_subset)]
     df["activities.standard_value"] = df["activities.standard_value"].astype(float)
     df["docking.predicted_rmsd"] = df["docking.predicted_rmsd"].astype(float)
 
@@ -140,7 +141,7 @@ def process_raw_data(
         fp.write_bytes(resp.content)
 
     pocket_mol2_files = {
-        int(fp.stem.split("_")[0]): fp for fp in (pocket_dir).iterdir()
+        int(fp.stem.split("_")[0]): fp for fp in pocket_dir.iterdir()
     }
     df["pocket_mol2_file"] = [
         pocket_mol2_files[row["similar.klifs_structure_id"]] for _, row in df.iterrows()
@@ -151,7 +152,6 @@ def process_raw_data(
 
     print("Adding pocket sequences...")
     # KLIFS API now sometimes decides to timeout
-    print(df.shape)
     while True:
         try:
             with CachedSequences(pocket_sequence_file) as sequence_cache:
@@ -168,7 +168,6 @@ def process_raw_data(
             print(f"Querying KLIFS for sequence from structure id raised {e}")
             print("Retrying..")
             sleep(10)
-    print(df.shape)
 
     # if pocket_sequence_file.exists():
     #     print(f"from cached file {pocket_sequence_file}.")
@@ -274,7 +273,7 @@ class KinodataDocked(InMemoryDataset):
         pre_transform: Optional[Callable] = None,
         pre_filter: Optional[Callable] = FilterActivityType([ActivityTypes.pic50]),
         post_filter: Optional[Callable] = None,
-        residue_representation: Literal["sequence", "structural", None] = "sequence",
+        residue_representation: Literal["sequence", "structural", None] = "structural",
         require_kissim_residues: bool = False,
         use_multiprocessing: bool = True,
         num_processes: Optional[int] = None,
@@ -286,11 +285,11 @@ class KinodataDocked(InMemoryDataset):
         self.use_multiprocessing = use_multiprocessing
         if self.use_multiprocessing:
             num_processes = num_processes if num_processes else os.cpu_count()
-        self.make_pyg_data = partial(
-            process_pyg,
-            residue_representation=self.residue_representation,
-            require_kissim_residues=self.require_kissim_residues,
-        )
+        # self.make_pyg_data = partial(
+            # process_pyg,
+            # residue_representation=self.residue_representation,
+            # require_kissim_residues=self.require_kissim_residues,
+        # )
         self.num_processes = num_processes
         self.post_filter = post_filter
         super().__init__(root, transform, pre_transform, pre_filter)
@@ -356,11 +355,16 @@ class KinodataDocked(InMemoryDataset):
 
     def make_data_list(self) -> List[HeteroData]:
         RDLogger.DisableLog("rdApp.*")
+    
+        # shut the hell up
+        lg = RDLogger.logger()
+        lg.setLevel(RDLogger.CRITICAL)
+
         data_list = []
         complex_info = ComplexInformation.from_raw(
             self.df, remove_hydrogen=self.remove_hydrogen
         )
-        if self.use_multiprocessing:
+        if False: #self.use_multiprocessing:
             tasks = [
                 (_complex, self.residue_representation, self.require_kissim_residues)
                 for _complex in complex_info
@@ -489,7 +493,7 @@ def _process_pyg(args) -> Optional[HeteroData]:
 
 def process_pyg(
     complex: Optional[ComplexInformation] = None,
-    residue_representation: Literal["sequence", "structural", None] = "sequence",
+    residue_representation: Literal["sequence", "structural", None] = "structural",
     require_kissim_residues: bool = False,
 ) -> Optional[HeteroData]:
     if complex is None:
@@ -517,6 +521,8 @@ def process_pyg(
         logging.warning(f"Exception: {e} when processing {complex}")
         return None
 
+    if data is None:
+        return None
     if require_kissim_residues:
         kissim_fp = load_kissim(complex.klifs_structure_id)
         if kissim_fp is None:
