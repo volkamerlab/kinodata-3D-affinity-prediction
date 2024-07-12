@@ -16,7 +16,7 @@ from kinodata.types import NodeType
 from kinodata.data.dataset import apply_transform_instance_permament
 from kinodata.data.featurization.atoms import AtomFeatures
 from kinodata.transform.to_complex_graph import TransformToComplexGraph
-from kinodata.transform.add_residue_type import AddResidueType
+from kinodata.transform.add_residue_type import AddResidueType, NUM_RESIDUES
 
 from rdkit import RDLogger
 
@@ -47,7 +47,7 @@ if __name__ == "__main__":
     config["perturb_ligand_positions"] = 0.0
     config["perturb_pocket_positions"] = 0.0
     config["perturb_complex_positions"] = 0.1
-    config["atom_attr_size"] = 21 + AtomFeatures.size
+    config["atom_attr_size"] = NUM_RESIDUES + AtomFeatures.size
     config["node_types"] = [NodeType.Complex]
     config["residue_representation"] = "structural"
 
