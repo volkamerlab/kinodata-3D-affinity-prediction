@@ -75,7 +75,7 @@ def remove_hydrogens(
 
     df_atom = df_atom[~is_h_mask]
     df_bond = df_bond[~is_h_bond]
-    df_atom.loc[:, "atom.id"] = relabeling[df_atom["atom.id"].values]
+    df_atom.loc[:, "atom.id"] = relabeling[df_atom["atom.id"].values].astype(np.int32)
     df_bond.loc[:, "source_atom_id"] = relabeling[df_bond["source_atom_id"].values]
     df_bond.loc[:, "target_atom_id"] = relabeling[df_bond["target_atom_id"].values]
 
