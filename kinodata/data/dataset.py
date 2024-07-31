@@ -87,7 +87,8 @@ def process_raw_data(
         removeHs=remove_hydrogen,
     )
     if activity_type_subset is not None:
-        df = df.query("activities.standard_type in @activity_type_subset")
+        # df = df.query("activities.standard_type in @activity_type_subset")
+        df = df[df['activities.standard_type'].isin(activity_type_subset)]
     df["activities.standard_value"] = df["activities.standard_value"].astype(float)
     df["docking.predicted_rmsd"] = df["docking.predicted_rmsd"].astype(float)
 
@@ -192,6 +193,7 @@ class ComplexInformation:
     molecule: Any
     activity_value: float
     activity_type: str
+    assay_ident: int
     pocket_mol2_file: Path
     docking_score: float
     posit_probability: float
@@ -209,6 +211,7 @@ class ComplexInformation:
                 row["molecule"],
                 float(row["activities.standard_value"]),
                 row["activities.standard_type"],
+                int(row["assays.chembl_id"][6:]),
                 Path(row["pocket_mol2_file"]),
                 float(row["docking.chemgauss_score"]),
                 float(row["docking.posit_probability"]),
@@ -532,4 +535,6 @@ def process_pyg(
     data.activity_type = complex.activity_type
     data.ident = complex.kinodata_ident
     data.smiles = complex.compound_smiles
+    data.assay_ident = complex.assay_ident
+    data.klifs_structure_id = complex.klifs_structure_id
     return data
