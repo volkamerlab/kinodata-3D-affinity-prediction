@@ -1,5 +1,5 @@
 from itertools import combinations
-from typing import List, Callable, Optional, Any, Union
+from typing import List, Callable, Optional, Any, Union, Dict
 
 from tqdm import tqdm
 from rdkit.Chem import PandasTools
@@ -27,46 +27,70 @@ def split_graph(
     del nodes_t["batch"]
 
     mask = edges.edge_index < size_s
-    edges_s = EdgeStorage(
-        {
-            "edge_index": (edges.edge_index[:, mask[0]]).T,
-            "edge_attr": edges.edge_attr[mask[0]],
-        }
-    )
-    edges_t = EdgeStorage(
-        {
-            "edge_index": (edges.edge_index[:, ~mask[1]] - size_s).T,
-            "edge_attr": edges.edge_attr[~mask[0]],
-        }
-    )
+    edges_s = {
+        "edge_index": (edges.edge_index[:, mask[0]]),
+        "edge_attr": edges.edge_attr[mask[0]],
+    }
+    edges_t = {
+        "edge_index": (edges.edge_index[:, ~mask[1]] - size_s),
+        "edge_attr": edges.edge_attr[~mask[0]],
+    }
 
     return nodes_s, edges_s, nodes_t, edges_t
 
 
-def pair_data(primary: HeteroData, secondary: HeteroData) -> HeteroData:
-    paired, _, _ = collate.collate(HeteroData, [primary, secondary], add_batch=True)
+def split_graphs(combined: HeteroData):
+    paired = HeteroData()
     s, bond_s, t, bond_t = split_graph(
-        paired[NodeType.Ligand],
-        paired[(NodeType.Ligand, RelationType.Covalent, NodeType.Ligand)],
+        combined[NodeType.Ligand],
+        combined[(NodeType.Ligand, RelationType.Covalent, NodeType.Ligand)],
     )
-    del paired[NodeType.Ligand]
-    del paired[(NodeType.Ligand, RelationType.Covalent, NodeType.Ligand)]
 
-    def set_subgraph(nodes: NodeStorage, edges: EdgeStorage, node_type: NodeType):
+    def set_subgraph(
+        nodes: NodeStorage, edges: Dict[str, torch.Tensor], node_type: NodeType
+    ):
         paired[node_type] = nodes
-        paired[(node_type, RelationType.Covalent, node_type)] = edges
+        paired[(node_type, RelationType.Covalent, node_type)].edge_index = edges[
+            "edge_index"
+        ]
+        paired[(node_type, RelationType.Covalent, node_type)].edge_attr = edges[
+            "edge_attr"
+        ]
 
     set_subgraph(s, bond_s, NodeType.LigandA)
     set_subgraph(t, bond_t, NodeType.LigandB)
 
     s, bond_s, t, bond_t = split_graph(
-        paired[NodeType.Pocket],
-        paired[(NodeType.Pocket, RelationType.Covalent, NodeType.Pocket)],
+        combined[NodeType.Pocket],
+        combined[(NodeType.Pocket, RelationType.Covalent, NodeType.Pocket)],
     )
-    del paired[NodeType.Pocket]
-    del paired[(NodeType.Pocket, RelationType.Covalent, NodeType.Pocket)]
     set_subgraph(s, bond_s, NodeType.PocketA)
     set_subgraph(t, bond_t, NodeType.PocketB)
+
+    return paired
+
+
+def join_metadata(paired: HeteroData, combined: HeteroData):
+    paired.y = combined.y[0] - combined.y[1]
+    for key in [
+        "scaffold",
+        "ident",
+        "klifs_structure_id",
+        "posit_prob",
+        "assay_ident",
+        "pocket_sequence",
+        "predicted_rmsd",
+        "activity_type",
+    ]:
+        paired["metadata"][key] = combined[key]
+
+    return paired
+
+
+def pair_data(primary: HeteroData, secondary: HeteroData) -> HeteroData:
+    combined, _, _ = collate.collate(HeteroData, [primary, secondary], add_batch=True)
+    paired = split_graphs(combined)
+    paired = join_metadata(paired, combined)
 
     return paired
 
@@ -105,12 +129,15 @@ class KinodataDockedPairs(KinodataDocked):
         data_list = super().make_data_list()
         data_list = super().filter_transform(data_list)
 
-        n_data = len(data_list)
-        pair_list = [
+        data_list = [
             pair_data(a, b)
             for a, b in tqdm(
                 filter(self.pair_filter, combinations(data_list, 2)),
             )
         ]
 
-        self.persist(pair_list)
+        self.persist(data_list)
+
+    def persist(self, data_list: List[HeteroData]):
+        data, slices = self.collate(data_list)
+        torch.save((data, slices), self.processed_paths[0])

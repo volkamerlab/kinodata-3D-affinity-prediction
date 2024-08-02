@@ -27,20 +27,20 @@ class TransformToComplexGraph(BaseTransform):
         ligand_edge_store = data[self.ligand_ty, RelationType.Covalent, self.ligand_ty]
         pocket_edge_store = data[self.pocket_ty, RelationType.Covalent, self.pocket_ty]
 
-        x = torch.cat((pocket_store.x, ligand_store.x), dim=0)
-        z = torch.cat((pocket_store.z, ligand_store.z), dim=0)
-        pos = torch.cat((pocket_store.pos, ligand_store.pos), dim=0)
+        x = torch.cat((pocket_store['x'], ligand_store['x']), dim=0)
+        z = torch.cat((pocket_store['z'], ligand_store['z']), dim=0)
+        pos = torch.cat((pocket_store['pos'], ligand_store['pos']), dim=0)
         edge_index = torch.cat(
             (
-                pocket_edge_store.edge_index,
-                ligand_edge_store.edge_index + pocket_store.x.size(0),
+                pocket_edge_store['edge_index'],
+                ligand_edge_store['edge_index'] + pocket_store['x'].size(0),
             ),
             dim=1,
         )
         edge_attr = torch.cat(
             (
-                pocket_edge_store.edge_attr,
-                ligand_edge_store.edge_attr,
+                pocket_edge_store['edge_attr'],
+                ligand_edge_store['edge_attr'],
             ),
             dim=0,
         )
