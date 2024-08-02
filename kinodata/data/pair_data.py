@@ -100,9 +100,11 @@ class KinodataDockedPairs(KinodataDocked):
         data_list = super().make_data_list()
         data_list = super().filter_transform(data_list)
 
+        n_data = len(data_list)
         pair_list = [
             pair_data(a, b)
-            for a, b in tqdm(filter(self.pair_filter, combinations(data_list, 2)))
+            for a, b in tqdm(filter(self.pair_filter, combinations(data_list, 2)),
+                             total=(n_data ** 2 - n_data) // 2)
         ]
 
         self.persist(pair_list)
