@@ -49,17 +49,13 @@ class InteractionModule(Module):
     def out(self, edge_repr: Tensor) -> Tensor:
         return self.act(edge_repr + self.bias)
 
-    def set_node_type(self, node_type: NodeType):
-        ...
+    def set_node_type(self, node_type: NodeType): ...
 
-    def interactions(self, data: HeteroData) -> Tuple[Tensor, OptTensor, OptTensor]:
-        ...
+    def interactions(self, data: HeteroData) -> Tuple[Tensor, OptTensor, OptTensor]: ...
 
-    def process_attr(self, edge_attr: Tensor) -> Tensor:
-        ...
+    def process_attr(self, edge_attr: Tensor) -> Tensor: ...
 
-    def process_weight(self, edge_weight: Tensor) -> Tensor:
-        ...
+    def process_weight(self, edge_weight: Tensor) -> Tensor: ...
 
     def forward(self, data: HeteroData) -> Tuple[Tensor, Tensor]:
         edge_index, edge_attr, edge_weight = self.interactions(data)
@@ -78,7 +74,7 @@ class CovalentInteractions(InteractionModule):
         hidden_channels: int,
         act: str = "none",
         bias: bool = False,
-        node_type: str = None,
+        node_type: str = NodeType.Complex,
     ) -> None:
         super().__init__(hidden_channels, act, bias)
         assert node_type is not None
@@ -183,9 +179,7 @@ class ComplexTransformer(RegressionModel):
         intr = []
         for mode in interaction_modes:
             if mode == "covalent":
-                module = CovalentInteractions(
-                    hidden_channels, act, intr_bias
-                )
+                module = CovalentInteractions(hidden_channels, act, intr_bias)
             elif mode == "structural":
                 module = StructuralInteractions(
                     hidden_channels,
