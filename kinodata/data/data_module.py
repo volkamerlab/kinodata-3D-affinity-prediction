@@ -18,6 +18,7 @@ from kinodata.data.dataset import (
     KinodataDocked,
     Filtered,
 )
+from kinodata.data.pair_data import KinodataDockedPairs
 import kinodata.transform as T
 from kinodata.types import NodeType
 
@@ -192,24 +193,27 @@ def make_kinodata_pair_module(
     config: Config,
     transforms=None,
     one_time_transform=None,
-    pair_filter=Callable[[tuple[HeteroData, HeteroData]], bool],
+    matching_properties: List[str] = [],
+    non_matching_properties: List[str] = [],
 ) -> LightningDataset:
-    dataset_cls = partial(KinodataDocked, remove_hydrogen=config.remove_hydrogen)
+    dataset_cls = partial(
+        KinodataDockedPairs,
+        matching_properties=matching_properties,
+        non_matching_properties=non_matching_properties,
+        remove_hydrogen=config.remove_hydrogen,
+    )
 
     def rmsd_filter(data: HeteroData):
         # print(data)
-        return data.predicted_rmsd < config.filter_rmsd_max_value
-        # rmsd = data['metadata']['predicted_rmsd']
-        # return torch.all(rmsd < config.filter_rmsd_max_value)
+        # return data.predicted_rmsd < config.filter_rmsd_max_value
+        rmsd = data["metadata"]["predicted_rmsd"]
+        return torch.all(rmsd < config.filter_rmsd_max_value)
 
     if config.filter_rmsd_max_value is not None:
-        dataset_cls = Filtered(
-                dataset_cls(), rmsd_filter
-        )
+        dataset_cls = Filtered(dataset_cls(), rmsd_filter)
 
     if transforms is None:
         transforms = []
-
 
     if config.perturb_ligand_positions and config.need_distances:
         raise NotImplementedError
@@ -259,4 +263,3 @@ def make_kinodata_pair_module(
     )
 
     return data_module
-

@@ -70,7 +70,7 @@ def split_graphs(combined: HeteroData):
     return paired
 
 
-def join_metadata(paired: HeteroData, combined: HeteroData):
+def join_metadata(paired: HeteroData, combined: HeteroData, matching_properties):
     paired.y = combined.y[0] - combined.y[1]
     for key in [
         "scaffold",
@@ -82,15 +82,18 @@ def join_metadata(paired: HeteroData, combined: HeteroData):
         "predicted_rmsd",
         "activity_type",
     ]:
-        paired["metadata"][key] = combined[key]
+        if key in matching_properties:
+            paired[key] = combined[key][0]
+        else:
+            paired["metadata"][key] = combined[key]
 
     return paired
 
 
-def pair_data(primary: HeteroData, secondary: HeteroData) -> HeteroData:
+def pair_data(primary: HeteroData, secondary: HeteroData, matching_properties: List[str]) -> HeteroData:
     combined, _, _ = collate.collate(HeteroData, [primary, secondary], add_batch=True)
     paired = split_graphs(combined)
-    paired = join_metadata(paired, combined)
+    paired = join_metadata(paired, combined, matching_properties)
 
     return paired
 
@@ -115,10 +118,12 @@ class PropertyPairing(Callable):
 class KinodataDockedPairs(KinodataDocked):
     def __init__(
         self,
-        pair_filter: Callable[[tuple[HeteroData, HeteroData]], bool],
+        matching_properties: List[str] = [],
+        non_matching_properties: List[str] = [],
         **kwargs
     ):
-        self.pair_filter = pair_filter
+        self.matching_properties = matching_properties
+        self.non_matching_properties = non_matching_properties
         super().__init__(**kwargs)
 
     @property
@@ -129,15 +134,15 @@ class KinodataDockedPairs(KinodataDocked):
         data_list = super().make_data_list()
         data_list = super().filter_transform(data_list)
 
+        pair_filter = PropertyPairing(
+            self.matching_properties,
+            self.non_matching_properties,
+        )
         data_list = [
-            pair_data(a, b)
+            pair_data(a, b, self.matching_properties)
             for a, b in tqdm(
-                filter(self.pair_filter, combinations(data_list, 2)),
+                filter(pair_filter, combinations(data_list, 2)),
             )
         ]
 
         self.persist(data_list)
-
-    def persist(self, data_list: List[HeteroData]):
-        data, slices = self.collate(data_list)
-        torch.save((data, slices), self.processed_paths[0])
