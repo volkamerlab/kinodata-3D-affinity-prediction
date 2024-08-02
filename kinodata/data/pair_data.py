@@ -23,17 +23,19 @@ def split_graph(
     nodes_t = NodeStorage(
         {k: nodes[k][~mask] for k in keys if nodes[k].size(0) == len(mask)}
     )
+    del nodes_s["batch"]
+    del nodes_t["batch"]
 
     mask = edges.edge_index < size_s
     edges_s = EdgeStorage(
         {
-            "edge_index": edges.edge_index[:, mask[0]],
+            "edge_index": (edges.edge_index[:, mask[0]]).T,
             "edge_attr": edges.edge_attr[mask[0]],
         }
     )
     edges_t = EdgeStorage(
         {
-            "edge_index": edges.edge_index[:, ~mask[1]] - size_s,
+            "edge_index": (edges.edge_index[:, ~mask[1]] - size_s).T,
             "edge_attr": edges.edge_attr[~mask[0]],
         }
     )
@@ -108,7 +110,6 @@ class KinodataDockedPairs(KinodataDocked):
             pair_data(a, b)
             for a, b in tqdm(
                 filter(self.pair_filter, combinations(data_list, 2)),
-                total=(n_data**2 - n_data) // 2,
             )
         ]
 
