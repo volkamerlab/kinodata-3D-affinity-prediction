@@ -49,6 +49,9 @@ class InteractionModule(Module):
     def out(self, edge_repr: Tensor) -> Tensor:
         return self.act(edge_repr + self.bias)
 
+    def set_node_type(self, node_type: NodeType):
+        ...
+
     def interactions(self, data: HeteroData) -> Tuple[Tensor, OptTensor, OptTensor]:
         ...
 
@@ -82,6 +85,9 @@ class CovalentInteractions(InteractionModule):
         self.node_type = node_type
         self.lin = Linear(NUM_BOND_TYPES, hidden_channels)
 
+    def set_node_type(self, node_type: NodeType):
+        self.node_type = node_type
+
     def interactions(self, data: HeteroData) -> Tuple[Tensor, OptTensor, OptTensor]:
         edge_store = data[self.node_type, RelationType.Covalent, self.node_type]
         return edge_store.edge_index, edge_store.edge_attr, None
@@ -99,6 +105,7 @@ class StructuralInteractions(InteractionModule):
         interaction_radius: float = 8.0,
         max_num_neighbors: int = 16,
         rbf_size: int = None,
+        node_type: NodeType = NodeType.Complex,
     ) -> None:
         super().__init__(hidden_channels, act, bias)
         self.interaction_radius = interaction_radius
@@ -106,10 +113,14 @@ class StructuralInteractions(InteractionModule):
         self.rbf_size = rbf_size if rbf_size else hidden_channels
         self.distance_embedding = GaussianDistEmbedding(rbf_size, interaction_radius)
         self.lin = Linear(rbf_size, hidden_channels, bias=False)
+        self.node_type = node_type
+
+    def set_node_type(self, node_type: NodeType):
+        self.node_type = node_type
 
     def interactions(self, data: HeteroData) -> Tuple[Tensor, OptTensor, OptTensor]:
-        pos = data[NodeType.Complex].pos
-        batch = data[NodeType.Complex].batch
+        pos = data[self.node_type].pos
+        batch = data[self.node_type].batch
         edge_index = knn_graph(pos, self.max_num_neighbors + 1, batch, loop=True)
         distances = (pos[edge_index[0]] - pos[edge_index[1]]).pow(2).sum(dim=1).sqrt()
         mask = distances <= self.interaction_radius
@@ -130,6 +141,10 @@ class CombinedInteractions(Module):
             len(set([intr.hidden_channels for intr in interactions])) == 1
         ), "Interactions should not map edge representation to different number of hidden channels."
         self.bias = Parameter(torch.zeros(interactions[0].hidden_channels))
+
+    def set_node_type(self, node_type: NodeType):
+        for module in self.interactions:
+            module.set_node_type(node_type)
 
     def forward(self, data: HeteroData) -> Tuple[Tensor, Tensor]:
         edge_indices, edge_reprs = zip(*[intr(data) for intr in self.interactions])
@@ -160,8 +175,7 @@ class ComplexTransformer(RegressionModel):
         dropout: float = 0.1,
     ) -> None:
         super().__init__(config)
-        assert len(config["node_types"]) == 1
-        assert config["node_types"][0] == NodeType.Complex
+        self.node_type = config["node_types"][0]
         self.act = resolve_act(act)
         self.d_cut = interaction_radius
         self.max_num_neighbors = max_num_neighbors
@@ -170,7 +184,7 @@ class ComplexTransformer(RegressionModel):
         for mode in interaction_modes:
             if mode == "covalent":
                 module = CovalentInteractions(
-                    hidden_channels, act, intr_bias, config["node_types"][0]
+                    hidden_channels, act, intr_bias
                 )
             elif mode == "structural":
                 module = StructuralInteractions(
@@ -215,8 +229,12 @@ class ComplexTransformer(RegressionModel):
             )
         )
 
+    def set_node_type(self, node_type: NodeType):
+        self.node_type = node_type
+        self.interaction_module.set_node_type(self.node_type)
+
     def message_passing(self, data: HeteroData):
-        node_store = data[NodeType.Complex]
+        node_store = data[self.node_type]
         node_repr = self.act(
             self.atomic_num_embedding(node_store.z)
             + self.lin_atom_features(node_store.x)
@@ -232,7 +250,7 @@ class ComplexTransformer(RegressionModel):
         return node_repr
 
     def graph_representation(self, data: HeteroData):
-        node_store = data[NodeType.Complex]
+        node_store = data[self.node_type]
         node_repr = self.message_passing(data)
         graph_repr = self.aggr(node_repr, node_store.batch)
         return graph_repr

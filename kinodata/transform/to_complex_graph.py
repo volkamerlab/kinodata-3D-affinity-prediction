@@ -6,18 +6,26 @@ from ..types import NodeType, RelationType
 
 
 class TransformToComplexGraph(BaseTransform):
-    def __init__(self, remove_heterogeneous_representation: bool = False):
+    def __init__(
+        self,
+        remove_heterogeneous_representation: bool = False,
+        ligand_ty: NodeType = NodeType.Ligand,
+        pocket_ty: NodeType = NodeType.Pocket,
+        complex_ty: NodeType = NodeType.Complex,
+    ):
         self.remove_heterogeneous_representation = remove_heterogeneous_representation
+        self.ligand_ty = ligand_ty
+        self.pocket_ty = pocket_ty
+        self.complex_ty = complex_ty
 
-    def __call__(self, data: HeteroData) -> HeteroData:
-        ligand_store = data[NodeType.Ligand]
-        pocket_store = data[NodeType.Pocket]
-        ligand_edge_store = data[
-            NodeType.Ligand, RelationType.Covalent, NodeType.Ligand
-        ]
-        pocket_edge_store = data[
-            NodeType.Pocket, RelationType.Covalent, NodeType.Pocket
-        ]
+    def __call__(
+        self,
+        data: HeteroData,
+    ) -> HeteroData:
+        ligand_store = data[self.ligand_ty]
+        pocket_store = data[self.pocket_ty]
+        ligand_edge_store = data[self.ligand_ty, RelationType.Covalent, self.ligand_ty]
+        pocket_edge_store = data[self.pocket_ty, RelationType.Covalent, self.pocket_ty]
 
         x = torch.cat((pocket_store.x, ligand_store.x), dim=0)
         z = torch.cat((pocket_store.z, ligand_store.z), dim=0)
@@ -37,20 +45,20 @@ class TransformToComplexGraph(BaseTransform):
             dim=0,
         )
 
-        data[NodeType.Complex].x = x
-        data[NodeType.Complex].z = z
-        data[NodeType.Complex].pos = pos
-        data[
-            NodeType.Complex, RelationType.Covalent, NodeType.Complex
-        ].edge_index = edge_index
-        data[
-            NodeType.Complex, RelationType.Covalent, NodeType.Complex
-        ].edge_attr = edge_attr
+        data[self.complex_ty].x = x
+        data[self.complex_ty].z = z
+        data[self.complex_ty].pos = pos
+        data[self.complex_ty, RelationType.Covalent, self.complex_ty].edge_index = (
+            edge_index
+        )
+        data[self.complex_ty, RelationType.Covalent, self.complex_ty].edge_attr = (
+            edge_attr
+        )
 
         if self.remove_heterogeneous_representation:
-            del data[NodeType.Ligand]
-            del data[NodeType.Pocket]
-            del data[NodeType.Ligand, RelationType.Covalent, NodeType.Ligand]
-            del data[NodeType.Pocket, RelationType.Covalent, NodeType.Pocket]
+            del data[self.ligand_ty]
+            del data[self.pocket_ty]
+            del data[self.ligand_ty, RelationType.Covalent, self.ligand_ty]
+            del data[self.pocket_ty, RelationType.Covalent, self.pocket_ty]
 
         return data
