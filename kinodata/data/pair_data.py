@@ -1,67 +1,70 @@
-import pandas as pd
-from rdkit.Chem import PandasTools
-import numpy as np
-import matplotlib.pyplot as plt
+from itertools import combinations
 from typing import List, Callable, Optional, Any, Union
-from kinodata.data.dataset import KinodataDocked
+
+from tqdm import tqdm
+from rdkit.Chem import PandasTools
+import torch
 from torch_geometric.data import Data, InMemoryDataset, collate, HeteroData
 from torch_geometric.data.storage import NodeStorage, EdgeStorage
-from tqdm import tqdm
-from itertools import combinations
-import torch
+
+from kinodata.types import NodeType, RelationType
+from kinodata.data.dataset import KinodataDocked
+
+
+def split_graph(
+    nodes: NodeStorage, edges: EdgeStorage
+) -> (NodeStorage, EdgeStorage, NodeStorage, EdgeStorage):
+    keys = list(nodes.to_dict().keys())
+    mask = nodes.batch == 0
+    size_s = nodes.ptr[1]
+    nodes_s = NodeStorage(
+        {k: nodes[k][mask] for k in keys if nodes[k].size(0) == len(mask)}
+    )
+    nodes_t = NodeStorage(
+        {k: nodes[k][~mask] for k in keys if nodes[k].size(0) == len(mask)}
+    )
+
+    mask = edges.edge_index < size_s
+    edges_s = EdgeStorage(
+        {
+            "edge_index": edges.edge_index[:, mask[0]],
+            "edge_attr": edges.edge_attr[mask[0]],
+        }
+    )
+    edges_t = EdgeStorage(
+        {
+            "edge_index": edges.edge_index[:, ~mask[1]] - size_s,
+            "edge_attr": edges.edge_attr[~mask[0]],
+        }
+    )
+
+    return nodes_s, edges_s, nodes_t, edges_t
 
 
 def pair_data(primary: HeteroData, secondary: HeteroData) -> HeteroData:
-    def split_graph(
-        nodes: NodeStorage, edges: EdgeStorage
-    ) -> (NodeStorage, EdgeStorage, NodeStorage, EdgeStorage):
-        keys = list(nodes.to_dict().keys())
-        mask = nodes.batch == 0
-        size_s = nodes.ptr[1]
-        nodes_s = NodeStorage(
-            {k: nodes[k][mask] for k in keys if nodes[k].size(0) == len(mask)}
-        )
-        nodes_t = NodeStorage(
-            {k: nodes[k][~mask] for k in keys if nodes[k].size(0) == len(mask)}
-        )
-
-        mask = edges.edge_index < size_s
-        edges_s = EdgeStorage(
-            {
-                "edge_index": edges.edge_index[:, mask[0]],
-                "edge_attr": edges.edge_attr[mask[0]],
-            }
-        )
-        edges_t = EdgeStorage(
-            {
-                "edge_index": edges.edge_index[:, ~mask[1]] - size_s,
-                "edge_attr": edges.edge_attr[~mask[0]],
-            }
-        )
-
-        return nodes_s, edges_s, nodes_t, edges_t
-
     paired, _, _ = collate.collate(HeteroData, [primary, secondary], add_batch=True)
     s, bond_s, t, bond_t = split_graph(
-        paired["ligand"], paired[("ligand", "bond", "ligand")]
+        paired[NodeType.Ligand],
+        paired[(NodeType.Ligand, RelationType.Covalent, NodeType.Ligand)],
     )
-    del paired["ligand"]
-    del paired[("ligand", "bond", "ligand")]
+    del paired[NodeType.Ligand]
+    del paired[(NodeType.Ligand, RelationType.Covalent, NodeType.Ligand)]
 
-    def set_subgraph(nodes: NodeStorage, edges: EdgeStorage, name: str):
-        paired[name] = nodes
-        paired[(name, "bond", name)] = edges
+    def set_subgraph(nodes: NodeStorage, edges: EdgeStorage, node_type: NodeType):
+        paired[node_type] = nodes
+        paired[(node_type, RelationType.Covalent, node_type)] = edges
 
-    set_subgraph(s, bond_s, "ligand_s")
-    set_subgraph(t, bond_t, "ligand_t")
+    set_subgraph(s, bond_s, NodeType.LigandA)
+    set_subgraph(t, bond_t, NodeType.LigandB)
 
     s, bond_s, t, bond_t = split_graph(
-        paired["pocket"], paired[("pocket", "bond", "pocket")]
+        paired[NodeType.Pocket],
+        paired[(NodeType.Pocket, RelationType.Covalent, NodeType.Pocket)],
     )
-    del paired["pocket"]
-    del paired[("pocket", "bond", "pocket")]
-    set_subgraph(s, bond_s, "pocket_s")
-    set_subgraph(t, bond_t, "pocket_t")
+    del paired[NodeType.Pocket]
+    del paired[(NodeType.Pocket, RelationType.Covalent, NodeType.Pocket)]
+    set_subgraph(s, bond_s, NodeType.PocketA)
+    set_subgraph(t, bond_t, NodeType.PocketB)
 
     return paired
 
@@ -103,8 +106,10 @@ class KinodataDockedPairs(KinodataDocked):
         n_data = len(data_list)
         pair_list = [
             pair_data(a, b)
-            for a, b in tqdm(filter(self.pair_filter, combinations(data_list, 2)),
-                             total=(n_data ** 2 - n_data) // 2)
+            for a, b in tqdm(
+                filter(self.pair_filter, combinations(data_list, 2)),
+                total=(n_data**2 - n_data) // 2,
+            )
         ]
 
         self.persist(pair_list)
