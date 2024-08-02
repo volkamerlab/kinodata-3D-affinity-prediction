@@ -115,7 +115,7 @@ class PropertyPairing(Callable):
 class KinodataDockedPairs(KinodataDocked):
     def __init__(
         self,
-        pair_filter: Optional[Callable[[tuple[HeteroData, HeteroData]], bool]] = None,
+        pair_filter: Callable[[tuple[HeteroData, HeteroData]], bool],
         **kwargs
     ):
         self.pair_filter = pair_filter

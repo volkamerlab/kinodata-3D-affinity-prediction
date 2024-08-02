@@ -5,8 +5,9 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 import pandas as pd
-from torch_geometric.data import InMemoryDataset
-from torch_geometric.data.lightning_datamodule import LightningDataset
+import torch
+from torch_geometric.data import InMemoryDataset, HeteroData
+from torch_geometric.data.lightning import LightningDataset
 from torch_geometric.loader.dataloader import DataLoader
 from torch_geometric.transforms import Compose
 
@@ -112,7 +113,9 @@ def fix_split_for_batch_norm(split: Split, batch_size: int) -> Split:
 
 
 def make_kinodata_module(
-    config: Config, transforms=None, one_time_transform=None
+    config: Config,
+    transforms=None,
+    one_time_transform=None,
 ) -> LightningDataset:
     dataset_cls = partial(KinodataDocked, remove_hydrogen=config.remove_hydrogen)
 
@@ -183,3 +186,77 @@ def make_kinodata_module(
     )
 
     return data_module
+
+
+def make_kinodata_pair_module(
+    config: Config,
+    transforms=None,
+    one_time_transform=None,
+    pair_filter=Callable[[tuple[HeteroData, HeteroData]], bool],
+) -> LightningDataset:
+    dataset_cls = partial(KinodataDocked, remove_hydrogen=config.remove_hydrogen)
+
+    def rmsd_filter(data: HeteroData):
+        # print(data)
+        return data.predicted_rmsd < config.filter_rmsd_max_value
+        # rmsd = data['metadata']['predicted_rmsd']
+        # return torch.all(rmsd < config.filter_rmsd_max_value)
+
+    if config.filter_rmsd_max_value is not None:
+        dataset_cls = Filtered(
+                dataset_cls(), rmsd_filter
+        )
+
+    if transforms is None:
+        transforms = []
+
+
+    if config.perturb_ligand_positions and config.need_distances:
+        raise NotImplementedError
+    if config.perturb_pocket_positions and config.need_distances:
+        raise NotImplementedError
+    if "perturb_complex_positions" in config and config.perturb_complex_positions > 0.0:
+        raise NotImplementedError
+
+    if config.need_distances:
+        ...
+
+    if config.add_docking_scores:
+        raise NotImplementedError
+
+    train_transform = compose(transforms)
+    val_transform = compose(transforms)
+
+    dataset = dataset_cls()
+    if config.data_split is not None:
+        split = load_precomputed_split(config)
+        print(split)
+        print("Remapping idents to dataset index..")
+        index_mapping = dataset.ident_index_map()
+        split = split.remap_index(index_mapping)
+    else:
+        splitter = KinodataKFoldSplit(config.split_type, config.k_fold)
+        splits = splitter.split(dataset)
+        split = splits[config.split_index]
+    del dataset
+
+    # dirty batchnorm fix
+    split = fix_split_for_batch_norm(split, config.batch_size)
+
+    print("Creating data module:")
+    print(f"    split:{split}")
+    print(f"    train_transform:{train_transform}")
+    print(f"    val_transform:{val_transform}")
+    data_module = make_data_module(
+        split,
+        config.batch_size,
+        config.num_workers,
+        dataset_cls=dataset_cls,  # type: ignore
+        train_kwargs={"transform": train_transform},
+        val_kwargs={"transform": val_transform},
+        test_kwargs={"transform": val_transform},
+        one_time_transform=one_time_transform,
+    )
+
+    return data_module
+
