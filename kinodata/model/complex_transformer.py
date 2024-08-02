@@ -215,7 +215,7 @@ class ComplexTransformer(RegressionModel):
             )
         )
 
-    def graph_representation(self, data: HeteroData):
+    def message_passing(self, data: HeteroData):
         node_store = data[NodeType.Complex]
         node_repr = self.act(
             self.atomic_num_embedding(node_store.z)
@@ -229,6 +229,11 @@ class ComplexTransformer(RegressionModel):
                 node_repr, edge_repr, edge_index
             )
             node_repr = norm(node_repr, node_store.batch)
+        return node_repr
+
+    def graph_representation(self, data: HeteroData):
+        node_store = data[NodeType.Complex]
+        node_repr = self.message_passing(data)
         graph_repr = self.aggr(node_repr, node_store.batch)
         return graph_repr
 
