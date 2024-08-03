@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, List, Optional
 import pandas as pd
 import torch
 from torch_geometric.data import InMemoryDataset, HeteroData
-from torch_geometric.data.lightning import LightningDataset
+from torch_geometric.data.lightning_datamodule import LightningDataset
 from torch_geometric.loader.dataloader import DataLoader
 from torch_geometric.transforms import Compose
 
