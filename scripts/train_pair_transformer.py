@@ -48,10 +48,9 @@ if __name__ == "__main__":
         print(f"{key}: {value}")
 
     wandb.init(
-            mode='disabled'
-        # config=config,
-        # project="kinodata-docked-rescore",
-        # tags=["pair_model", "transformer"],
+        config=config,
+        project="kinodata-docked-rescore",
+        tags=["pair_model", "transformer"],
     )
     train(
         config,
