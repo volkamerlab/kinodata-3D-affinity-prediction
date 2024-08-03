@@ -28,7 +28,7 @@ class PairTransformer(RegressionModel):
         node_store = data[NodeType.ComplexB]
         node_repr_b = self.gnn.aggr(self.gnn.message_passing(data), node_store.batch)
 
-        return self.out(node_repr_a - node_repr_b)
+        return self.gnn.out(node_repr_a - node_repr_b)
 
 
 def make_model(config: Config):
