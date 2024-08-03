@@ -98,7 +98,7 @@ def pair_data(
     paired = join_metadata(paired, combined, matching_properties)
 
     paired.ident = i
-    paired.predicted_rmsd = torch.max(paired['metadata'].predicted_rmsd)
+    paired.predicted_rmsd = torch.max(paired["metadata"].predicted_rmsd)
 
     return paired
 
@@ -143,11 +143,14 @@ class KinodataDockedPairs(KinodataDocked):
             self.matching_properties,
             self.non_matching_properties,
         )
-        data_list = [
-            pair_data(i, a, b, self.matching_properties)
-            for i, (a, b) in tqdm(
-                enumerate(filter(pair_filter, combinations(data_list, 2))),
-            )
-        ]
+        pair_list = []
+        n_data = len(data_list)
+        for i, (a, b) in tqdm(
+            enumerate(combinations(data_list, 2)), total=n_data * (n_data - 1) // 2
+        ):
+            if not pair_filter((a, b)):
+                continue
+            pair = pair_data(i, a, b, self.matching_properties)
+            pair_list.append(pair)
 
-        self.persist(data_list)
+        self.persist(pair_list)
