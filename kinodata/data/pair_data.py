@@ -90,10 +90,13 @@ def join_metadata(paired: HeteroData, combined: HeteroData, matching_properties)
     return paired
 
 
-def pair_data(primary: HeteroData, secondary: HeteroData, matching_properties: List[str]) -> HeteroData:
+def pair_data(
+    i: int, primary: HeteroData, secondary: HeteroData, matching_properties: List[str]
+) -> HeteroData:
     combined, _, _ = collate.collate(HeteroData, [primary, secondary], add_batch=True)
     paired = split_graphs(combined)
     paired = join_metadata(paired, combined, matching_properties)
+    paired.ident = i
 
     return paired
 
@@ -139,9 +142,9 @@ class KinodataDockedPairs(KinodataDocked):
             self.non_matching_properties,
         )
         data_list = [
-            pair_data(a, b, self.matching_properties)
-            for a, b in tqdm(
-                filter(pair_filter, combinations(data_list, 2)),
+            pair_data(i, a, b, self.matching_properties)
+            for i, (a, b) in tqdm(
+                enumerate(filter(pair_filter, combinations(data_list, 2))),
             )
         ]
 
