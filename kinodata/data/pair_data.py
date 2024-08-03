@@ -96,7 +96,9 @@ def pair_data(
     combined, _, _ = collate.collate(HeteroData, [primary, secondary], add_batch=True)
     paired = split_graphs(combined)
     paired = join_metadata(paired, combined, matching_properties)
+
     paired.ident = i
+    paired.predicted_rmsd = torch.max(paired['metadata'].predicted_rmsd)
 
     return paired
 
