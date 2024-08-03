@@ -50,14 +50,19 @@ class KinodataKFoldSplit:
     Splits are cached in a datasets processed dir.
     """
 
+    valid_splits = [
+        "assay-k-fold",
+        "scaffold-k-fold",
+        "pocket-k-fold",
+        "random-k-fold",
+    ]
+
     pocket_clustering = AffinityPropagation()
     pocket_similarity_measure = BLOSUMSubstitutionSimilarity
 
     def __init__(self, split_type: str, k: int) -> None:
-        assert split_type in (
-            "scaffold-k-fold",
-            "pocket-k-fold",
-            "random-k-fold",
+        assert (
+            split_type in self.__class__.valid_splits
         ), f"Unknown split type {split_type}"
         self.k = k
         self.split_type = split_type
@@ -87,6 +92,11 @@ class KinodataKFoldSplit:
         return [cache_dir / f"{i}:{self.k}.csv" for i in range(1, self.k + 1)]
 
     def _split(self, dataset: KinodataDocked):
+        if self.split_type == "assay-k-fold":
+            assays, idents = zip(*[(data.assay_ident, data.ident) for data in dataset])
+            assays = np.array(scaffolds)
+            splits = group_k_fold_split(group_index=assays, k=self.k)
+            return splits
         if self.split_type == "scaffold-k-fold":
             scaffolds, idents = zip(*[(data.scaffold, data.ident) for data in dataset])
             scaffolds = np.array(scaffolds)

@@ -203,14 +203,10 @@ def make_kinodata_pair_module(
         remove_hydrogen=config.remove_hydrogen,
     )
 
-    def rmsd_filter(data: HeteroData):
-        # print(data)
-        # return data.predicted_rmsd < config.filter_rmsd_max_value
-        rmsd = data["metadata"]["predicted_rmsd"]
-        return torch.all(rmsd < config.filter_rmsd_max_value)
-
     if config.filter_rmsd_max_value is not None:
-        dataset_cls = Filtered(dataset_cls(), rmsd_filter)
+        dataset_cls = Filtered(
+            dataset_cls(), T.FilterDockingRMSD(config.filter_rmsd_max_value)
+        )
 
     if transforms is None:
         transforms = []
