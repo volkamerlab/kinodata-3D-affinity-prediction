@@ -4,11 +4,12 @@ from typing import List, Callable, Optional, Any, Union, Dict
 from tqdm import tqdm
 from rdkit.Chem import PandasTools
 import torch
-from torch_geometric.data import Data, InMemoryDataset, collate, HeteroData
+from torch_geometric.data import Data, InMemoryDataset, OnDiskDataset, collate, HeteroData
 from torch_geometric.data.storage import NodeStorage, EdgeStorage
 
 from kinodata.types import NodeType, RelationType
 from kinodata.data.dataset import KinodataDocked
+from kinodata.transform.filter_activity import FilterActivityType, ActivityTypes
 
 
 def split_graph(
@@ -120,30 +121,32 @@ class PropertyPairing(Callable):
         )
 
 
-class KinodataDockedPairs(KinodataDocked):
+class KinodataDockedPairs(OnDiskDataset):
     def __init__(
         self,
         matching_properties: List[str] = [],
         non_matching_properties: List[str] = [],
+        transform: Optional[Callable] = None,
+        pre_filter: Optional[Callable] = FilterActivityType([ActivityTypes.pic50]),
         **kwargs
     ):
         self.matching_properties = matching_properties
         self.non_matching_properties = non_matching_properties
-        super().__init__(**kwargs)
+        self.kinodata3d = KinodataDocked(transform=transform, pre_filter=pre_filter, **kwargs)
+        super().__init__("data/processed", transform, pre_filter=pre_filter, log=True)
 
     @property
-    def processed_file_names(self) -> List[str]:
-        return ["kinodata_docked_v2_paired.pt"]
+    def processed_dir(self):
+        return "data/processed"
 
     def process(self):
-        data_list = super().make_data_list()
-        data_list = super().filter_transform(data_list)
+        data_list = self.kinodata3d.make_data_list()
+        data_list = self.kinodata3d.filter_transform(data_list)
 
         pair_filter = PropertyPairing(
             self.matching_properties,
             self.non_matching_properties,
         )
-        pair_list = []
         n_data = len(data_list)
         for i, (a, b) in tqdm(
             enumerate(combinations(data_list, 2)), total=n_data * (n_data - 1) // 2
@@ -151,6 +154,8 @@ class KinodataDockedPairs(KinodataDocked):
             if not pair_filter((a, b)):
                 continue
             pair = pair_data(i, a, b, self.matching_properties)
-            pair_list.append(pair)
+            self.append(pair)
 
-        self.persist(pair_list)
+    def __getattr__(self, name):
+        # don't judge...
+        return getattr(self.kinodata3d, name)
