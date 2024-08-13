@@ -1,6 +1,9 @@
 # i dont even know
 conda_hack.py
 
+# fast prototyping in notebooks
+dev.ipynb
+
 # raw kinodata
 /data
 /surface_data

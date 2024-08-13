@@ -23,6 +23,7 @@ from kinodata.model.regression import cat_many
 from kinodata.transform import FilterDockingRMSD, TransformToComplexGraph
 from kinodata.transform.mask_residues import MaskResidues
 from kinodata.types import *
+from kinodata.util import wandb_interface, ModelInfo
 from pytorch_lightning import Trainer
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
@@ -70,22 +71,35 @@ def load_wandb_config(
     config = {str(key): value["value"] for key, value in config.items()}
     return config
 
-def load_from_checkpoint(
-    rmsd_threshold: int,
-    split_type: str,
-    fold: int,
-    model_type: str
-) -> RegressionModel:
+def load_model_from_checkpoint(
+    rmsd_threshold: int | None = None,
+    split_type: str | None = None,
+    split_fold: int | None = None,
+    model_type: str | None = None,
+    model_path: Path | None = None,
+    model_info: ModelInfo | None = None,
+) -> tuple[RegressionModel, cfg.Config]:
+    if model_info is not None:
+        model_ckpt = model_info.fp_model_ckpt
+        config = model_info.config
+        model_type = model_info.model_type
+    else:
+        if model_path is None:
+            assert rmsd_threshold is not None
+            assert split_type is not None
+            assert split_fold is not None
+            assert model_type is not None
+            model_path = path_to_model(rmsd_threshold, split_type, split_fold, model_type)
+        model_ckpt = list(model_path.glob("**/*.ckpt"))[0]
+        model_config = model_path / "config.json"
+        config = load_wandb_config(model_config)
     cls = model_cls[model_type]
-    p = path_to_model(rmsd_threshold, split_type, fold, model_type)
-    model_ckpt = list(p.glob("**/*.ckpt"))[0]
-    model_config = p / "config.json"
+    config = cfg.Config(config)
     ckp = torch.load(model_ckpt, map_location=DEVICE)
-    config = cfg.Config(load_wandb_config(model_config))
     model = cls(config)
     assert isinstance(model, RegressionModel)
     model.load_state_dict(ckp["state_dict"])
-    return model
+    return model, config
 
 def prepare_data(config, split_fold):
     to_cplx = TransformToComplexGraph(remove_heterogeneous_representation=True)
@@ -137,6 +151,20 @@ def load_residue_atom_index(idents, parallelize = True):
 if __name__ == "__main__":
     predict_reference = False
     config = make_config()
+    config["model_path"] = (Path(__file__).parent.parent / "models" / "1iwhhsg0").absolute()
+    print(config["model_path"])
+    
+    model_info = None 
+    if (model_path := config.get("model_path", None)) is not None:
+        model_info = ModelInfo.from_dir(model_path) 
+    model = load_model_from_checkpoint(
+        rmsd_threshold=2, 
+        split_type=config["split_type"],
+        split_fold=config["split_index"], 
+        model_type="CGNN-3D",
+        model_info=model_info,
+    )
+    
     print("Creating data list...")
     data_list = prepare_data(config, config["split_index"])
    
@@ -160,8 +188,7 @@ if __name__ == "__main__":
     
     print("Preparing residue masking transform...")
     transform = MaskResidues(index, edges_only=config["edges_only"])
-    
-    model = load_from_checkpoint(2, config["split_type"], config["split_index"], "CGNN-3D")
+  
     trainer = Trainer(
         logger=None,
         auto_select_gpus=True,

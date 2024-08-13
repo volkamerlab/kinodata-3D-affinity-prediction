@@ -6,7 +6,8 @@ from typing import Any, Callable, Dict, Optional, Type, Union
 import pandas as pd
 import numpy as np
 from torch_geometric.data import InMemoryDataset
-from torch_geometric.data.lightning_datamodule import LightningDataset
+# from torch_geometric.data.lightning_datamodule import LightningDataset
+from torch_geometric.data.lightning import LightningDataset
 from torch_geometric.data.dataset import IndexType
 from torch_geometric.transforms import Compose
 

@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 if __name__ == "__main__":
-    full_dataset = KinodataDocked()
+    full_dataset = KinodataDocked(use_multiprocessing=False)
     for rmsd_cutoff in [2.0, 4.0, 6.0, 100.0]:
         cls_dataset = Filtered(full_dataset, FilterDockingRMSD(rmsd_cutoff))
         dataset = cls_dataset()
