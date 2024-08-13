@@ -55,6 +55,11 @@ class ModelInfo:
     config: dict
     fp_model_ckpt: Path
    
+    @property 
+    def model_type(self) -> str:
+        # TODO derive from config
+        return "CGNN-3D"
+   
     @classmethod 
     def from_dir(cls, path: Path):
         return cls(
