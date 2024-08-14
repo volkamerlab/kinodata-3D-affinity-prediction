@@ -89,14 +89,14 @@ class Config(dict):
         return parser
 
     def update_from_args(self, known_only: bool = True) -> "Config":
-        if not known_only:
-            raise NotImplementedError
         parser = self.argparser(overwrite_default_values=True)
         args, unknown = parser.parse_known_args()
         shared_args = {key: getattr(args, key) for key in self if hasattr(args, key)}
         updated_args = {
             key: value for key, value in shared_args.items() if value is not None
         }
+        if not known_only:
+            updated_args.update(vars(unknown))
         print(f"Updating config from args: {updated_args}")
         return self.update(updated_args)
 
