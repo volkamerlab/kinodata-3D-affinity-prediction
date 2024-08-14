@@ -96,6 +96,7 @@ class Config(dict):
             key: value for key, value in shared_args.items() if value is not None
         }
         if not known_only:
+            print("Using unknown CLI args:", unknown)
             updated_args.update(vars(unknown))
         print(f"Updating config from args: {updated_args}")
         return self.update(updated_args)
