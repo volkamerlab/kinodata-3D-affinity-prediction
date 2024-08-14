@@ -44,7 +44,8 @@ def make_config():
         edges_only=False,
     )
     config = cfg.get("crocodoc")
-    config = config.update_from_args()
+    config["model_path"] = None
+    config = config.update_from_args("model_path")
     return config
 
 model_dir = Path("models")
@@ -151,8 +152,9 @@ def load_residue_atom_index(idents, parallelize = True):
 if __name__ == "__main__":
     predict_reference = False
     config = make_config()
-    config["model_path"] = (Path(__file__).parent.parent / "models" / "1iwhhsg0").absolute()
-    print(config["model_path"])
+    config["model_path"] = Path(config["model_path"]) 
+    if config.get("model", None):
+        print("Loading model from", config["model_path"])
     
     model_info = None 
     if (model_path := config.get("model_path", None)) is not None:
