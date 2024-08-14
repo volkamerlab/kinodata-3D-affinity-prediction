@@ -235,7 +235,10 @@ if __name__ == "__main__":
             "masked_resname": masked_resname,
             "masked_res_letter": masked_res_letter,
         })
-        file_name = f"residue_delta_{split_type}_{fold}_part_{part}"
+        if model_path is not None:
+            file_name = f"residue_delta_{str(model_path).replace("/", "_")}_part_{part}"
+        else:
+            file_name = f"residue_delta_{split_type}_{fold}_part_{part}"
         if config["edges_only"]:
             file_name += "_edges_only"
         df.to_csv(
