@@ -88,16 +88,15 @@ class Config(dict):
             parser.add_argument(f"--{key}", default=default, type=type(value))
         return parser
 
-    def update_from_args(self, known_only: bool = True) -> "Config":
+    def update_from_args(self, *extra_kwd_args: str) -> "Config":
         parser = self.argparser(overwrite_default_values=True)
+        for arg in extra_kwd_args:
+            parser.add_argument(f"--{arg}", default=None, type=str)
         args, unknown = parser.parse_known_args()
         shared_args = {key: getattr(args, key) for key in self if hasattr(args, key)}
         updated_args = {
             key: value for key, value in shared_args.items() if value is not None
         }
-        if not known_only:
-            print("Using unknown CLI args:", unknown)
-            updated_args.update(vars(unknown))
         print(f"Updating config from args: {updated_args}")
         return self.update(updated_args)
 
