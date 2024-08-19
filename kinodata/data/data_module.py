@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, List, Optional
 import pandas as pd
 import torch
 from torch_geometric.data import InMemoryDataset, HeteroData
-from torch_geometric.data.lightning_datamodule import LightningDataset
+from torch_geometric.data.lightning import LightningDataset
 from torch_geometric.loader.dataloader import DataLoader
 from torch_geometric.transforms import Compose
 
@@ -203,10 +203,10 @@ def make_kinodata_pair_module(
         remove_hydrogen=config.remove_hydrogen,
     )
 
-    if config.filter_rmsd_max_value is not None:
-        dataset_cls = Filtered(
-            dataset_cls(), T.FilterDockingRMSD(config.filter_rmsd_max_value)
-        )
+    # if config.filter_rmsd_max_value is not None:
+        # dataset_cls = Filtered(
+            # dataset_cls(), T.FilterDockingRMSD(config.filter_rmsd_max_value)
+        # )
 
     if transforms is None:
         transforms = []

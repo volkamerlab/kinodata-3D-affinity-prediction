@@ -5,11 +5,13 @@ import numpy as np
 from numpy.random import default_rng
 from sklearn.model_selection import GroupKFold, KFold
 import pandas as pd
+import tqdm
 
 from .data_split import Split
 from .utils.cluster import AffinityPropagation
 from .utils.similarity import BLOSUMSubstitutionSimilarity
 from .dataset import KinodataDocked
+from .pair_data import KinodataDockedPairs
 
 
 def _split_random(a: np.ndarray, percentile: float, seed: int = 0):
@@ -69,10 +71,14 @@ class KinodataKFoldSplit:
 
     @singledispatchmethod
     def cache_dir(self, dataset) -> Path:
-        raise NotImplementedError(f"cahe_dir({type(dataset)})")
+        raise NotImplementedError(f"cache_dir({type(dataset)})")
 
     @cache_dir.register
     def _(self, dataset: KinodataDocked) -> Path:
+        return Path(dataset.processed_dir) / self.split_type
+
+    @cache_dir.register
+    def _(self, dataset: KinodataDockedPairs) -> Path:
         return Path(dataset.processed_dir) / self.split_type
 
     @cache_dir.register
@@ -92,9 +98,10 @@ class KinodataKFoldSplit:
         return [cache_dir / f"{i}:{self.k}.csv" for i in range(1, self.k + 1)]
 
     def _split(self, dataset: KinodataDocked):
+        print("split the dataset")
         if self.split_type == "assay-k-fold":
-            assays, idents = zip(*[(data.assay_ident, data.ident) for data in dataset])
-            assays = np.array(scaffolds)
+            assays, idents = zip(*[(data.assay_ident, data.ident) for data in tqdm.tqdm(dataset)])
+            assays = np.array(assays)
             splits = group_k_fold_split(group_index=assays, k=self.k)
             return splits
         if self.split_type == "scaffold-k-fold":

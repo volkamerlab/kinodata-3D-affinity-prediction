@@ -280,7 +280,7 @@ class KinodataDocked(InMemoryDataset):
         residue_representation: Literal["sequence", "structural", None] = "sequence",
         require_kissim_residues: bool = False,
         use_multiprocessing: bool = False,
-        num_processes: Optional[int] = None,
+        num_processes: Optional[int] = 8,
     ):
         self.remove_hydrogen = remove_hydrogen
         self._prefix = prefix
