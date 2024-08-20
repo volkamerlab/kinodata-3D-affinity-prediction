@@ -157,13 +157,3 @@ class KinodataDockedPairs(OnDiskDataset):
             pair = pair_data(i, a, b, self.matching_properties)
             self.append(pair)
 
-
-    def __hasattr__(self, name) -> bool:
-        return hasattr(self, name) or hasattr(self.kinodata3d, name)
-
-
-    def __getattr__(self, name):
-        # don't judge...
-        if not hasattr(self, name):
-            return getattr(self.kinodata3d, name)
-        return super().__getattr__(name)

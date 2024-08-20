@@ -41,6 +41,7 @@ if __name__ == "__main__":
     config["perturb_ligand_positions"] = 0.0
     config["perturb_pocket_positions"] = 0.0
     config["perturb_complex_positions"] = 0.0
+    config["split_type"] = "assay-k-fold"
 
     config["node_types"] = [NodeType.Complex]
 
@@ -57,26 +58,25 @@ if __name__ == "__main__":
         fn_model=make_model,
         fn_data=partial(
             make_kinodata_pair_module,
-            matching_properties=["assay_ident", "klifs_structure_id", "pocket_sequence"],
+            matching_properties=[
+                "assay_ident",
+                "klifs_structure_id",
+                "pocket_sequence",
+            ],
             non_matching_properties=["ident"],
-            one_time_transform=partial(
-                apply_transform_instance_permament,
-                transform=Compose(
-                    [
-                        TransformToComplexGraph(
-                            ligand_ty=NodeType.LigandA,
-                            pocket_ty=NodeType.PocketA,
-                            complex_ty=NodeType.ComplexA,
-                            remove_heterogeneous_representation=True,
-                        ),
-                        TransformToComplexGraph(
-                            ligand_ty=NodeType.LigandB,
-                            pocket_ty=NodeType.PocketB,
-                            complex_ty=NodeType.ComplexB,
-                            remove_heterogeneous_representation=True,
-                        ),
-                    ]
+            transforms=[
+                TransformToComplexGraph(
+                    ligand_ty=NodeType.LigandA,
+                    pocket_ty=NodeType.PocketA,
+                    complex_ty=NodeType.ComplexA,
+                    remove_heterogeneous_representation=True,
                 ),
-            ),
+                TransformToComplexGraph(
+                    ligand_ty=NodeType.LigandB,
+                    pocket_ty=NodeType.PocketB,
+                    complex_ty=NodeType.ComplexB,
+                    remove_heterogeneous_representation=True,
+                ),
+            ],
         ),
     )
