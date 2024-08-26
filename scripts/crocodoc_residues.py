@@ -16,8 +16,7 @@ from kinodata.data.data_module import create_dataset
 from kinodata.data.dataset import _DATA
 from kinodata.data.grouped_split import KinodataKFoldSplit
 from kinodata.model import RegressionModel
-from kinodata.model.complex_transformer import \
-    make_model as make_complex_transformer
+from kinodata.model.complex_transformer import make_model as make_complex_transformer
 from kinodata.model.dti import make_model as make_dti_baseline
 from kinodata.model.regression import cat_many
 from kinodata.transform import FilterDockingRMSD, TransformToComplexGraph
@@ -34,6 +33,7 @@ HAS_GPU = torch.cuda.is_available()
 FORCE_CPU = False
 DEVICE = "cpu" if FORCE_CPU or not HAS_GPU else "cuda:0"
 
+
 def make_config():
     cfg.register(
         "crocodoc",
@@ -48,29 +48,39 @@ def make_config():
     config = config.update_from_args("model_path")
     return config
 
+
 model_dir = Path("models")
 assert model_dir.exists(), (model_dir, Path().absolute())
 
-def path_to_model(rmsd_threshold: int, split_type: str, split_fold: int, model_type: str) -> Path:
-    p = model_dir / f"rmsd_cutoff_{rmsd_threshold}" / split_type / str(split_fold) / model_type
+
+def path_to_model(
+    rmsd_threshold: int, split_type: str, split_fold: int, model_type: str
+) -> Path:
+    p = (
+        model_dir
+        / f"rmsd_cutoff_{rmsd_threshold}"
+        / split_type
+        / str(split_fold)
+        / model_type
+    )
     if not p.exists():
         p.mkdir(parents=True)
     return p
 
+
 model_cls = {
     "DTI": make_dti_baseline,
     "CGNN": make_complex_transformer,
-    "CGNN-3D": make_complex_transformer
+    "CGNN-3D": make_complex_transformer,
 }
 
 
-def load_wandb_config(
-    config_file: Path
-) -> dict[str, Any]:
+def load_wandb_config(config_file: Path) -> dict[str, Any]:
     with open(config_file, "r") as f_config:
         config = json.load(f_config)
     config = {str(key): value["value"] for key, value in config.items()}
     return config
+
 
 def load_model_from_checkpoint(
     rmsd_threshold: int | None = None,
@@ -90,7 +100,9 @@ def load_model_from_checkpoint(
             assert split_type is not None
             assert split_fold is not None
             assert model_type is not None
-            model_path = path_to_model(rmsd_threshold, split_type, split_fold, model_type)
+            model_path = path_to_model(
+                rmsd_threshold, split_type, split_fold, model_type
+            )
         model_ckpt = list(model_path.glob("**/*.ckpt"))[0]
         model_config = model_path / "config.json"
         config = load_wandb_config(model_config)
@@ -102,13 +114,11 @@ def load_model_from_checkpoint(
     model.load_state_dict(ckp["state_dict"])
     return model, config
 
+
 def prepare_data(config, split_fold):
     to_cplx = TransformToComplexGraph(remove_heterogeneous_representation=True)
     rmsd_filter = FilterDockingRMSD(config["filter_rmsd_max_value"])
-    data_cls = Filtered(
-        KinodataDocked(),
-        rmsd_filter
-    )
+    data_cls = Filtered(KinodataDocked(), rmsd_filter)
     test_split = KinodataKFoldSplit(config["split_type"], 5)
     split = test_split.split(data_cls())[split_fold]
     test_data = create_dataset(
@@ -117,12 +127,19 @@ def prepare_data(config, split_fold):
         split.test_split,
         None,
     )
-    forbidden_seq = set(['KALGKGLFSMVIRITLKVVGLRILNLPHLILEYCKAKDIIRFLQQKNFLLLINWGIR',
- 'LIGKGDSARLDYLVVGRLLQLVREP',
- 'LIIGKGDFGKVELSALKVVDIIRLILDYLVVGRLLQLVRE',
- 'NKMGEGGFGVVYKVAVKKLQFDQEIKVMAKCQENLVELLGFCLVYVYMPNGSLLDRLSCFLHENHHIHRDIKSANILLISDFGLA',
- '_ALNVLDMSQKLYLLSSLDPYLLEMYSYLILEAPEGEIFNLLRQYLHSAMIIYRDLKPHNVLFIAA'])
-    return [to_cplx(data) for data in test_data if data.pocket_sequence not in forbidden_seq]
+    forbidden_seq = set(
+        [
+            "KALGKGLFSMVIRITLKVVGLRILNLPHLILEYCKAKDIIRFLQQKNFLLLINWGIR",
+            "LIGKGDSARLDYLVVGRLLQLVREP",
+            "LIIGKGDFGKVELSALKVVDIIRLILDYLVVGRLLQLVRE",
+            "NKMGEGGFGVVYKVAVKKLQFDQEIKVMAKCQENLVELLGFCLVYVYMPNGSLLDRLSCFLHENHHIHRDIKSANILLISDFGLA",
+            "_ALNVLDMSQKLYLLSSLDPYLLEMYSYLILEAPEGEIFNLLRQYLHSAMIIYRDLKPHNVLFIAA",
+        ]
+    )
+    return [
+        to_cplx(data) for data in test_data if data.pocket_sequence not in forbidden_seq
+    ]
+
 
 def load_single_index(file: Path):
     with open(file, "r") as f:
@@ -133,11 +150,13 @@ def load_single_index(file: Path):
     ident = int(file.stem.split("_")[-1])
     return (ident, dictionary)
 
+
 def get_ident(file: Path):
     ident = int(file.stem.split("_")[-1])
     return ident
 
-def load_residue_atom_index(idents, parallelize = True):
+
+def load_residue_atom_index(idents, parallelize=True):
     files = list(REDIUE_ATOM_INDEX.iterdir())
     files = [file for file in files if get_ident(file) in idents]
     progressing_iterable = tqdm(files, desc="Loading residue atom index...")
@@ -147,50 +166,52 @@ def load_residue_atom_index(idents, parallelize = True):
     else:
         tuples = [load_single_index(f) for f in progressing_iterable]
     return dict(tuples)
-    
-    
+
+
 if __name__ == "__main__":
     predict_reference = False
     config = make_config()
-    config["model_path"] = Path(config["model_path"]) 
+    config["model_path"] = Path(config["model_path"])
     if config.get("model", None):
         print("Loading model from", config["model_path"])
-    
-    model_info = None 
+
+    model_info = None
     if (model_path := config.get("model_path", None)) is not None:
-        model_info = ModelInfo.from_dir(model_path) 
+        model_info = ModelInfo.from_dir(model_path)
     model = load_model_from_checkpoint(
-        rmsd_threshold=2, 
+        rmsd_threshold=2,
         split_type=config["split_type"],
-        split_fold=config["split_index"], 
+        split_fold=config["split_index"],
         model_type="CGNN-3D",
         model_info=model_info,
     )
-    
+
     print("Creating data list...")
     data_list = prepare_data(config, config["split_index"])
-   
-    print("Checking data...") 
+
+    print("Checking data...")
     for data in tqdm(data_list):
-        edge_index = data[NodeType.Complex, RelationType.Covalent, NodeType.Complex].edge_index
+        edge_index = data[
+            NodeType.Complex, RelationType.Covalent, NodeType.Complex
+        ].edge_index
         assert data[NodeType.Complex].x.shape[0] > edge_index.max()
-    
+
     idents = set([int(data["ident"].item()) for data in data_list])
-    
+
     index = load_residue_atom_index(idents, parallelize=False)
     del_list = []
-    
-    for (k, v) in index.items():
+
+    for k, v in index.items():
         if v is None:
             print(f"Removing ident {k} due to missing index")
             del_list.append(k)
-            
+
     for k in del_list:
         del index[k]
-    
+
     print("Preparing residue masking transform...")
     transform = MaskResidues(index, edges_only=config["edges_only"])
-  
+
     trainer = Trainer(
         logger=None,
         auto_select_gpus=True,
@@ -200,51 +221,64 @@ if __name__ == "__main__":
     split_type = config["split_type"].split("-")[0]
     if predict_reference:
         predictions = trainer.predict(model, DataLoader(data_list, batch_size=32))
-        predictions = cat_many(predictions) 
-        meta = cat_many([{
-            "ident": data["ident"],
-        } for data in data_list])
-        df = pd.DataFrame({
-            "ident": meta["ident"].cpu().numpy(),
-            "reference_pred": predictions["pred"].cpu().numpy(),
-            "target": predictions["target"].cpu().numpy(),
-        })
+        predictions = cat_many(predictions)
+        meta = cat_many(
+            [
+                {
+                    "ident": data["ident"],
+                }
+                for data in data_list
+            ]
+        )
+        df = pd.DataFrame(
+            {
+                "ident": meta["ident"].cpu().numpy(),
+                "reference_pred": predictions["pred"].cpu().numpy(),
+                "target": predictions["target"].cpu().numpy(),
+            }
+        )
         df.to_csv(
             _DATA / "crocodoc_out" / "residue" / f"reference_{split_type}_{fold}.csv",
-            index=False
+            index=False,
         )
-    
+
     part = 0
     while True:
         print(len(transform))
         pre_filter = [data for data in data_list if transform.filter(data)]
         transformed_data_list = [transform(copy.copy(data)) for data in pre_filter]
         transformed_data_list = transformed_data_list
-        predictions = trainer.predict(model, DataLoader(transformed_data_list, batch_size=32, shuffle=False))
-        predictions = cat_many(predictions) 
-        meta = cat_many([{
-            "ident": data["ident"],
-            "masked_residue": data.masked_residue,
-        } for data in transformed_data_list])
+        predictions = trainer.predict(
+            model, DataLoader(transformed_data_list, batch_size=32, shuffle=False)
+        )
+        predictions = cat_many(predictions)
+        meta = cat_many(
+            [
+                {
+                    "ident": data["ident"],
+                    "masked_residue": data.masked_residue,
+                }
+                for data in transformed_data_list
+            ]
+        )
         masked_resname = [data.masked_resname for data in transformed_data_list]
         masked_res_letter = [data.masked_res_letter for data in transformed_data_list]
-        df = pd.DataFrame({
-            "ident": meta["ident"].cpu().numpy(),
-            "masked_residue": meta["masked_residue"].cpu().numpy(),
-            "masked_pred": predictions["pred"].cpu().numpy(),
-            "masked_resname": masked_resname,
-            "masked_res_letter": masked_res_letter,
-        })
+        df = pd.DataFrame(
+            {
+                "ident": meta["ident"].cpu().numpy(),
+                "masked_residue": meta["masked_residue"].cpu().numpy(),
+                "masked_pred": predictions["pred"].cpu().numpy(),
+                "masked_resname": masked_resname,
+                "masked_res_letter": masked_res_letter,
+            }
+        )
         if model_path is not None:
-            file_name = f"residue_delta_{str(model_path).replace("/", "_")}_part_{part}"
+            file_name = f"residue_delta_{str(model_path).replace('/', '_')}_part_{part}"
         else:
             file_name = f"residue_delta_{split_type}_{fold}_part_{part}"
         if config["edges_only"]:
             file_name += "_edges_only"
-        df.to_csv(
-           _DATA / "crocodoc_out" / "residue" / f"{file_name}.csv",
-           index=False
-        )
+        df.to_csv(_DATA / "crocodoc_out" / "residue" / f"{file_name}.csv", index=False)
         part += 1
         if len(transform) == 0:
             break
