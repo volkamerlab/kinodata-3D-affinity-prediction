@@ -85,7 +85,11 @@ def inject_partial_forward(model: ComplexTransformer) -> ComplexTransformer:
     return model
 
 
-def compute_attributions(model: ComplexTransformer, loader: DataLoader):
+def compute_attributions(
+    model: ComplexTransformer,
+    loader: DataLoader,
+    collapse_hidden_dim: bool = True,
+):
     ig = captum.attr.IntegratedGradients(model.forward_initial_embeds)
     attrs = []
     deltas = []
@@ -95,7 +99,7 @@ def compute_attributions(model: ComplexTransformer, loader: DataLoader):
         print("CUDA is available, using GPU")
         device = torch.device("cuda")
     model = model.to(device)
-    for data in tqdm(loader):
+    for data in tqdm(loader[:5]):
         data = data.to(device)
         with torch.no_grad():
             node_embed, edge_embed, edge_index, batch = model.compute_initial_embeds(
@@ -107,10 +111,13 @@ def compute_attributions(model: ComplexTransformer, loader: DataLoader):
             additional_forward_args=(edge_embed, edge_index, batch),
             return_convergence_delta=True,
             internal_batch_size=1,
+            n_steps=150,
         )
-        attrs.append(attr)
-        deltas.append(delta)
-        idents.append(data.ident)
+        if collapse_hidden_dim:
+            attr = attr.sum(dim=-1)
+        attrs.append(attr.detach().cpu())
+        deltas.append(delta.detach().cpu())
+        idents.append(data.ident.detach().cpu())
     return attrs, deltas, idents
 
 
