@@ -1,0 +1,1 @@
+git pull && condor_submit $1.sub && condor_watch_q
