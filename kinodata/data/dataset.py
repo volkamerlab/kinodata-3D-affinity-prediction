@@ -363,7 +363,7 @@ class KinodataDocked(InMemoryDataset):
         complex_info = ComplexInformation.from_raw(
             self.df, remove_hydrogen=self.remove_hydrogen
         )
-        if False: #self.use_multiprocessing:
+        if self.use_multiprocessing:
             tasks = [
                 (_complex, self.residue_representation, self.require_kissim_residues)
                 for _complex in complex_info
