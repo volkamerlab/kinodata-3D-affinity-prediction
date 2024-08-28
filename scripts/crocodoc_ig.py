@@ -1,3 +1,5 @@
+from pathlib import Path
+import time
 from types import MethodType
 
 import captum
@@ -87,7 +89,8 @@ def compute_attributions(model: ComplexTransformer, loader: DataLoader):
     ig = captum.attr.IntegratedGradients(model.forward_initial_embeds)
     attrs = []
     deltas = []
-    for data in tqdm(loader[:3]):
+    idents = []
+    for data in tqdm(loader):
         with torch.no_grad():
             node_embed, edge_embed, edge_index, batch = model.compute_initial_embeds(
                 data
@@ -101,7 +104,8 @@ def compute_attributions(model: ComplexTransformer, loader: DataLoader):
         )
         attrs.append(attr)
         deltas.append(delta)
-    return attrs, deltas
+        idents.append(data.ident)
+    return attrs, deltas, idents
 
 
 if __name__ == "__main__":
@@ -111,14 +115,30 @@ if __name__ == "__main__":
             "rmsd": 2,
             "split_type": "scaffold-k-fold",
             "fold": 0,
+            "save_to": "data/ig_attributions",
         }
     )
     config = config.update_from_args()
 
     rmsd, split_type, fold = config["rmsd"], config["split_type"], config["fold"]
+
+    save_to = Path(config["save_to"])
+    # create a timestamp in the format YYYY-MM-DD_HH-MM-SS
+    timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+    save_to = save_to / timestamp
+    if not save_to.exists():
+        save_to.mkdir(parents=True)
     model, train_config = load_model_from_checkpoint(rmsd, split_type, fold, "CGNN-3D")
     model = inject_partial_forward(model)
     model.eval()
     data = prepare_data(rmsd, split_type, fold)
-    attrs, deltas = compute_attributions(model, data)
+    attrs, deltas, idents = compute_attributions(model, data)
+
+    # save config as a json file
+    with open(save_to / "config.json", "w") as f:
+        f.write(config.to_json())
+
+    torch.save(attrs, save_to / "attrs.pt")
+    torch.save(deltas, save_to / "deltas.pt")
+    torch.save(idents, save_to / "idents.pt")
     pass
