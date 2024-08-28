@@ -54,6 +54,9 @@ class Config(dict):
     def __setattr__(self, __name: str, __value: Any) -> None:
         self[__name] == __value
 
+    def to_json(self) -> str:
+        return json.dumps(dict(self))
+
     def intersect(self, other: MutableMapping) -> "Config":
         return Config({k: v for k, v in self.items() if k in other})
 

@@ -90,7 +90,13 @@ def compute_attributions(model: ComplexTransformer, loader: DataLoader):
     attrs = []
     deltas = []
     idents = []
+    device = torch.device("cpu")
+    if torch.cuda.is_available():
+        print("CUDA is available, using GPU")
+        device = torch.device("cuda")
+    model = model.to(device)
     for data in tqdm(loader):
+        data = data.to(device)
         with torch.no_grad():
             node_embed, edge_embed, edge_index, batch = model.compute_initial_embeds(
                 data
