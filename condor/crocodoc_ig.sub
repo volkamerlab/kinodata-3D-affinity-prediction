@@ -1,21 +1,17 @@
 universe = docker
 docker_image = gjoschka/kinodata3d-b0:2.3.0-cuda12.1 
 executable = train_generic.sh
-arguments = $(script) --split_type $(split) --filter_rmsd_max_value $(rmsd) --split_index $(index) --config $(model)
-output = train_kinodata.$(ClusterId).$(ProcId).out
-error = train_kinodata.$(ClusterId).$(ProcId).err
-log = train_kinodata.$(ClusterId).log
+arguments = $(rmsd) $(split) $(index) 
+output = crocodoc_ig.$(ClusterId).$(ProcId).out
+error = crocodoc_ig.$(ClusterId).$(ProcId).err
+log = crocodoc_ig.$(ClusterId).log
 should_transfer_files   = YES
 when_to_transfer_output = ON_EXIT
 request_GPUs = 1
 request_CPUs = 32
-request_memory = 128G
+request_memory = 64G
 requirements = UidDomain == "cs.uni-saarland.de"
 +WantGPUHomeMounted = true
 queue index, rmsd, split from (
    0, 2, scaffold-k-fold
-   1, 2, scaffold-k-fold
-   2, 2, scaffold-k-fold
-   3, 2, scaffold-k-fold
-   4, 2, scaffold-k-fold
 )
