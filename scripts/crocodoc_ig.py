@@ -14,6 +14,7 @@ from kinodata.model.complex_transformer import ComplexTransformer
 from kinodata.transform.filter_metadata import FilterDockingRMSD
 from kinodata.transform.to_complex_graph import TransformToComplexGraph
 from kinodata.types import NodeType
+from kinodata.configuration import Config
 
 from crocodoc_residues import load_model_from_checkpoint
 
@@ -104,7 +105,17 @@ def compute_attributions(model: ComplexTransformer, loader: DataLoader):
 
 
 if __name__ == "__main__":
-    rmsd, split_type, fold = 2, "scaffold-k-fold", 0
+    config = Config()
+    config = config.update(
+        {
+            "rmsd": 2,
+            "split_type": "scaffold-k-fold",
+            "fold": 0,
+        }
+    )
+    config = config.update_from_args()
+
+    rmsd, split_type, fold = config["rmsd"], config["split_type"], config["fold"]
     model, train_config = load_model_from_checkpoint(rmsd, split_type, fold, "CGNN-3D")
     model = inject_partial_forward(model)
     model.eval()
