@@ -22,6 +22,7 @@ from kinodata.model.dti import make_model as make_dti_baseline
 from kinodata.model.regression import cat_many
 from kinodata.transform import FilterDockingRMSD, TransformToComplexGraph
 from kinodata.transform.mask_residues import MaskResidues
+from kinodata.transform.add_residue_type import AddResidueType
 from kinodata.types import *
 from kinodata.util import wandb_interface, ModelInfo
 from pytorch_lightning import Trainer
@@ -104,6 +105,7 @@ def load_model_from_checkpoint(
 
 def prepare_data(config, split_fold):
     to_cplx = TransformToComplexGraph(remove_heterogeneous_representation=True)
+    add_res = AddResidueType()
     rmsd_filter = FilterDockingRMSD(config["filter_rmsd_max_value"])
     data_cls = Filtered(
         KinodataDocked(),
@@ -122,7 +124,7 @@ def prepare_data(config, split_fold):
  'LIIGKGDFGKVELSALKVVDIIRLILDYLVVGRLLQLVRE',
  'NKMGEGGFGVVYKVAVKKLQFDQEIKVMAKCQENLVELLGFCLVYVYMPNGSLLDRLSCFLHENHHIHRDIKSANILLISDFGLA',
  '_ALNVLDMSQKLYLLSSLDPYLLEMYSYLILEAPEGEIFNLLRQYLHSAMIIYRDLKPHNVLFIAA'])
-    return [to_cplx(data) for data in test_data if data.pocket_sequence not in forbidden_seq]
+    return [to_cplx(add_res(data)) for data in test_data if data.pocket_sequence not in forbidden_seq]
 
 def load_single_index(file: Path):
     with open(file, "r") as f:
@@ -147,10 +149,22 @@ def load_residue_atom_index(idents, parallelize = True):
     else:
         tuples = [load_single_index(f) for f in progressing_iterable]
     return dict(tuples)
-    
+
+def force_align_configs(
+    srccfg,
+    targetcfg,
+    key
+):
+    assert key in targetcfg
+    assert key in srccfg
+    if (srcval := srccfg[key]) != (targetval := targetcfg[key]):
+        print(f"Warning: config mismatch on key '{key}!'")
+        print(f"Source: {srcval}")
+        print(f"Target: {targetval}")
+    targetcfg[key] = srcval
     
 if __name__ == "__main__":
-    predict_reference = False
+    predict_reference = True
     config = make_config()
     config["model_path"] = Path(config["model_path"]) 
     if config.get("model", None):
@@ -159,16 +173,23 @@ if __name__ == "__main__":
     model_info = None 
     if (model_path := config.get("model_path", None)) is not None:
         model_info = ModelInfo.from_dir(model_path) 
-    model = load_model_from_checkpoint(
+    model, train_config = load_model_from_checkpoint(
         rmsd_threshold=2, 
         split_type=config["split_type"],
         split_fold=config["split_index"], 
         model_type="CGNN-3D",
         model_info=model_info,
     )
-    
+    print("train config:", train_config)
+    force_align_configs(train_config, config, "split_type")
+    force_align_configs(train_config, config, "split_index")
+
+
+    print("trained model", model)
     print("Creating data list...")
+
     data_list = prepare_data(config, config["split_index"])
+
    
     print("Checking data...") 
     for data in tqdm(data_list):
@@ -235,10 +256,7 @@ if __name__ == "__main__":
             "masked_resname": masked_resname,
             "masked_res_letter": masked_res_letter,
         })
-        if model_path is not None:
-            file_name = f"residue_delta_{str(model_path).replace("/", "_")}_part_{part}"
-        else:
-            file_name = f"residue_delta_{split_type}_{fold}_part_{part}"
+        file_name = f"residue_delta_{split_type}_{fold}_part_{part}"
         if config["edges_only"]:
             file_name += "_edges_only"
         df.to_csv(

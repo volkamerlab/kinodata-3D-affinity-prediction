@@ -1,7 +1,7 @@
 universe = docker
-docker_image = gjoschka/massspec_with_wandb
+docker_image = gjoschka/kinodata3d-frompytorch:2.3.0-cuda12.1-captum
 executable = train_generic.sh
-arguments = $(script) --split_type $(split) --filter_rmsd_max_value $(rmsd) --split_index $(index) --config $(model)
+arguments = $(script) $(split) $(rmsd) $(index) $(model)
 output = train_kinodata.$(ClusterId).$(ProcId).out
 error = train_kinodata.$(ClusterId).$(ProcId).err
 log = train_kinodata.$(ClusterId).log
@@ -13,14 +13,5 @@ request_memory = 128G
 requirements = UidDomain == "cs.uni-saarland.de"
 +WantGPUHomeMounted = true
 queue index, model, rmsd, script, split from (
-   0, cgnn.yaml, 2, train_sparse_sparse_transformer, pocket-k-fold
-   0, cgnn.yaml, 2, train_sparse_sparse_transformer, scaffold-k-fold
-   1, cgnn.yaml, 2, train_sparse_sparse_transformer, pocket-k-fold
-   1, cgnn.yaml, 2, train_sparse_sparse_transformer, scaffold-k-fold
-   2, cgnn.yaml, 2, train_sparse_sparse_transformer, pocket-k-fold
-   2, cgnn.yaml, 2, train_sparse_sparse_transformer, scaffold-k-fold
-   3, cgnn.yaml, 2, train_sparse_sparse_transformer, pocket-k-fold
-   3, cgnn.yaml, 2, train_sparse_sparse_transformer, scaffold-k-fold
-   4, cgnn.yaml, 2, train_sparse_sparse_transformer, pocket-k-fold
-   4, cgnn.yaml, 2, train_sparse_sparse_transformer, scaffold-k-fold
+   0, cgnn.yaml, 2, train_sparse_transformer, scaffold-k-fold
 )

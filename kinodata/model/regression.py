@@ -79,7 +79,10 @@ class RegressionModel(pl.LightningModule):
         ]
 
     def define_metrics(self):
-        wandb.init()
+        try:
+            wandb.init()
+        except:
+            pass
         wandb.define_metric("val/mae", summary="min")
         wandb.define_metric("val/corr", summary="max")
 
