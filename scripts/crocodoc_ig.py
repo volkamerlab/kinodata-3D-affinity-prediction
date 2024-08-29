@@ -89,6 +89,7 @@ def compute_attributions(
     model: ComplexTransformer,
     loader: DataLoader,
     collapse_hidden_dim: bool = True,
+    resolution: int = 150,
 ):
     ig = captum.attr.IntegratedGradients(model.forward_initial_embeds)
     attrs = []
@@ -111,7 +112,7 @@ def compute_attributions(
             additional_forward_args=(edge_embed, edge_index, batch),
             return_convergence_delta=True,
             internal_batch_size=1,
-            n_steps=150,
+            n_steps=resolution,
         )
         if collapse_hidden_dim:
             attr = attr.sum(dim=-1)
@@ -129,6 +130,7 @@ if __name__ == "__main__":
             "split_type": "scaffold-k-fold",
             "fold": 0,
             "save_to": "data/ig_attributions",
+            "ig_resolution": 150,
         }
     )
     config = config.update_from_args()
@@ -145,7 +147,9 @@ if __name__ == "__main__":
     model = inject_partial_forward(model)
     model.eval()
     data = prepare_data(rmsd, split_type, fold)
-    attrs, deltas, idents = compute_attributions(model, data)
+    attrs, deltas, idents = compute_attributions(
+        model, data, resolution=config["ig_resolution"]
+    )
 
     # save config as a json file
     with open(save_to / "config.json", "w") as f:
