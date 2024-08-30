@@ -91,15 +91,16 @@ def compute_attributions(
     collapse_hidden_dim: bool = True,
     resolution: int = 150,
 ):
-    ig = captum.attr.IntegratedGradients(model.forward_initial_embeds)
-    attrs = []
-    deltas = []
-    idents = []
     device = torch.device("cpu")
     if torch.cuda.is_available():
         print("CUDA is available, using GPU")
         device = torch.device("cuda")
     model = model.to(device)
+    ig = captum.attr.IntegratedGradients(model.forward_initial_embeds)
+    attrs = []
+    deltas = []
+    idents = []
+    preds = []
     for data in tqdm(loader):
         data = data.to(device)
         with torch.no_grad():
@@ -107,6 +108,11 @@ def compute_attributions(
                 data
             )
             node_embed.unsqueeze_(0)
+            pred = model.forward_initial_embeds(
+                node_embed, edge_embed, edge_index, batch
+            )
+        preds.append(pred.detach().cpu())
+
         attr, delta = ig.attribute(
             node_embed,
             additional_forward_args=(edge_embed, edge_index, batch),
@@ -119,7 +125,7 @@ def compute_attributions(
         attrs.append(attr.detach().cpu())
         deltas.append(delta.detach().cpu())
         idents.append(data.ident.detach().cpu())
-    return attrs, deltas, idents
+    return preds, attrs, deltas, idents
 
 
 if __name__ == "__main__":
@@ -147,7 +153,7 @@ if __name__ == "__main__":
     model = inject_partial_forward(model)
     model.eval()
     data = prepare_data(rmsd, split_type, fold)
-    attrs, deltas, idents = compute_attributions(
+    preds, attrs, deltas, idents = compute_attributions(
         model, data, resolution=config["ig_resolution"]
     )
 
@@ -155,6 +161,7 @@ if __name__ == "__main__":
     with open(save_to / "config.json", "w") as f:
         f.write(config.to_json())
 
+    torch.save(preds, save_to / "preds.pt")
     torch.save(attrs, save_to / "attrs.pt")
     torch.save(deltas, save_to / "deltas.pt")
     torch.save(idents, save_to / "idents.pt")
