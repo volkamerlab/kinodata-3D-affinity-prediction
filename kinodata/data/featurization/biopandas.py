@@ -24,7 +24,6 @@ def prepare_pocket_information(
     # prepare pocket data frame
     # each row corresponds to one atom
     df_atom, df_bond = read_klifs_mol2(pocket_mol2_file)
-    # TODO: are all residue names exactly 3 characters long??
     df_atom["residue.type"] = df_atom["residue.subst_name"].apply(lambda s: s[:3])
 
     # zero all indices
@@ -42,6 +41,9 @@ def prepare_pocket_information(
     )
     # add categorical integer feature for residue type
     df_residue["residue.type_idx"] = df_residue["residue.type"].apply(
+        amino_acid_to_int.get
+    )
+    df_atom["residue.type_idx"] = df_atom["residue.type"].apply(
         amino_acid_to_int.get
     )
 
@@ -73,13 +75,11 @@ def remove_hydrogens(
     relabeling = np.empty(df_atom.shape[0], dtype=int)
     relabeling[~is_h_mask] = np.arange(num_heavy)
 
-    df_atom = df_atom[~is_h_mask]
-    df_bond = df_bond[~is_h_bond]
-    df_atom.loc[:, "atom.id"] = relabeling[df_atom["atom.id"].values]
-    df_bond.loc[:, "source_atom_id"] = relabeling[df_bond["source_atom_id"].values]
-    df_bond.loc[:, "target_atom_id"] = relabeling[df_bond["target_atom_id"].values]
+    df_atom.loc[~is_h_mask, "atom.id"] = relabeling[df_atom[~is_h_mask]["atom.id"].values].astype(np.int32)
+    df_bond.loc[~is_h_bond, "source_atom_id"] = relabeling[df_bond[~is_h_bond]["source_atom_id"].values]
+    df_bond.loc[~is_h_bond, "target_atom_id"] = relabeling[df_bond[~is_h_bond]["target_atom_id"].values]
 
-    return df_atom, df_bond
+    return df_atom[~is_h_mask], df_bond[~is_h_bond]
 
 
 def longrange_to_onehot(
@@ -120,7 +120,7 @@ def add_pocket_information(
         "charge_pos",
         "charge_neg",
     ],
-    residue_only: bool = True,
+    residue_only: bool = False,
 ) -> Optional[HeteroData]:
     """TODO
     This is kind of a mess and needs to be refactored.
@@ -174,38 +174,40 @@ def add_pocket_information(
     )
 
     if not residue_only:
-        raise NotImplementedError
-        # set element/atomic number feature
-        data["pocket"].z = torch.tensor(
-            df_atom["atom.atomic_number"].values, dtype=torch.long
-        )
+        data[NodeType.Pocket].residue = torch.from_numpy(df_atom["residue.type_idx"].values)
+        data[NodeType.Ligand].residue = 20 * torch.ones(data["ligand"].x.shape[0])
 
-        # other features
-        # formal charge
-        charge_features = longrange_to_onehot(df_atom, "atom.charge", -2, 2)
-        # num hydrogens
-        h_features = longrange_to_onehot(df_atom, "atom.num_hs", 0, 4)
-        data["pocket"].x = torch.cat((charge_features, h_features), dim=1)
+        # # set element/atomic number feature
+        # data["pocket"].z = torch.tensor(
+        # df_atom["atom.atomic_number"].values, dtype=torch.long
+        # )
 
-        # atomic positions
-        data["pocket"].pos = torch.tensor(
-            df_atom[["atom.x", "atom.y", "atom.z"]].values,
-            dtype=torch.float,
-        )
+        # # other features
+        # # formal charge
+        # charge_features = longrange_to_onehot(df_atom, "atom.charge", -2, 2)
+        # # num hydrogens
+        # h_features = longrange_to_onehot(df_atom, "atom.num_hs", 0, 4)
+        # data["pocket"].x = torch.cat((charge_features, h_features), dim=1)
 
-        # covalent bond edge index
-        row = torch.tensor(df_bond["source_atom_id"].values, dtype=torch.long)
-        col = torch.tensor(df_bond["target_atom_id"].values, dtype=torch.long)
-        edge_index = torch.stack((row, col))
-        edge_attr = any_to_onehot(df_bond, "bond_type", ["1", "2", "3"])
-        edge_index, edge_attr = to_undirected(edge_index, edge_attr)
-        data["pocket", "bond", "pocket"].edge_index = edge_index
-        data["pocket", "bond", "pocket"].edge_attr = edge_attr
+        # # atomic positions
+        # data["pocket"].pos = torch.tensor(
+        # df_atom[["atom.x", "atom.y", "atom.z"]].values,
+        # dtype=torch.float,
+        # )
 
-        # store atom/residue member relation as edges
-        # (a, r) if atom a belongs to residue r
-        data["pocket_residue", "contains", "pocket"].edge_index = torch.tensor(
-            df_atom[["residue.subst_id", "atom.id"]].values.T, dtype=torch.long
-        )
+        # # covalent bond edge index
+        # row = torch.tensor(df_bond["source_atom_id"].values, dtype=torch.long)
+        # col = torch.tensor(df_bond["target_atom_id"].values, dtype=torch.long)
+        # edge_index = torch.stack((row, col))
+        # edge_attr = any_to_onehot(df_bond, "bond_type", ["1", "2", "3"])
+        # edge_index, edge_attr = to_undirected(edge_index, edge_attr)
+        # data["pocket", "bond", "pocket"].edge_index = edge_index
+        # data["pocket", "bond", "pocket"].edge_attr = edge_attr
+
+        # # store atom/residue member relation as edges
+        # # (a, r) if atom a belongs to residue r
+        # data["pocket_residue", "contains", "pocket"].edge_index = torch.tensor(
+        # df_atom[["residue.subst_id", "atom.id"]].values.T, dtype=torch.long
+        # )
 
     return data
