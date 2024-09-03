@@ -1,4 +1,3 @@
-#%%
 import logging
 import multiprocessing as mp
 import os
@@ -8,7 +7,6 @@ from time import sleep
 import warnings
 from functools import cached_property, partial
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor
 from typing import (
     Any,
     Callable,
@@ -29,7 +27,6 @@ from rdkit.Chem import AddHs, Kekulize, MolFromMol2File, PandasTools  # type: ig
 from torch_geometric.data import HeteroData, InMemoryDataset
 from tqdm import tqdm
 from rdkit import RDLogger
-from rdkit import Chem
 
 from kinodata.data.featurization.biopandas import add_pocket_information
 from kinodata.data.featurization.rdkit import (
@@ -52,7 +49,8 @@ from kinodata.types import NodeType
 from kinodata.data.utils.scaffolds import mol_to_scaffold
 from kinodata.transform.filter_activity import FilterActivityType, ActivityTypes
 
-_DATA = Path(__file__).parents[2] / "data"
+#_DATA = Path(__file__).parents[2] / "data"
+_DATA = Path(f"{Path(__file__).parents[2]}/data")
 
 
 def to_list(value: Any) -> Sequence:
@@ -68,184 +66,141 @@ def _repr(obj: Any) -> str:
     return re.sub("(<.*?)\\s.*(>)", r"\1\2", obj.__repr__())
 
 
-def to_list(value: Any) -> Sequence:
-    if isinstance(value, Sequence) and not isinstance(value, str):
-        return value
-    else:
-        return [value]
-
-
-def _repr(obj: Any) -> str:
-    if obj is None:
-        return "None"
-    return re.sub("(<.*?)\\s.*(>)", r"\1\2", obj.__repr__())
-
-# Fetch Uniprot ID
-def fetch_uniprot_id(klifs_id):
-
-    # Fetch structure information
-    r = requests.get(f"https://klifs.net/api_v2/structure_list?structure_ID={klifs_id}")
-    r.raise_for_status()
-    data = r.json()
-    
-    # Extract required information
-    if data:
-        kinase_id = data[0].get("kinase_ID")
-        structure_id = data[0].get("structure_ID")
-
-        # Fetch kinase information
-        r = requests.get(f"https://klifs.net/api/kinase_information?kinase_ID={kinase_id}")
-        r.raise_for_status()
-        data = r.json()
-        
-        if data:
-            uniprot = data[0].get("uniprot")
-            return uniprot
-
-    return None
-
-def assert_same_length(dataframes):
-    # Get lengths of all DataFrames
-    lengths = [len(df) for df in dataframes]
-
-    # Assert that all lengths are equal
-    assert all(length == lengths[0] for length in lengths), "DataFrames are not of the same length"
-
-
-
-def process_raw_data_kinodata(
-    raw_dir: Path,
+def process_raw_data(
+   raw_dir: Path,
     file_name: str = "kinodata_docked_v2.sdf.gz",
     remove_hydrogen: bool = True,
     pocket_dir: Optional[Path] = None,
     pocket_sequence_file: Optional[Path] = None,
     activity_type_subset: Optional[List[str]] = None,
-                ) -> pd.DataFrame:
-    
-
-
-
-    print('succsefully running kinodata function')
-
-
-    print(raw_dir)
-
+    ) -> pd.DataFrame:
     if pocket_dir is None:
-        pocket_dir = raw_dir / "mol2" / "pocket"
+        pocket_dir = f"{raw_dir}/mol2/pocket"
     if pocket_sequence_file is None:
-        pocket_sequence_file = raw_dir / "pocket_sequences.csv"
-    raw_fp = str(raw_dir / file_name)
+        pocket_sequence_file = f"{raw_dir}/pocket_sequences.csv"
+
+    #raw_dir='/home/raquellrdc/Desktop/postdoc/fast_ml_final/new_data_try'
+
+    raw_fp = f"{raw_dir}/{file_name}"
+    file_path=raw_fp
+
+    #print(file_path)
+
+    # Check if the file exists
+    if os.path.exists(file_path):
+        print("sdf file exists.")
+    else:
+         print("sdf file does not exist.")
+ 
+  
     print(f"Reading data frame from {raw_fp}...")
     df = PandasTools.LoadSDF(
-        raw_fp,
-        smilesName="compound_structures.canonical_smiles",
-        molColName="molecule",
-        embedProps=True,
-        removeHs=remove_hydrogen,
-    )
-
-    print('df reading is done')
-    print(df.columns)
+         raw_fp,
+         smilesName="compound_structures.canonical_smiles",
+         molColName="molecule",
+         embedProps=True,
+         removeHs=remove_hydrogen,
+     )
+     
     if activity_type_subset is not None:
-        print(activity_type_subset)
-        #df = df.query("activities.standard_type in @activity_type_subset")
-        df = df.query("`activities.standard_type` == @activity_type_subset")
+         
+         #df = df.query("activities.standard_type in @activity_type_subset")
+         df = df.query("`activities.standard_type` == @activity_type_subset")
     df["activities.standard_value"] = df["activities.standard_value"].astype(float)
     df["docking.predicted_rmsd"] = df["docking.predicted_rmsd"].astype(float)
 
     print(f"Deduping data frame (current size: {df.shape[0]})...")
     group_key = [
-        "compound_structures.canonical_smiles",
-        "UniprotID",
-        "activities.standard_type",
-    ]
+         "compound_structures.canonical_smiles",
+         "UniprotID",
+         "activities.standard_type",
+      ]
     mean_activity = (
-        df.groupby(group_key).agg({"activities.standard_value": "mean"}).reset_index()
-    )
+         df.groupby(group_key).agg({"activities.standard_value": "mean"}).reset_index()
+     )
     best_structure = (
-        df.sort_values(by="docking.predicted_rmsd", ascending=True)
-        .groupby(group_key)[group_key + ["docking.predicted_rmsd", "molecule"]]
-        .head(1)
-    )
+         df.sort_values(by="docking.predicted_rmsd", ascending=True)
+         .groupby(group_key)[group_key + ["docking.predicted_rmsd", "molecule"]]
+         .head(1)
+     )
     deduped = pd.merge(mean_activity, best_structure, how="outer", on=group_key)
     df = pd.merge(
-        df.drop_duplicates(group_key),
-        deduped,
-        how="left",
+         df.drop_duplicates(group_key),
+         deduped,
+         how="left",
         on=group_key,
-        suffixes=(".orig", None),
-    )
+         suffixes=(".orig", None),
+     )
     for col in ("activities.standard_value", "docking.predicted_rmsd", "molecule"):
-        del df[f"{col}.orig"]
-    # df.set_index("ID", inplace=True)
+         del df[f"{col}.orig"]
+     # df.set_index("ID", inplace=True)
     print(f"{df.shape[0]} complexes remain after deduplication.")
 
     print("Checking for missing pocket mol2 files...")
     df["similar.klifs_structure_id"] = (
-        df["similar.klifs_structure_id"].astype(float).astype(int)
-    )
+         df["similar.klifs_structure_id"].astype(float).astype(int)
+     )
     # get pocket mol2 files
     if not pocket_dir.exists():
-        pocket_dir.mkdir(parents=True)
+         pocket_dir.mkdir(parents=True)
 
     struc_ids = df["similar.klifs_structure_id"].unique()
     pbar = tqdm(struc_ids, total=len(struc_ids))
     for structure_id in pbar:
         fp = pocket_dir / f"{structure_id}_pocket.mol2"
         if fp.exists():
-            continue
+             continue
         resp = requests.get(
-            "https://klifs.net/api/structure_get_pocket",
-            params={"structure_ID": structure_id},
-        )
+             "https://klifs.net/api/structure_get_pocket",
+             params={"structure_ID": structure_id},
+         )
         resp.raise_for_status()
         fp.write_bytes(resp.content)
 
     pocket_mol2_files = {
-        int(fp.stem.split("_")[0]): fp for fp in (pocket_dir).iterdir()
-    }
+         int(fp.stem.split("_")[0]): fp for fp in (pocket_dir).iterdir()
+     }
     df["pocket_mol2_file"] = [
         pocket_mol2_files[row["similar.klifs_structure_id"]] for _, row in df.iterrows()
-    ]
+     ]
 
-    # backwards compatability
+     # backwards compatability
     df["ident"] = df.index
 
     print("Adding pocket sequences...")
-    # KLIFS API now sometimes decides to timeout
+     # KLIFS API now sometimes decides to timeout
     print(df.shape)
     while True:
-        try:
-            with CachedSequences(pocket_sequence_file) as sequence_cache:
-                klifs_ids = df["similar.klifs_structure_id"].tolist()
-                for klifs_id in tqdm(klifs_ids):
-                    if klifs_id in sequence_cache:
-                        continue
-                    sequence = get_pocket_sequence([klifs_id])
-                    sequence_cache[klifs_id] = sequence
-                df_sequences = sequence_cache.to_data_frame()
-                df = pd.merge(df, df_sequences, on="similar.klifs_structure_id")
-            break
-        except Exception as e:
-            print(f"Querying KLIFS for sequence from structure id raised {e}")
-            print("Retrying..")
-            sleep(10)
+         try:
+             with CachedSequences(pocket_sequence_file) as sequence_cache:
+                 klifs_ids = df["similar.klifs_structure_id"].tolist()
+                 for klifs_id in tqdm(klifs_ids):
+                     if klifs_id in sequence_cache:
+                         continue
+                     sequence = get_pocket_sequence([klifs_id])
+                     sequence_cache[klifs_id] = sequence
+                 df_sequences = sequence_cache.to_data_frame()
+                 df = pd.merge(df, df_sequences, on="similar.klifs_structure_id")
+             break
+         except Exception as e:
+             print(f"Querying KLIFS for sequence from structure id raised {e}")
+             print("Retrying..")
+             sleep(10)
     print(df.shape)
-
-    # if pocket_sequence_file.exists():
-    #     print(f"from cached file {pocket_sequence_file}.")
-    #     pocket_sequences = pd.read_csv(pocket_sequence_file)
-    #     pocket_sequences["ident"] = pocket_sequences["ident"].astype(str)
-    #     df = pd.merge(df, pocket_sequences, left_on="ident", right_on="ident")
-    # else:
-    #     print("from KLIFS.")
-    #     df = add_pocket_sequence(df, pocket_sequence_key="structure.pocket_sequence")
-    #     df[["ident", "structure.pocket_sequence", "similar.klifs_structure_id"]].to_csv(
-    #         pocket_sequence_file, index=False
-    #     )
+ 
+     # if pocket_sequence_file.exists():
+     #     print(f"from cached file {pocket_sequence_file}.")
+ #    #     pocket_sequences = pd.read_csv(pocket_sequence_file)
+  #   #     pocket_sequences["ident"] = pocket_sequences["ident"].astype(str)
+   #  #     df = pd.merge(df, pocket_sequences, left_on="ident", right_on="ident")
+   #  # else:
+   #  #     print("from KLIFS.")
+   #  #     df = add_pocket_sequence(df, pocket_sequence_key="structure.pocket_sequence")
+   #  #     df[["ident", "structure.pocket_sequence", "similar.klifs_structure_id"]].to_csv(
+   #  #         pocket_sequence_file, index=False
+   #  #     )
 
     return df
-
 
 
 @dataclass
@@ -308,8 +263,8 @@ class KinodataDockedAgnostic:
     ):
         self.raw_dir = Path(raw_dir)
         self.remove_hydrogen = remove_hydrogen
-        print(f"Loading kinodata raw data from {self.raw_dir}...")
-        self._df = process_raw_data_kinodata(self.raw_dir, remove_hydrogen=remove_hydrogen)
+        print(f"Loading raw data from {self.raw_dir}...")
+        self._df = process_raw_data(self.raw_dir, remove_hydrogen=remove_hydrogen)
         print("Converting to data list...")
         self.data_list = ComplexInformation.from_raw(
             self._df, remove_hydrogen=self.remove_hydrogen
@@ -357,23 +312,15 @@ class KinodataDocked(InMemoryDataset):
         self.num_processes = num_processes
         self.post_filter = post_filter
         super().__init__(root, transform, pre_transform, pre_filter)
-        print(self.processed_paths[0])
-        print(self.root)
-        print(self.processed_file_names)
         self.data, self.slices = torch.load(self.processed_paths[0])
-
-    #i have commented out the following because with davids data this is not the defaults, but when merging both I need to change this
 
     @property
     def pocket_sequence_file(self) -> Path:
         return Path(self.raw_dir) / "pocket_sequences.csv"
 
-    
     @property
-    #def raw_file_names_kinodata(self) -> List[str]:
     def raw_file_names(self) -> List[str]:
         return ["kinodata_docked_v2.sdf.gz"]
-   #     return ["posit_combined.sdf"]
         #return ["kinodata_docked_full.sdf.gz"]
 
     @property
@@ -386,9 +333,8 @@ class KinodataDocked(InMemoryDataset):
     @property
     def processed_dir(self) -> str:
         pdir = super().processed_dir
-        pdir = os.path.join(pdir, "kinodata")
         if self.prefix is not None:
-            pdir = os.path.join(pdir, self.prefix)
+            pdir = osp.join(pdir, self.prefix)
         return pdir
 
     @property
@@ -403,50 +349,18 @@ class KinodataDocked(InMemoryDataset):
         # TODO at some point set up public download?
         pass
 
-
-
-    ##adding this now on the plane not sure if this will break things
-    #@cached_property
-    #def process_david(self):
-
-    #    return process_raw_data_david(
-    #        Path(self.raw_dir),
-    #        self.raw_file_names[0],
-    #        # self.file_name_benchmark_results,
-    #        #self.file_name_benchmark_dataset,
-    #        self.remove_hydrogen,
-    #        self.pocket_dir,
-    #        self.pocket_sequence_file,
-    #         )
-    
-
-    #def df(self) -> pd.DataFrame:
-    #    return process_raw_data_david(
-    #        Path(self.raw_dir),
-    #        self.raw_file_names[0],
-    #        # self.file_name_benchmark_results,
-    #        #self.file_name_benchmark_dataset,
-    #        self.remove_hydrogen,
-    #        self.pocket_dir,
-    #        self.pocket_sequence_file,
-    #         )
-
     @cached_property
     def df(self) -> pd.DataFrame:
-        return process_raw_data_kinodata(
+        return process_raw_data(
             Path(self.raw_dir),
-            #self.raw_file_names_kinodata[0],
             self.raw_file_names[0],
             self.remove_hydrogen,
             self.pocket_dir,
             self.pocket_sequence_file,
-            activity_type_subset="pIC50", 
+            activity_type_subset=["pIC50"],
         )
-    
 
-    
     def _process(self):
-        #f = osp.join(self.processed_dir, "post_filter.pt")
         f = osp.join(self.processed_dir, "post_filter.pt")
         if osp.exists(f) and torch.load(f) != _repr(self.post_filter):
             warnings.warn(
@@ -484,7 +398,7 @@ class KinodataDocked(InMemoryDataset):
         #    with mp.Pool(os.cpu_count()) as pool:
         #        data_list = pool.map(_process_pyg, tqdm(tasks))
         #else:
- 
+        print('I am doing option 2')
 
 
 
@@ -497,7 +411,6 @@ class KinodataDocked(InMemoryDataset):
 
         # Define the number of parallel processes to use
         n_jobs = 14  # Use all available CPU cores
-
 
         # Parallelize the processing of items
         data_list = Parallel(n_jobs=n_jobs)(
@@ -512,7 +425,6 @@ class KinodataDocked(InMemoryDataset):
         #data_list = list(map(process, tqdm(complex_info)))
 
         data_list = [d for d in data_list if d is not None]
-        #print(data_list)
         print("Exiting make_data_list")
         return data_list
 
@@ -529,14 +441,12 @@ class KinodataDocked(InMemoryDataset):
         return data_list
 
     def persist(self, data_list: List[HeteroData]):
-
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
 
     def process(self):
         data_list = self.make_data_list()
         data_list = self.filter_transform(data_list)
-
         self.persist(data_list)
 
     def ident_index_map(self) -> Dict[Any, int]:
@@ -672,5 +582,4 @@ def process_pyg(
     data.activity_type = complex.activity_type
     data.ident = complex.kinodata_ident
     data.smiles = complex.compound_smiles
-    
     return data

@@ -112,30 +112,41 @@ def assert_same_length(dataframes):
     assert all(length == lengths[0] for length in lengths), "DataFrames are not of the same length"
 
 
-
-def process_raw_data_kinodata(
+def process_raw_data_david(
     raw_dir: Path,
-    file_name: str = "kinodata_docked_v2.sdf.gz",
+    file_name: str = "posit_combined.sdf",
     remove_hydrogen: bool = True,
     pocket_dir: Optional[Path] = None,
     pocket_sequence_file: Optional[Path] = None,
-    activity_type_subset: Optional[List[str]] = None,
-                ) -> pd.DataFrame:
+    #activity_type_subset: Optional[List[str]] = None,
+    )-> pd.DataFrame:#.process_david():
     
-
-
-
-    print('succsefully running kinodata function')
-
-
-    print(raw_dir)
-
+    #-> pd.DataFrame:
     if pocket_dir is None:
-        pocket_dir = raw_dir / "mol2" / "pocket"
+        pocket_dir = f"{raw_dir}/mol2/pocket"
     if pocket_sequence_file is None:
-        pocket_sequence_file = raw_dir / "pocket_sequences.csv"
-    raw_fp = str(raw_dir / file_name)
+        pocket_sequence_file = f"{raw_dir}/pocket_sequences.csv"
+
+
+    print('succesfully runing davids funciton')
+    
+    raw_fp = f"{raw_dir}/{file_name}"
+    if os.path.exists(raw_fp):
+        print("File exists")
+    else:
+        print("File does not exist")
+
     print(f"Reading data frame from {raw_fp}...")
+ 
+
+
+    file_name_benchmark_results= "posit_results.csv"
+    file_name_benchmark_dataset= "docking_benchmark_dataset.csv"
+
+
+
+
+    ########
     df = PandasTools.LoadSDF(
         raw_fp,
         smilesName="compound_structures.canonical_smiles",
@@ -144,54 +155,110 @@ def process_raw_data_kinodata(
         removeHs=remove_hydrogen,
     )
 
-    print('df reading is done')
-    print(df.columns)
-    if activity_type_subset is not None:
-        print(activity_type_subset)
-        #df = df.query("activities.standard_type in @activity_type_subset")
-        df = df.query("`activities.standard_type` == @activity_type_subset")
-    df["activities.standard_value"] = df["activities.standard_value"].astype(float)
-    df["docking.predicted_rmsd"] = df["docking.predicted_rmsd"].astype(float)
 
-    print(f"Deduping data frame (current size: {df.shape[0]})...")
-    group_key = [
-        "compound_structures.canonical_smiles",
-        "UniprotID",
-        "activities.standard_type",
-    ]
-    mean_activity = (
-        df.groupby(group_key).agg({"activities.standard_value": "mean"}).reset_index()
-    )
-    best_structure = (
-        df.sort_values(by="docking.predicted_rmsd", ascending=True)
-        .groupby(group_key)[group_key + ["docking.predicted_rmsd", "molecule"]]
-        .head(1)
-    )
-    deduped = pd.merge(mean_activity, best_structure, how="outer", on=group_key)
-    df = pd.merge(
-        df.drop_duplicates(group_key),
-        deduped,
-        how="left",
-        on=group_key,
-        suffixes=(".orig", None),
-    )
-    for col in ("activities.standard_value", "docking.predicted_rmsd", "molecule"):
-        del df[f"{col}.orig"]
-    # df.set_index("ID", inplace=True)
-    print(f"{df.shape[0]} complexes remain after deduplication.")
+    ###############
+    #activity_type_subset = 'pIC50'
+
+
+    benchmark_posit_results=pd.read_csv(f"{raw_dir}/{file_name_benchmark_results}")
+    benchmark_dataset=pd.read_csv(f"{raw_dir}/{file_name_benchmark_dataset}")
+
+    assert_same_length([df, benchmark_posit_results])
+
+
+
+    print('Retrieving file names')
+    
+    df['Name']=benchmark_posit_results['Unnamed: 0']
+
+    print('Retrieving ligand id')
+    df['ligand_expo_id']=benchmark_posit_results['ligand_expo_id'] #i do not need this column later on
+
+    print('Retrieving kinase pdb id')
+    df['protein_pdb_id']=benchmark_posit_results['protein_pdb_id'] #i do not need this column later on (?)
+
+    print('Retrieving fingerprint similarity')
+    df['similar.fp_similarity']=benchmark_posit_results['fingerprint_similarity']
+
+    #print('Retrieving chemgauss score')
+    #df['docking.chemgauss_score']=benchmark_posit_results['docking_score']
+    df.rename(columns={'POSIT::Probability': 'docking.posit_probability', 'Chemgauss4': 'docking.chemgauss_score'}, inplace=True)
+
+    #print('Retrieving posit probability')
+    #df['docking.posit_probability']=benchmark_posit_results['posit_probability']
+
+    print('Retrieving predicted RMSD')
+    df['docking.predicted_rmsd']=benchmark_posit_results['rmsd']
+
+
+    #ligand_smiles_data=benchmark_dataset[['ligand.expo_id', 'smiles']].drop_duplicates()
+
+    ####
+    # Merge ligand_smiles_data with df on ligand expo ID
+    #merged_df = pd.merge(df, ligand_smiles_data, left_on='ligand_expo_id', right_on='ligand.expo_id', how='left')
+    
+    #print('Retrieving SMILES')
+    # Update DataFrame columns using vectorized operations
+    #merged_df['compound_structures.canonical_smiles_2'] = merged_df['smiles']
+
+    #print('Retrieving MOL')
+    #merged_df['molecule'] = merged_df['smiles'].apply(Chem.MolFromSmiles)
+
+    # Drop redundant columns
+    #merged_df.drop(columns=['ligand.expo_id', 'smiles'], inplace=True)
+
+    # Reassign back to df if needed
+    #df = merged_df
+
+
+    ##########
+
+    # Merge benchmark_dataset with df on protein_pdb_id
+    pocket_structure=benchmark_dataset[['structure.pdb_id', 'structure.pocket', 'structure.klifs_id']].drop_duplicates()
+    merged_df = pd.merge(df, pocket_structure, left_on='protein_pdb_id', right_on='structure.pdb_id', how='left')
+    
+    # Filter pocket structures and unique Klifs ID for each row
+    #pocket_structures = merged_df.groupby('protein_pdb_id')['structure.pocket'].unique().reset_index()
+    #klifs_id = merged_df.groupby('protein_pdb_id')['structure.klifs_id'].first().reset_index()
+
+    #print(merged_df.columns)
+
+    # Merge pocket structures and Klifs ID with df
+    print('Retrieving KLIFS_structure_ID')
+    #merged_df = pd.merge(merged_df, pocket_structures, left_on='protein_pdb_id', right_on='protein_pdb_id', how='left')
+    #merged_df = pd.merge(merged_df, klifs_id, left_on='protein_pdb_id', right_on='protein_pdb_id', how='left')
+    
+    print('Retrieving UniprotID')
+    df=merged_df
+    klifs_structure_ids = df['structure.klifs_id'].unique()
+    #print(len(klifs_structure_ids))
+    uniprot_dic = {klifs_id: fetch_uniprot_id(klifs_id) for klifs_id in tqdm(klifs_structure_ids)}
+
+
+    df['UniprotID'] = df['structure.klifs_id'].map(uniprot_dic)
+
+    print("Adding pocket sequences...")
+    df.rename(columns={'structure.klifs_id': 'similar.klifs_structure_id', 'structure.pocket': 'structure.pocket_sequence'}, inplace=True)
+
+    # Ensure directories exist or create them if they don't
+    #os.makedirs(pocket_dir, exist_ok=True)
+
+
+    #structure_ids = df['structure.klifs_id'].unique().tolist()
+
 
     print("Checking for missing pocket mol2 files...")
     df["similar.klifs_structure_id"] = (
         df["similar.klifs_structure_id"].astype(float).astype(int)
     )
     # get pocket mol2 files
-    if not pocket_dir.exists():
-        pocket_dir.mkdir(parents=True)
+    if not Path(pocket_dir).exists():
+        Path(pocket_dir).mkdir(parents=True)
 
     struc_ids = df["similar.klifs_structure_id"].unique()
     pbar = tqdm(struc_ids, total=len(struc_ids))
     for structure_id in pbar:
-        fp = pocket_dir / f"{structure_id}_pocket.mol2"
+        fp = Path(f"{pocket_dir}/{structure_id}_pocket.mol2")
         if fp.exists():
             continue
         resp = requests.get(
@@ -202,7 +269,7 @@ def process_raw_data_kinodata(
         fp.write_bytes(resp.content)
 
     pocket_mol2_files = {
-        int(fp.stem.split("_")[0]): fp for fp in (pocket_dir).iterdir()
+        int(fp.stem.split("_")[0]): fp for fp in (Path(pocket_dir)).iterdir()
     }
     df["pocket_mol2_file"] = [
         pocket_mol2_files[row["similar.klifs_structure_id"]] for _, row in df.iterrows()
@@ -211,40 +278,35 @@ def process_raw_data_kinodata(
     # backwards compatability
     df["ident"] = df.index
 
-    print("Adding pocket sequences...")
-    # KLIFS API now sometimes decides to timeout
-    print(df.shape)
-    while True:
-        try:
-            with CachedSequences(pocket_sequence_file) as sequence_cache:
-                klifs_ids = df["similar.klifs_structure_id"].tolist()
-                for klifs_id in tqdm(klifs_ids):
-                    if klifs_id in sequence_cache:
-                        continue
-                    sequence = get_pocket_sequence([klifs_id])
-                    sequence_cache[klifs_id] = sequence
-                df_sequences = sequence_cache.to_data_frame()
-                df = pd.merge(df, df_sequences, on="similar.klifs_structure_id")
-            break
-        except Exception as e:
-            print(f"Querying KLIFS for sequence from structure id raised {e}")
-            print("Retrying..")
-            sleep(10)
-    print(df.shape)
+    #print(df["similar.klifs_structure_id"].tolist())
 
-    # if pocket_sequence_file.exists():
-    #     print(f"from cached file {pocket_sequence_file}.")
-    #     pocket_sequences = pd.read_csv(pocket_sequence_file)
-    #     pocket_sequences["ident"] = pocket_sequences["ident"].astype(str)
-    #     df = pd.merge(df, pocket_sequences, left_on="ident", right_on="ident")
-    # else:
-    #     print("from KLIFS.")
-    #     df = add_pocket_sequence(df, pocket_sequence_key="structure.pocket_sequence")
-    #     df[["ident", "structure.pocket_sequence", "similar.klifs_structure_id"]].to_csv(
-    #         pocket_sequence_file, index=False
-    #     )
+    print(df.columns)
 
-    return df
+
+
+    column_kinodata_list= ['docking.posit_probability', 'docking.chemgauss_score',
+       'activities.activity_id', 'assays.chembl_id',
+       'target_dictionary.chembl_id', 'molecule_dictionary.chembl_id',
+       'molecule_dictionary.max_phase', 'activities.standard_type',
+       'activities.standard_units', 'compound_structures.canonical_smiles',
+       'compound_structures.standard_inchi', 'component_sequences.sequence',
+       'assays.confidence_score', 'docs.chembl_id', 'docs.year',
+       'docs.authors', 'UniprotID', 'similar.klifs_structure_id',
+       'similar.fp_similarity', 'ID', 'activities.standard_value',
+       'docking.predicted_rmsd', 'molecule', 'pocket_mol2_file', 'ident',
+       'structure.pocket_sequence']
+    
+    for col_name in column_kinodata_list:
+        if col_name not in df.columns:
+            df[col_name] = float('nan')
+
+
+    
+    (df.iloc[0])
+
+    print("DataFrame done")
+
+    return df  #this df and the one fro kinodata_data have exactly the same columns
 
 
 
@@ -300,7 +362,7 @@ class ComplexInformation:
         return pocket
 
 
-class KinodataDockedAgnostic:
+class DavidsDockedAgnostic:
     def __init__(
         self,
         raw_dir: str = str(_DATA / "raw"),
@@ -308,8 +370,9 @@ class KinodataDockedAgnostic:
     ):
         self.raw_dir = Path(raw_dir)
         self.remove_hydrogen = remove_hydrogen
-        print(f"Loading kinodata raw data from {self.raw_dir}...")
-        self._df = process_raw_data_kinodata(self.raw_dir, remove_hydrogen=remove_hydrogen)
+        print(f"Loading davids raw data from {self.raw_dir}...")
+        self._df = process_raw_data_david(self.raw_dir, remove_hydrogen=remove_hydrogen)
+        print('wtf')
         print("Converting to data list...")
         self.data_list = ComplexInformation.from_raw(
             self._df, remove_hydrogen=self.remove_hydrogen
@@ -327,7 +390,7 @@ class KinodataDockedAgnostic:
         return self.data_list[idx]
 
 
-class KinodataDocked(InMemoryDataset):
+class DavidsdataDocked(InMemoryDataset):
     def __init__(
         self,
         root: Optional[str] = str(_DATA),
@@ -335,7 +398,9 @@ class KinodataDocked(InMemoryDataset):
         remove_hydrogen: bool = True,
         transform: Optional[Callable] = None,
         pre_transform: Optional[Callable] = None,
-        pre_filter: Optional[Callable] = FilterActivityType([ActivityTypes.pic50]),
+        pre_filter: Optional[Callable] = None,
+         # FilterActivityType([ActivityTypes.pic50]),  I removed this for David's data, think about how will I do this properly, like create  seaprate funciton that just does not have that input or what
+         #specially now that I am going to be working with heterodata
         post_filter: Optional[Callable] = None,
         residue_representation: Literal["sequence", "structural", None] = "sequence",
         require_kissim_residues: bool = False,
@@ -357,9 +422,6 @@ class KinodataDocked(InMemoryDataset):
         self.num_processes = num_processes
         self.post_filter = post_filter
         super().__init__(root, transform, pre_transform, pre_filter)
-        print(self.processed_paths[0])
-        print(self.root)
-        print(self.processed_file_names)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
     #i have commented out the following because with davids data this is not the defaults, but when merging both I need to change this
@@ -368,25 +430,25 @@ class KinodataDocked(InMemoryDataset):
     def pocket_sequence_file(self) -> Path:
         return Path(self.raw_dir) / "pocket_sequences.csv"
 
-    
     @property
-    #def raw_file_names_kinodata(self) -> List[str]:
+    #def raw_file_names_david(self) -> List[str]:
     def raw_file_names(self) -> List[str]:
-        return ["kinodata_docked_v2.sdf.gz"]
-   #     return ["posit_combined.sdf"]
+    #    return ["kinodata_docked_v2.sdf.gz"]
+        return ["posit_combined.sdf"]
         #return ["kinodata_docked_full.sdf.gz"]
 
+    
     @property
     def processed_file_names(self) -> List[str]:
         # TODO add preprocessed kssim fingerprints?
         return [
-            f"kinodata_docked_v2.pt",
+            f"posit_combined.pt",
         ]
 
     @property
     def processed_dir(self) -> str:
         pdir = super().processed_dir
-        pdir = os.path.join(pdir, "kinodata")
+        pdir = os.path.join(pdir, "davidsdocked")
         if self.prefix is not None:
             pdir = os.path.join(pdir, self.prefix)
         return pdir
@@ -419,34 +481,22 @@ class KinodataDocked(InMemoryDataset):
     #        self.pocket_sequence_file,
     #         )
     
-
-    #def df(self) -> pd.DataFrame:
-    #    return process_raw_data_david(
-    #        Path(self.raw_dir),
-    #        self.raw_file_names[0],
-    #        # self.file_name_benchmark_results,
-    #        #self.file_name_benchmark_dataset,
-    #        self.remove_hydrogen,
-    #        self.pocket_dir,
-    #        self.pocket_sequence_file,
-    #         )
-
     @cached_property
     def df(self) -> pd.DataFrame:
-        return process_raw_data_kinodata(
+        return process_raw_data_david(
             Path(self.raw_dir),
-            #self.raw_file_names_kinodata[0],
             self.raw_file_names[0],
+    #        # self.file_name_benchmark_results,
+    #        #self.file_name_benchmark_dataset,
             self.remove_hydrogen,
             self.pocket_dir,
             self.pocket_sequence_file,
-            activity_type_subset="pIC50", 
-        )
+             )
+
     
 
     
     def _process(self):
-        #f = osp.join(self.processed_dir, "post_filter.pt")
         f = osp.join(self.processed_dir, "post_filter.pt")
         if osp.exists(f) and torch.load(f) != _repr(self.post_filter):
             warnings.warn(
@@ -500,6 +550,7 @@ class KinodataDocked(InMemoryDataset):
 
 
         # Parallelize the processing of items
+        print("Running loop inside make data list")
         data_list = Parallel(n_jobs=n_jobs)(
         delayed(process_single_item)(item, self.residue_representation, self.require_kissim_residues)
         for item in tqdm(complex_info))
@@ -556,7 +607,7 @@ def repr_filter(filter: Callable):
     )
 
 
-def Filtered(dataset: KinodataDocked, filter: Callable) -> Type[KinodataDocked]:
+def Filtered_david(dataset: DavidsdataDocked, filter: Callable) -> Type[DavidsdataDocked]:
     """
     Creates a new, filtered dataset class with its own processed directory
     that caches the filtered data.
@@ -573,7 +624,7 @@ def Filtered(dataset: KinodataDocked, filter: Callable) -> Type[KinodataDocked]:
     Type[KinodataDocked]
     """
 
-    class FilteredDataset(KinodataDocked):
+    class FilteredDataset(DavidsdataDocked):
         def __init__(self, **kwargs):
             for attr in ("transform", "pre_transform", "pre_filter", "post_filter"):
                 if attr not in kwargs:
@@ -602,7 +653,7 @@ def Filtered(dataset: KinodataDocked, filter: Callable) -> Type[KinodataDocked]:
 
 
 def apply_transform_instance_permament(
-    dataset: KinodataDocked, transform: Callable[[HeteroData], Optional[HeteroData]]
+    dataset: DavidsdataDocked, transform: Callable[[HeteroData], Optional[HeteroData]]
 ):
     print(f"Applying permamnent transform {transform} to {dataset}...")
     transformed_data_list = []

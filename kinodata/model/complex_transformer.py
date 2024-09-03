@@ -18,6 +18,7 @@ from torch_geometric.nn.aggr import SoftmaxAggregation
 from torch_geometric.utils import coalesce
 from torch_cluster import knn_graph
 
+
 from kinodata.configuration import Config
 
 from ..types import NodeEmbedding, NodeType, RelationType
@@ -145,8 +146,8 @@ class ComplexTransformer(RegressionModel):
         config: Config,
         hidden_channels: int,
         num_heads: int,
-        num_attention_blocks: int,
-        interaction_radius: float,
+        num_attention_blocks: int, #.3
+        interaction_radius: float, #1
         max_num_neighbors: int,
         act: str,
         max_atomic_number: int = 100,
@@ -211,12 +212,24 @@ class ComplexTransformer(RegressionModel):
                     FF(hidden_channels, hidden_channels, self.act)
                     for _ in range(decoder_hidden_layers)
                 ]
-                + [Linear(hidden_channels, 1)]
+                + [Linear(hidden_channels, 3)]# Change the output dimension to 3
+            
             )
         )
 
     def forward(self, data: HeteroData) -> NodeEmbedding:
+      
+
+       
+
+
+
+
+        #nose_store_test=data[0][NodeType.Complex]
         node_store = data[NodeType.Complex]
+
+
+
         node_repr = self.act(
             self.atomic_num_embedding(node_store.z)
             + self.lin_atom_features(node_store.x)
@@ -231,7 +244,21 @@ class ComplexTransformer(RegressionModel):
             node_repr = norm(node_repr, node_store.batch)
 
         graph_repr = self.aggr(node_repr, node_store.batch)
-        return self.out(graph_repr)
+        output = self.out(graph_repr)
+
+        #output[:, 2] = torch.relu(output[:, 2])
+
+        #out_put[:,2]=1 / (1 + torch.exp(5 * (output[:, 2] - 3)))
+
+        #output[:, 2] = torch.nn.functional.softplus(output[:, 2])
+        # # Create a new tensor for the modified third column
+        new_third_col = torch.nn.functional.softplus(output[:, 2])
+
+        # Concatenate the new third column with the rest of the output
+        output = torch.cat((output[:, :2], new_third_col.unsqueeze(1), output[:, 3:]), dim=1)
+        #ensuring the third prediciton is always positive and greater than 0, so that it can then be put through the sigmoid function--> check with jonh!
+        #I thoguht about just using a sigmoid above, but then it would sometimes predict values that are 0 and this would be an issue in the loss computation
+        return output
 
 
 def make_model(config: Config):

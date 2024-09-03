@@ -10,6 +10,7 @@ from .data_split import Split
 from .utils.cluster import AffinityPropagation
 from .utils.similarity import BLOSUMSubstitutionSimilarity
 from .dataset import KinodataDocked
+from .dataset_davids_data import DavidsdataDocked
 
 
 def _split_random(a: np.ndarray, percentile: float, seed: int = 0):
@@ -69,6 +70,10 @@ class KinodataKFoldSplit:
     @cache_dir.register
     def _(self, dataset: KinodataDocked) -> Path:
         return Path(dataset.processed_dir) / self.split_type
+    
+    @cache_dir.register
+    def _(self, dataset: DavidsdataDocked) -> Path:
+        return Path(dataset.processed_dir) / self.split_type
 
     @cache_dir.register
     def _(self, dataset_dir: Path) -> Path:
@@ -84,9 +89,10 @@ class KinodataKFoldSplit:
         if dataset is not None:
             cache_dir = self.cache_dir(dataset)
         assert cache_dir is not None
-        return [cache_dir / f"{i}:{self.k}.csv" for i in range(1, self.k + 1)]
+        return [cache_dir / f"{i}:{self.k}.csv" for i in range(1, self.k + 1)] #here it is where the csv is loaded!
 
-    def _split(self, dataset: KinodataDocked):
+    #def _split(self, dataset: KinodataDocked):
+    def _split(self, dataset):
         if self.split_type == "scaffold-k-fold":
             scaffolds, idents = zip(*[(data.scaffold, data.ident) for data in dataset])
             scaffolds = np.array(scaffolds)
@@ -113,7 +119,8 @@ class KinodataKFoldSplit:
             idents = [data.ident for data in dataset]
             return random_k_fold_split(idents, self.k)
 
-    def split(self, dataset: KinodataDocked) -> List[Split]:
+        #def split(self, dataset: KinodataDocked) -> List[Split]:
+    def split(self, dataset) -> List[Split]:
         split_files = self.split_files(dataset)
         if all(f.exists() for f in split_files):
             return [Split.from_csv(f) for f in split_files]
