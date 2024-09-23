@@ -138,7 +138,6 @@ def fname2ident(filename: Union[str, Path]) -> str:
 
 
 def main():
-    wandb.init(mode="disabled")
     pocket_file = sys.argv[1]
     ligand_dir = Path(sys.argv[2])
     assert Path(ligand_dir).exists(), f"invalid ligand path: {ligand_dir}"
@@ -153,7 +152,7 @@ def main():
     transform = TransformToComplexGraph(remove_heterogeneous_representation=True)
     pocket = read_molecule(pocket_file)
 
-    print("watch for new ligands")
+    print("watch for new ligands in", ligand_dir)
     while True:
         ligand_files = [
             Path(ligand_dir) / f
