@@ -87,6 +87,7 @@ class RegressionModel(pl.LightningModule):
             {
                 "scheduler": scheduler,
                 "monitor": "val/mae",
+                #"monitor": "train/loss_activity",
                 "interval": "epoch",
                 "frequency": 1,
             }
@@ -95,82 +96,20 @@ class RegressionModel(pl.LightningModule):
     def forward(self, batch) -> Tensor:
         
         pred = self.model(batch)
-        #pred_activity = pred[:, 0]
-        #pred_uncertainty = pred[:, 1]
-        #pred_pose = pred[:, 2]
 
         return pred
 
-    #def compute_loss(self, pred, batch_david, batch_kino):
-
-    #    target_activity = batch_kino.y #double check this is right but I think so 
-    #    target_exp_rmsd=batch_david.predicted_rmsd #this is assuming that the predicted rmsd of the kinodata data is the true one!
-
-    #    print("the target activity is")
-    #    print(target_activity)
-        
-       
-    #    print('pred inside loss function')
-    #    print(pred)
-    
-    #    pred_activity = pred[:, 0]
-    #    pred_unc_activity = pred[:, 1]
-    #    pose_certainty = pred[:, 2]
-
-    #    for item in target_activity:
-
-    #        target_pose_certainty = 1 / (1 + torch.exp(10 * (target_exp_rmsd - 2.5))) #there shoudl be a pytorch func to do this
-    #        regulariser_term = 1 / pred_unc_activity #change this later?
-
-    #        loss_activity += (((target_activity - pred_activity).pow(2) / pred_unc_activity.pow(2)) * pose_certainty) + regulariser_term
-
-    #    for item in target_exp_rmsd:
-             
-    #        target_pose_certainty = 1 / (1 + torch.exp(10 * (item - 2.5)))
-    #        loss_pose += target_pose_certainty * torch.log(pose_certainty) + (1 - target_pose_certainty) * torch.log(1 - pose_certainty)
-
-
-    #    total_loss += self.weight_pki * torch.mean(loss_activity) + self.weight_pose * torch.mean(loss_pose) # added the + here so that it is added up -- divde by datasets
-
-
-       # if not torch.isnan(target_activity).all(): 
-
-        #    target_pose_certainty = 1 / (1 + torch.exp(10 * (target_exp_rmsd - 2.5))) #there shoudl be a pytorch func to do this
-
-            # I have done this manually, problaly there is a better wya to do this
-            #is the above correct if I am not calculating the loss_pose
-        #    regulariser_term = 1 / pred_unc_activity #change this later?
-
-        #    loss_activity = (((target_activity - pred_activity).pow(2) / pred_unc_activity.pow(2)) * pose_certainty) + regulariser_term#.mean() #why do I need the mean?
-            #also I have seen that some times for the log-likelihood of the gaussion distribution to the firstterm we need to add log(uncertianty squared)
-    
-        #    loss_pose = torch.tensor(0.0)  # No loss_pose for dataset kinodata
-        #else:  # Dataset B
-
-        #    target_pose_certainty = 1 / (1 + torch.exp(10 * (target_exp_rmsd - 2.5)))
-        #    loss_activity = torch.tensor(0.0)  # No loss_activity for dataset B
-        #    loss_pose = target_pose_certainty * torch.log(pose_certainty) + (1 - target_pose_certainty) * torch.log(1 - pose_certainty)
-
-        #total_loss += self.weight_pki * torch.mean(loss_activity) + self.weight_pose * torch.mean(loss_pose) # added the + here so that it is added up -- divde by datasets
-
-        # for logging return losses separately
-
-        #return torch.mean(loss_activity), torch.mean(loss_pose), total_loss
+   
     
     def compute_loss_activity(self, pred, batch):
 
         target_activity = batch.y #double check this is right but I think so 
-        #target_exp_rmsd=batch.predicted_rmsd #this is assuming that the predicted rmsd of the kinodata data is the true one!
-
-        #print('pred inside loss function of activities')
-        #print(pred)
+        
 
         print("the target activity is")
         print(target_activity)
         
        
-       
-    
         pred_activity = pred[:, 0]
         pred_unc_activity = pred[:, 1]
         pose_certainty = pred[:, 2]
@@ -191,34 +130,25 @@ class RegressionModel(pl.LightningModule):
     def compute_loss_pose(self, pred, batch):
          
         target_activity = batch.y #double check this is right but I think so 
-        target_exp_rmsd=batch.predicted_rmsd #this is assuming that the predicted rmsd of the kinodata data is the true one!
+        target_exp_rmsd=batch.predicted_rmsd 
         
         print("the target pose is")
         print(target_exp_rmsd)
 
-       
-        
 
-    
-        pred_activity = pred[:, 0]
-        pred_unc_activity = pred[:, 1]
         pose_certainty = pred[:, 2]
         
 
         target_pose_certainty = 1 / (1 + torch.exp(5 * (target_exp_rmsd - 3))) #changing this to 3 since most values are actually quite tiny. need to think a bit about this further
         #target_pose_certainty=1 / (1 + torch.exp(10 * (target_exp_rmsd - 2.5)))
+        
         print("printing target pose certainty")
-
         print(target_pose_certainty)
-
 
         print("printing pose_certainty")
         print(pose_certainty)
 
         loss_pose = target_pose_certainty * torch.log(pose_certainty) + (1 - target_pose_certainty) * torch.log(1 - pose_certainty)
-
-        print('loss pose')
-        print(loss_pose)
 
         return loss_pose
 
@@ -230,95 +160,96 @@ class RegressionModel(pl.LightningModule):
 
         from torch_geometric.data import Batch
 
+
+        # Unpack the activity and pose batches directly
+        activity_batch, pose_batch = batch  # batch is a tuple from the DataLoader
         
+        print('the activity batch is')
+        print(activity_batch['y'])
+        print(activity_batch['predicted_rmsd'])
 
-        batch=Batch.from_data_list(batch)
-
-        pred = self.forward(batch)
-
-
-
-        mask_dataset_kino = ~torch.isnan(batch.y)  # Assuming dataset A has target_activity
-        mask_dataset_david = torch.isnan(batch.y) 
-
-        print("printing datasets of david and kino ")
-        print(mask_dataset_david)
-        print(mask_dataset_kino)
+        print('the pose batch is')
+        print(pose_batch['y'])
+        print(pose_batch['predicted_rmsd'])
 
 
-        batch_a = batch[mask_dataset_kino]
-        batch_a=Batch.from_data_list(batch_a)
-        pred_a = pred[mask_dataset_kino]
-        loss_activity= self.compute_loss_activity(pred_a, batch_a)
-        self.log("train/loss_activity", loss_activity.mean(), batch_size=pred_a.size(0), on_epoch=True)
-        
+       
+        #I want to talk about why these two predictions are different!
+        # Forward pass for activity batch
+        pred_activity = self.forward(activity_batch)
 
+        loss_activity = self.compute_loss_activity(pred_activity, activity_batch)
+        self.log("train/loss_activity", loss_activity.mean(), batch_size=pred_activity.size(0), on_epoch=True)
+    
+        # Forward pass for pose batch
+        pred_pose = self.forward(pose_batch)
+        loss_pose = self.compute_loss_pose(pred_pose, pose_batch)
+        self.log("train/loss_pose", loss_pose.mean(), batch_size=pred_pose.size(0), on_epoch=True)
 
-        batch_b = batch[mask_dataset_david]
-        batch_b=Batch.from_data_list(batch_b)
-        pred_b = pred[mask_dataset_david]
-        loss_pose = self.compute_loss_pose(pred_b, batch_b)
-        self.log("train/loss_pose", loss_pose.mean(), batch_size=pred_b.size(0), on_epoch=True)
+        # Combine losses
+        total_loss = self.weight_pki * loss_activity.mean() + self.weight_pose * loss_pose.mean()
+        self.log("train/total_loss", total_loss, batch_size=pred_activity.size(0), on_epoch=True)
 
-
-        
-
-        total_loss = self.weight_pki * torch.mean(loss_activity) + self.weight_pose * torch.mean(loss_pose) 
-        self.log("train/total_loss", total_loss, batch_size=pred.size(0), on_epoch=True)
-        wandb.log("train/total_loss", total_loss, batch_size=pred.size(0), on_epoch=True)
-
+        wandb.log({
+            "train/total_loss": total_loss,
+             "batch_size": pred_activity.size(0), #check this is right
+             "on_epoch": True
+            })
         return total_loss
 
         
     def validation_step(self, batch, *args, key: str = "val"):
 
-        from torch_geometric.data import Batch
         print('running a validation step')
-        
 
-        batch=Batch.from_data_list(batch)
+        # Unpack the activity and pose batches directly
+        activity_batch, pose_batch = batch  # batch is a tuple from the DataLoader
 
+        # Forward pass for activity batch
+        pred_activity = self.forward(activity_batch)
+        activity_mae = (pred_activity[:, 0] - activity_batch.y).abs().mean()  # Assuming pred_activity[:, 0] corresponds to pred_activity
+        self.log(f"{key}/activity_mae", activity_mae, batch_size=pred_activity.size(0), on_epoch=True)
+    
+        # Forward pass for pose batch
+        pred_pose = self.forward(pose_batch)
+        target_exp_rmsd = pose_batch.predicted_rmsd  # Assuming pose_batch has predicted_rmsd as a target
 
-        pred=self.forward(batch)
-
-        mask_dataset_kino = ~torch.isnan(batch.y)  # Assuming dataset A has target_activity
-        mask_dataset_david = torch.isnan(batch.y)   # Assuming dataset B doesn't have target_activity
-
-      
-        batch_a = batch[mask_dataset_kino]
-        batch_a=Batch.from_data_list(batch_a)
-        pred_a = pred[mask_dataset_kino]
-        activity_mae = (pred_a[:, 0] - batch_a.y).abs().mean()  # Assuming pred_a[:, 0] corresponds to pred_activity
-        self.log(f"{key}/activity_mae", activity_mae, batch_size=pred_a.size(0), on_epoch=True)
-        
-       
-        batch_b = batch[mask_dataset_david]
-        batch_b=Batch.from_data_list(batch_b)
-        pred_b = pred[mask_dataset_david]
-        target_exp_rmsd = batch_b.predicted_rmsd
-        print('printing target_rmsd from validations step')
+        print('printing target_rmsd from validation step')
         print(target_exp_rmsd)
-        target_rmsd = 1 / (1 + np.exp(5 * (target_exp_rmsd - 3)))  # Transform target_exp_rmsd to target_rmsd, it has to be the same formula as in the loss
-        pose_mae = (pred_b[:, 2] - target_rmsd).abs().mean()  # Assuming pred_b[:, 2] corresponds to pose_certainty
-        self.log(f"{key}/pose_mae", pose_mae, batch_size=pred_b.size(0), on_epoch=True)
-        combined_mae = (activity_mae + pose_mae) / 2 #check formula of the combined error
-        self.log(f"{key}/mae", combined_mae, batch_size=pred.size(0), on_epoch=True)
+
+        target_rmsd = 1 / (1 + torch.exp(5 * (target_exp_rmsd - 3)))  # Transform target_exp_rmsd to target_rmsd
+        pose_mae = (pred_pose[:, 2] - target_rmsd).abs().mean()  # Assuming pred_pose[:, 2] corresponds to pose_certainty
+        self.log(f"{key}/pose_mae", pose_mae, batch_size=pred_pose.size(0), on_epoch=True)
+
+        # Combined MAE of activity and pose
+        combined_mae = (activity_mae + pose_mae) / 2
+    
+        print(f"Logging {key}/mae: {combined_mae}")
+        self.log(f"{key}/mae", combined_mae, batch_size=max(pred_activity.size(0), pred_pose.size(0)), on_epoch=True)
+
+        #return {
+        #    f"{key}/pose_mae": pose_mae,
+        #    "pred_pose": pred_pose[:, 2],  # Assuming pred_pose[:, 2] corresponds to pose_certainty
+        #    "target_pose": target_rmsd,
+        #    "ident_pose": pose_batch.ident,
+        #    f"{key}/activity_mae": activity_mae,
+        #    "pred_activity": pred_activity[:, 0],  # Assuming pred_activity[:, 0] corresponds to pred_activity
+        #    "target_activity": activity_batch.y,
+        #    "ident_activity": activity_batch.ident,
+        #    f"{key}/mae": combined_mae
+        #    }
+
+        # Return predictions and targets for evaluation
         return {
-                f"{key}/pose_mae": pose_mae,
-                "pred": pred_b[:, 2],  # Assuming pred_b[:, 2] corresponds to pose_certainty
-                "target": target_rmsd,
-                "ident": batch_b.ident,
-                f"{key}/activity_mae": activity_mae,
-                "pred": pred_a[:, 0],  # Assuming pred_a[:, 0] corresponds to pred_activity
-                "target": batch_a.y,
-                "ident": batch_a.ident,
-                f"{key}/mae": combined_mae
+            "pred": torch.cat([pred_activity[:, 0], pred_pose[:, 2]]),  # Concatenate activity and pose predictions
+            "target": torch.cat([activity_batch.y, target_rmsd]),  # Concatenate activity and pose targets
+            f"{key}/mae": combined_mae
             }
-        ######
+
     
     
     def process_eval_outputs(self, outputs) -> float:
-        print('printint outputs')
+        print('printing outputs')
         print(outputs)
         pred = torch.cat([output["pred"] for output in outputs], 0)
         target = torch.cat([output["target"] for output in outputs], 0)
@@ -354,7 +285,7 @@ class RegressionModel(pl.LightningModule):
         from torch_geometric.data import Batch
 
         
-
+        #I think there is an inconsistency here with the batch
         batch=Batch.from_data_list(batch)
         pred = self.forward(batch)
         pred_activity = pred[:, 0]
