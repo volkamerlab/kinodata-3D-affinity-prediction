@@ -30,7 +30,7 @@ from kinodata.data.data_module import make_kinodata_module
 from kinodata.transform import TransformToComplexGraph
 
 import kinodata.configuration as configuration
-from kinodata.training import train
+#from kinodata.training import train
 from kinodata.model.complex_transformer import ComplexTransformer, make_model
 from kinodata.types import NodeType
 from kinodata.data.dataset import apply_transform_instance_permament
@@ -46,27 +46,10 @@ import wandb
 wandb.init(project='extended_kinodata')
 
 #%%
-#%%
 torch.cuda.is_available()
 
 #%%
 
-#%%
-# Function to get WandB cache directory
-#def get_wandb_cache_dir():
-#    from wandb.sdk.interface.artifacts import get_artifacts_cache
-#    artifacts_cache = get_artifacts_cache()
-#    return artifacts_cache._cache_dir
-
-# Print the WandB cache directory
-#print("WandB Cache Directory:", get_wandb_cache_dir())
-#%%
-
-#print("WandB Settings:")
-#print(wandb.run.settings)
-#print("Environment Variables:")
-#print(os.environ.get('WANDB_CACHE_DIR'))
-#%%
 data_module = make_kinodata_module(
     cfg.get("data", "training").update(
         dict(
@@ -80,12 +63,9 @@ data_module = make_kinodata_module(
     transforms=[TransformToComplexGraph(remove_heterogeneous_representation=False)],
 )
 
-#%%
 
-
-data_module
 #%%
-data_module[0]
+data_module[1]
 
 
 #%%
@@ -94,211 +74,104 @@ data_module[0]
 
 import torch
 from torch.utils.data import Dataset, DataLoader
-
+from torch_geometric.data import Batch
+import pytorch_lightning as pl
 
 
 class CombinedDataset(Dataset):
     def __init__(self, dataset1, dataset2):
+        """
+        dataset1: Dataset A (Activity dataset)
+        dataset2: Dataset B (Pose dataset)
+        """
         self.dataset1 = dataset1
         self.dataset2 = dataset2
         self.len1 = len(dataset1)
         self.len2 = len(dataset2)
         self.min_len = min(self.len1, self.len2)
-        
+
     def __len__(self):
-        return self.min_len
+        return self.min_len  # Adjust this if you want equal-size batches or oversampling
 
     def __getitem__(self, idx):
+        """
+        Returns a combined batch containing activity and pose data
+        """
         item1 = self.dataset1[idx]
         item2 = self.dataset2[idx]
-        return item1, item2
-
-class CombinedBatchSampler(torch.utils.data.Sampler):
-    def __init__(self, combined_dataset, batch_size):
-        self.combined_dataset = combined_dataset
-        self.batch_size = batch_size
-        #self.num_batches = len(combined_dataset) // (batch_size // 2)
-        self.num_batches = len(combined_dataset) // batch_size 
-
-        
-    def __iter__(self):
-        for i in range(self.num_batches):
-            indices = list(range(i * (self.batch_size), (i + 1) * (self.batch_size)))
-            print('the indices are:')
-            print(indices)
-            yield indices
-    
-    def __len__(self):
-        return self.num_batches
-
-# Assuming dataset1 and dataset2 are instances of your dataset classes
-#%%
-#dataset1 = data_module[0].train_dataset
-
-
-#dataset2 = data_module[1].train_dataset
-
-#combined_dataset = CombinedDataset(dataset1, dataset2)
-
-#%%
-
-#combined_dataset_2=[]
-
-
-#for item in combined_dataset:
-
-#   for i in range(len(item)):
-
-#      combined_dataset_2.append(item[i])
-#print(combined_dataset_2)
-
-
-
-#%%
-
-
-#print(len(combined_dataset_2))
-#combined_batch_sampler = CombinedBatchSampler(combined_dataset_2, batch_size=32)
-
-#print(len(combined_batch_sampler.combined_dataset[13238]))
-
-#print(combined_batch_sampler.combined_dataset[0].y)
-#print(combined_batch_sampler.combined_dataset[1].y)
-#print(combined_batch_sampler.num_batches)
-#print(combined_batch_sampler.batch_size)
-
-
-#combined_loader = DataLoader(combined_dataset_2, batch_sampler=combined_batch_sampler, num_workers=0, pin_memory=True)
-#%%
-#print(combined_loader.batch_size)
-
-#%%
-   
-def fix_combined_dataset(combined_dataset):
-
-    combined_dataset_2=[]
-
-    for item in combined_dataset:
-
-        for i in range(len(item)):
-
-            combined_dataset_2.append(item[i])
-    return combined_dataset_2
-
+        return {'activity_batch': item1, 'pose_batch': item2}
 
 
 def custom_collate(batch):
-    return batch
+    """
+    Custom collate function to handle activity and pose batches separately.
+    """
+    activity_batches = [item['activity_batch'] for item in batch]
+    pose_batches = [item['pose_batch'] for item in batch]
+
+    # Create PyTorch Geometric batches from activity and pose data
+    activity_batch = Batch.from_data_list(activity_batches)
+    pose_batch = Batch.from_data_list(pose_batches)
+
+    return activity_batch, pose_batch
 
 
 class CombinedDataModule(pl.LightningDataModule):
-
     def __init__(self, datamodule1, datamodule2, batch_size=32, num_workers=0):
+        """
+        CombinedDataModule for handling two datasets (activity and pose).
+        
+        datamodule1: DataModule for Activity dataset (Dataset A)
+        datamodule2: DataModule for Pose dataset (Dataset B)
+        """
         super().__init__()
         self.datamodule1 = datamodule1
         self.datamodule2 = datamodule2
         self.batch_size = batch_size
         self.num_workers = num_workers
 
-
     def setup(self, stage=None):
-
-
+        """
+        Setup function to combine training, validation, and test datasets.
+        """
         # Combine training datasets
+        self.train_dataset = CombinedDataset(self.datamodule1.train_dataset, self.datamodule2.train_dataset)
 
-        combined_dataset_train = CombinedDataset(self.datamodule1.train_dataset[:100], self.datamodule2.train_dataset[:100])
-        combined_dataset_2_train=fix_combined_dataset(combined_dataset_train)
-        self.batch_train_dataset = CombinedBatchSampler(combined_dataset_2_train, batch_size=32)
-        self.train_dataset=combined_dataset_2_train
-        
         # Combine validation datasets
-        combined_dataset_val = CombinedDataset(self.datamodule1.val_dataset[:100], self.datamodule2.val_dataset[:100])
-        combined_dataset_2_val=fix_combined_dataset(combined_dataset_val)
-
-        self.batch_val_dataset=CombinedBatchSampler(combined_dataset_2_val, batch_size=32)
-
-        self.val_dataset = combined_dataset_2_val
-        print(self.batch_val_dataset)
-
+        self.val_dataset = CombinedDataset(self.datamodule1.val_dataset, self.datamodule2.val_dataset)
 
         # Combine test datasets
-        combined_dataset_test = CombinedDataset(self.datamodule1.test_dataset[:100], self.datamodule2.test_dataset[:100])
-        combined_dataset_2_test=fix_combined_dataset(combined_dataset_test)
-        self.batch_test_dataset= CombinedBatchSampler(combined_dataset_2_test, batch_size=32)
-        self.test_dataset = combined_dataset_2_test
-   
+        self.test_dataset = CombinedDataset(self.datamodule1.test_dataset, self.datamodule2.test_dataset)
 
     def train_dataloader(self):
-
-        return DataLoader(self.train_dataset,  batch_sampler=self.batch_train_dataset, num_workers=0, pin_memory=True, collate_fn=custom_collate)
-       # return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, pin_memory=True, collate_fn=collate_fn)
+        return DataLoader(
+            self.train_dataset, 
+            batch_size=self.batch_size, 
+            num_workers=self.num_workers, 
+            pin_memory=False, 
+            collate_fn=custom_collate
+        )
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_sampler=self.batch_val_dataset, num_workers=0, pin_memory=True, collate_fn=custom_collate)
-        #return DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=True, collate_fn=collate_fn)
+        return DataLoader(
+            self.val_dataset, 
+            batch_size=self.batch_size, 
+            num_workers=self.num_workers, 
+            pin_memory=False, 
+            collate_fn=custom_collate
+        )
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset,  batch_sampler=self.batch_test_dataset, num_workers=0, pin_memory=True, collate_fn=custom_collate)
-       
-        #return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=True, collate_fn=collate_fn)
+        return DataLoader(
+            self.test_dataset, 
+            batch_size=self.batch_size, 
+            num_workers=self.num_workers, 
+            pin_memory=False, 
+            collate_fn=custom_collate
+        )
 
-combined_data_module = CombinedDataModule(data_module[0], data_module[1])
-#%%
-data_module[0].train_dataset[:100]
-#%%
-#from torch.utils.data import Dataset
-#import pytorch_lightning as pl
-##from torch.utils.data import DataLoader
-#from torch_geometric.data import Batch
+combined_data_module = CombinedDataModule(data_module[0], data_module[1], batch_size=16)
 
-#class CombinedDataset(Dataset):
-#    def __init__(self, dataset1, dataset2):
-#        self.dataset1 = dataset1
-#        self.dataset2 = dataset2
-
-#    def __len__(self):
-#        return len(self.dataset1) + len(self.dataset2)
-
-#    def __getitem__(self, idx):
-#        if idx < len(self.dataset1):
-#            return self.dataset1[idx]
-#        else:
-#            return self.dataset2[idx - len(self.dataset1)]
-        
-
-#def collate_fn(batch):
-#    return Batch.from_data_list(batch) 
-
-
-#class CombinedDataModule(pl.LightningDataModule):
-#    def __init__(self, datamodule1, datamodule2, batch_size=32, num_workers=0):
-#        super().__init__()
-##        self.datamodule1 = datamodule1
-#        self.datamodule2 = datamodule2
-#        self.batch_size = batch_size
-#        self.num_workers = num_workers
-
-#    def setup(self, stage=None):
-        # Combine training datasets
-#        self.train_dataset = CombinedDataset(self.datamodule1.train_dataset, self.datamodule2.train_dataset)
-        
-#        # Combine validation datasets
-#        self.val_dataset = CombinedDataset(self.datamodule1.val_dataset, self.datamodule2.val_dataset)
-        
-#        # Combine test datasets
-#        self.test_dataset = CombinedDataset(self.datamodule1.test_dataset, self.datamodule2.test_dataset)
-
-#    def train_dataloader(self):
-#        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, pin_memory=True, collate_fn=collate_fn)
-
-#    def val_dataloader(self):
-#        return DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=True, collate_fn=collate_fn)
-
-#    def test_dataloader(self):
-#        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=True, collate_fn=collate_fn)
-
-#combined_data_module = CombinedDataModule(data_module[0], data_module[1])
-#%%
 
 
 def train(config, fn_data, fn_model=None):
@@ -311,12 +184,16 @@ def train(config, fn_data, fn_model=None):
     #data_module=data_module
     validation_checkpoint = ModelCheckpoint(
         monitor="val/mae",
+        #monitor="train/loss_activity",
         mode="min",
     )
     #print(data_module)
     lr_monitor = LearningRateMonitor("epoch")
     early_stopping = EarlyStopping(
-        monitor="val/mae", patience=config.early_stopping_patience, mode="min"
+        monitor="val/mae", 
+        #monitor="train/loss_activity", 
+    
+        patience=config.early_stopping_patience, mode="min"
     )
 
     trainer = pl.Trainer(
@@ -340,7 +217,7 @@ def train(config, fn_data, fn_model=None):
 
 
 
-# %%
+
 configuration.register(
         "sparse_transformer",
         max_num_neighbors=16,
@@ -379,22 +256,11 @@ config["node_types"] = [NodeType.Complex]
 
 #config.register(optimizer="adam")
 
-
 #%%
-import wandb
-for key, value in sorted(config.items(), key=lambda i: i[0]):
-        print(f"{key}: {value}")
-print('going the print the wand run!')
+import torch
+torch.cuda.empty_cache()
+print(torch.cuda.memory_summary())
 
-print(config)
-
-#wandb.init(config=config, project="kinodata_extended", tags=["transformer"])
-#wandb.init(project="kinodata_extended")
-if wandb.run is not None:
-    print("WandB Settings:")
-    print(wandb.run.settings)
-else:
-    print("WandB run is not initialized properly")
 # %%
 train(
         config,
