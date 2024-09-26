@@ -18,7 +18,7 @@ and install this package in editable/develop mode
 pip install -e .
 ```
 ### (3) Obtain raw data
-The raw data, docked poses and kinase pdb files, can be obtained [from Zenodo](https://zenodo.org/records/10410259). 
+The raw data, docked poses and kinase pdb files, can be obtained [from Zenodo](https://zenodo.org/records/10852507). 
 After downloading the archives, extract them in the root directory of this repository.
 ```
 cd PATH_TO_REPO
@@ -33,7 +33,7 @@ See the [Kinodata-3D repo](https://github.com/volkamerlab/kinodata-3D) for more 
 
 ## Reproducing results
 ### (1) Acquire exact dataset and data split versions
-If you intend to reproduce our results, we strongly recommend that you use [our preprocessed version of the dataset and corresponding data splits](https://zenodo.org/records/10410594).
+If you intend to reproduce our results, we strongly recommend that you use [our preprocessed version of the dataset and corresponding data splits](https://zenodo.org/records/10886085).
 
 ### (2) Model training and evaluation
 You can use the shell script `condor/train_generic.sh` to train and test a model in one run, on one particular split.
