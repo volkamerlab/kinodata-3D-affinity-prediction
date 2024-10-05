@@ -1,0 +1,14 @@
+universe = docker
+docker_image = gjoschka/kinodata3d-b0:2.3.0-cuda12.1
+executable = train_rlr.sh
+output = train_kinodata.$(ClusterId).out
+error = train_kinodata.$(ClusterId).err
+log = train_kinodata.$(ClusterId).log
+should_transfer_files   = YES
+when_to_transfer_output = ON_EXIT
+request_GPUs = 1
+request_CPUs = 32
+request_memory = 128G
+requirements = UidDomain == "cs.uni-saarland.de"
++WantGPUHomeMounted = true
+queue

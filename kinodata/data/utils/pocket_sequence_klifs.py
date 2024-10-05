@@ -17,7 +17,7 @@ def klifs_structure_ids(cache: Path, raw_data_fp: Path) -> list[str]:
             smilesName=None,
             embedProps=True,
         )
-        print(df.head())
+        #print(df.head())
         df[["similar.klifs_structure_id"]].to_csv(cache)
     return pd.read_csv(cache)["similar.klifs_structure_id"].unique().tolist()
 
@@ -29,16 +29,24 @@ class CachedSequences:
     ) -> None:
         sequence_file = Path(sequence_file)
         self.sequence_file = sequence_file
+        #print(sequence_file)
 
     def __setitem__(self, klifs_id, sequence: Optional[str] = None):
-        assert isinstance(sequence, str)
+        #print('printing the sequence from the pocket_sequence_klifs')
+        print('aaaaa')
+        print(str(sequence[0]))
+        print(str(sequence))
+        print('aaaaa')
+        assert isinstance(str(sequence[0]), str)
+        #assert isinstance(sequence[0], str) --bnefore changed by me
         if sequence is None:
             sequence = get_pocket_sequence([klifs_id])[0]
         if not hasattr(self, "sequences"):
             raise RuntimeError(
                 "Must enter context managed sequence cache before adding sequences."
             )
-        self.sequences[klifs_id] = sequence
+        self.sequences[klifs_id] = str(sequence)
+        #self.sequences[klifs_id] = sequence
 
     def write_to_cache(self):
         self.to_data_frame().to_csv(self.sequence_file, index=False)
@@ -60,6 +68,8 @@ class CachedSequences:
         self.sequences = dict()
         if self.sequence_file.exists():
             df = pd.read_csv(self.sequence_file)
+            #print('printing this from pocket_sequence_klifs')
+            #print(df)
             self.sequences = {
                 klifs_id: klifs_sequence
                 for klifs_id, klifs_sequence in zip(

@@ -217,7 +217,7 @@ register(
 
 register(
     "training",
-    optim="adamw",
+    optim="adam",
     lr=3e-4,
     weight_decay=1e-3,
     dropout=0.0,

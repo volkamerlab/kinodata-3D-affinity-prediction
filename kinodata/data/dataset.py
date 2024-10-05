@@ -1,3 +1,4 @@
+#%%
 import logging
 import multiprocessing as mp
 import os
@@ -7,6 +8,7 @@ from time import sleep
 import warnings
 from functools import cached_property, partial
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 from typing import (
     Any,
     Callable,
@@ -27,6 +29,7 @@ from rdkit.Chem import AddHs, Kekulize, MolFromMol2File, PandasTools  # type: ig
 from torch_geometric.data import HeteroData, InMemoryDataset
 from tqdm import tqdm
 from rdkit import RDLogger
+from rdkit import Chem
 
 from kinodata.data.featurization.biopandas import add_pocket_information
 from kinodata.data.featurization.rdkit import (
@@ -65,14 +68,68 @@ def _repr(obj: Any) -> str:
     return re.sub("(<.*?)\\s.*(>)", r"\1\2", obj.__repr__())
 
 
-def process_raw_data(
+def to_list(value: Any) -> Sequence:
+    if isinstance(value, Sequence) and not isinstance(value, str):
+        return value
+    else:
+        return [value]
+
+
+def _repr(obj: Any) -> str:
+    if obj is None:
+        return "None"
+    return re.sub("(<.*?)\\s.*(>)", r"\1\2", obj.__repr__())
+
+# Fetch Uniprot ID
+def fetch_uniprot_id(klifs_id):
+
+    # Fetch structure information
+    r = requests.get(f"https://klifs.net/api_v2/structure_list?structure_ID={klifs_id}")
+    r.raise_for_status()
+    data = r.json()
+    
+    # Extract required information
+    if data:
+        kinase_id = data[0].get("kinase_ID")
+        structure_id = data[0].get("structure_ID")
+
+        # Fetch kinase information
+        r = requests.get(f"https://klifs.net/api/kinase_information?kinase_ID={kinase_id}")
+        r.raise_for_status()
+        data = r.json()
+        
+        if data:
+            uniprot = data[0].get("uniprot")
+            return uniprot
+
+    return None
+
+def assert_same_length(dataframes):
+    # Get lengths of all DataFrames
+    lengths = [len(df) for df in dataframes]
+
+    # Assert that all lengths are equal
+    assert all(length == lengths[0] for length in lengths), "DataFrames are not of the same length"
+
+
+
+def process_raw_data_kinodata(
     raw_dir: Path,
     file_name: str = "kinodata_docked_v2.sdf.gz",
     remove_hydrogen: bool = True,
     pocket_dir: Optional[Path] = None,
     pocket_sequence_file: Optional[Path] = None,
     activity_type_subset: Optional[List[str]] = None,
-) -> pd.DataFrame:
+                ) -> pd.DataFrame:
+    
+
+
+
+    print('succsefully running kinodata function')
+
+
+    print(raw_dir)
+
     if pocket_dir is None:
         pocket_dir = raw_dir / "mol2" / "pocket"
     if pocket_sequence_file is None:
@@ -86,8 +143,13 @@ def process_raw_data(
         embedProps=True,
         removeHs=remove_hydrogen,
     )
+
+    print('df reading is done')
+    print(df.columns)
     if activity_type_subset is not None:
-        df = df.query("activities.standard_type in @activity_type_subset")
+        print(activity_type_subset)
+        #df = df.query("activities.standard_type in @activity_type_subset")
+        df = df.query("`activities.standard_type` == @activity_type_subset")
     df["activities.standard_value"] = df["activities.standard_value"].astype(float)
     df["docking.predicted_rmsd"] = df["docking.predicted_rmsd"].astype(float)
 
@@ -185,6 +247,7 @@ def process_raw_data(
     return df
 
 
+
 @dataclass
 class ComplexInformation:
     kinodata_ident: str
@@ -245,8 +308,8 @@ class KinodataDockedAgnostic:
     ):
         self.raw_dir = Path(raw_dir)
         self.remove_hydrogen = remove_hydrogen
-        print(f"Loading raw data from {self.raw_dir}...")
-        self._df = process_raw_data(self.raw_dir, remove_hydrogen=remove_hydrogen)
+        print(f"Loading kinodata raw data from {self.raw_dir}...")
+        self._df = process_raw_data_kinodata(self.raw_dir, remove_hydrogen=remove_hydrogen)
         print("Converting to data list...")
         self.data_list = ComplexInformation.from_raw(
             self._df, remove_hydrogen=self.remove_hydrogen
@@ -294,15 +357,24 @@ class KinodataDocked(InMemoryDataset):
         self.num_processes = num_processes
         self.post_filter = post_filter
         super().__init__(root, transform, pre_transform, pre_filter)
+        print(self.processed_paths[0])
+        print(self.root)
+        print(self.processed_file_names)
         self.data, self.slices = torch.load(self.processed_paths[0])
+
+    #i have commented out the following because with davids data this is not the defaults, but when merging both I need to change this
 
     @property
     def pocket_sequence_file(self) -> Path:
         return Path(self.raw_dir) / "pocket_sequences.csv"
 
+    
     @property
+    #def raw_file_names_kinodata(self) -> List[str]:
     def raw_file_names(self) -> List[str]:
         return ["kinodata_docked_v2.sdf.gz"]
+   #     return ["posit_combined.sdf"]
+        #return ["kinodata_docked_full.sdf.gz"]
 
     @property
     def processed_file_names(self) -> List[str]:
@@ -314,8 +386,9 @@ class KinodataDocked(InMemoryDataset):
     @property
     def processed_dir(self) -> str:
         pdir = super().processed_dir
+        pdir = os.path.join(pdir, "kinodata")
         if self.prefix is not None:
-            pdir = osp.join(pdir, self.prefix)
+            pdir = os.path.join(pdir, self.prefix)
         return pdir
 
     @property
@@ -330,18 +403,50 @@ class KinodataDocked(InMemoryDataset):
         # TODO at some point set up public download?
         pass
 
+
+
+    ##adding this now on the plane not sure if this will break things
+    #@cached_property
+    #def process_david(self):
+
+    #    return process_raw_data_david(
+    #        Path(self.raw_dir),
+    #        self.raw_file_names[0],
+    #        # self.file_name_benchmark_results,
+    #        #self.file_name_benchmark_dataset,
+    #        self.remove_hydrogen,
+    #        self.pocket_dir,
+    #        self.pocket_sequence_file,
+    #         )
+    
+
+    #def df(self) -> pd.DataFrame:
+    #    return process_raw_data_david(
+    #        Path(self.raw_dir),
+    #        self.raw_file_names[0],
+    #        # self.file_name_benchmark_results,
+    #        #self.file_name_benchmark_dataset,
+    #        self.remove_hydrogen,
+    #        self.pocket_dir,
+    #        self.pocket_sequence_file,
+    #         )
+
     @cached_property
     def df(self) -> pd.DataFrame:
-        return process_raw_data(
+        return process_raw_data_kinodata(
             Path(self.raw_dir),
+            #self.raw_file_names_kinodata[0],
             self.raw_file_names[0],
             self.remove_hydrogen,
             self.pocket_dir,
             self.pocket_sequence_file,
-            activity_type_subset=["pIC50"],
+            activity_type_subset="pIC50", 
         )
+    
 
+    
     def _process(self):
+        #f = osp.join(self.processed_dir, "post_filter.pt")
         f = osp.join(self.processed_dir, "post_filter.pt")
         if osp.exists(f) and torch.load(f) != _repr(self.post_filter):
             warnings.warn(
@@ -355,27 +460,60 @@ class KinodataDocked(InMemoryDataset):
         torch.save(_repr(self.post_filter), path)
 
     def make_data_list(self) -> List[HeteroData]:
+        print("Entering make_data_list")
         RDLogger.DisableLog("rdApp.*")
         data_list = []
         complex_info = ComplexInformation.from_raw(
             self.df, remove_hydrogen=self.remove_hydrogen
         )
-        if self.use_multiprocessing:
-            tasks = [
-                (_complex, self.residue_representation, self.require_kissim_residues)
-                for _complex in complex_info
-            ]
-            with mp.Pool(os.cpu_count()) as pool:
-                data_list = pool.map(_process_pyg, tqdm(tasks))
-        else:
-            process = partial(
-                process_pyg,
-                residue_representation=self.residue_representation,
-                require_kissim_residues=self.require_kissim_residues,
-            )
-            data_list = list(map(process, tqdm(complex_info)))
+        #import numpy as np
+        #np.save('/home/raquellrdc/Desktop/postdoc/fast_ml_final/new_data_try/complex_info.npy', complex_info)
+        #if self.use_multiprocessing:
+        #    print('I am doing option 1')
+        #    print(len(complex_info))
+        #    print(complex_info[0])
+        #    import numpy as np
+        #    np.save(complex_info)
+        #    print('saved')
+        #    tasks = [
+        #        (_complex, self.residue_representation, self.require_kissim_residues)
+        #        for _complex in complex_info
+        #    ]
+        #    print(tasks)
+        #    
+        #    with mp.Pool(os.cpu_count()) as pool:
+        #        data_list = pool.map(_process_pyg, tqdm(tasks))
+        #else:
+ 
+
+
+
+        ####
+        from joblib import Parallel, delayed
+
+        # Define the function to process a single item
+        def process_single_item(item, residue_representation, require_kissim_residues):
+            return process_pyg(item, residue_representation, require_kissim_residues)
+
+        # Define the number of parallel processes to use
+        n_jobs = 14  # Use all available CPU cores
+
+
+        # Parallelize the processing of items
+        data_list = Parallel(n_jobs=n_jobs)(
+        delayed(process_single_item)(item, self.residue_representation, self.require_kissim_residues)
+        for item in tqdm(complex_info))
+        ###
+        #process = partial(
+        #        process_pyg,
+        #        residue_representation=self.residue_representation,
+        #        require_kissim_residues=self.require_kissim_residues,
+        #    )
+        #data_list = list(map(process, tqdm(complex_info)))
 
         data_list = [d for d in data_list if d is not None]
+        #print(data_list)
+        print("Exiting make_data_list")
         return data_list
 
     def filter_transform(self, data_list: List[HeteroData]) -> List[HeteroData]:
@@ -391,12 +529,14 @@ class KinodataDocked(InMemoryDataset):
         return data_list
 
     def persist(self, data_list: List[HeteroData]):
+
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
 
     def process(self):
         data_list = self.make_data_list()
         data_list = self.filter_transform(data_list)
+
         self.persist(data_list)
 
     def ident_index_map(self) -> Dict[Any, int]:
@@ -532,4 +672,5 @@ def process_pyg(
     data.activity_type = complex.activity_type
     data.ident = complex.kinodata_ident
     data.smiles = complex.compound_smiles
+    
     return data
