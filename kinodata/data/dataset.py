@@ -87,7 +87,7 @@ def process_raw_data(
         removeHs=remove_hydrogen,
     )
     if activity_type_subset is not None:
-        df = df.query("activities.standard_type in @activity_type_subset")
+        df = df[df["activities.standard_type"].isin(activity_type_subset)]
     df["activities.standard_value"] = df["activities.standard_value"].astype(float)
     df["docking.predicted_rmsd"] = df["docking.predicted_rmsd"].astype(float)
 
@@ -102,7 +102,9 @@ def process_raw_data(
     )
     best_structure = (
         df.sort_values(by="docking.predicted_rmsd", ascending=True)
-        .groupby(group_key)[group_key + ["docking.predicted_rmsd", "molecule"]]
+        .groupby(group_key)[
+            group_key + ["docking.predicted_rmsd", "molecule", "activities.activity_id"]
+        ]
         .head(1)
     )
     deduped = pd.merge(mean_activity, best_structure, how="outer", on=group_key)
@@ -113,7 +115,12 @@ def process_raw_data(
         on=group_key,
         suffixes=(".orig", None),
     )
-    for col in ("activities.standard_value", "docking.predicted_rmsd", "molecule"):
+    for col in (
+        "activities.standard_value",
+        "docking.predicted_rmsd",
+        "molecule",
+        "activities.activity_id",
+    ):
         del df[f"{col}.orig"]
     # df.set_index("ID", inplace=True)
     print(f"{df.shape[0]} complexes remain after deduplication.")
@@ -151,7 +158,6 @@ def process_raw_data(
 
     print("Adding pocket sequences...")
     # KLIFS API now sometimes decides to timeout
-    print(df.shape)
     while True:
         try:
             with CachedSequences(pocket_sequence_file) as sequence_cache:
@@ -168,7 +174,6 @@ def process_raw_data(
             print(f"Querying KLIFS for sequence from structure id raised {e}")
             print("Retrying..")
             sleep(10)
-    print(df.shape)
 
     # if pocket_sequence_file.exists():
     #     print(f"from cached file {pocket_sequence_file}.")
@@ -187,7 +192,7 @@ def process_raw_data(
 
 @dataclass
 class ComplexInformation:
-    kinodata_ident: str
+    kinodata_ident: int
     compound_smiles: str
     molecule: Any
     activity_value: float
@@ -199,12 +204,14 @@ class ComplexInformation:
     pocket_sequence: str
     predicted_rmsd: float
     remove_hydrogen: bool
+    chembl_activity_id: int = 0
+    assay_id: int = 0
 
     @classmethod
     def from_raw(cls, raw_data: pd.DataFrame, **kwargs) -> List["ComplexInformation"]:
         return [
             cls(
-                row["ident"],
+                int(row["ident"]),
                 row["compound_structures.canonical_smiles"],
                 row["molecule"],
                 float(row["activities.standard_value"]),
@@ -215,6 +222,7 @@ class ComplexInformation:
                 int(row["similar.klifs_structure_id"]),
                 row["structure.pocket_sequence"],
                 float(row["docking.predicted_rmsd"]),
+                chembl_activity_id=int(row["activities.activity_id"]),
                 **kwargs,
             )
             for _, row in raw_data.iterrows()
@@ -530,6 +538,11 @@ def process_pyg(
     data.pocket_sequence = complex.pocket_sequence
     data.scaffold = ligand_scaffold
     data.activity_type = complex.activity_type
-    data.ident = complex.kinodata_ident
     data.smiles = complex.compound_smiles
+    data.ident = complex.kinodata_ident
+
+    # book keeping to make mapping back to
+    # chembl / klifs source data easier
+    data.chembl_activity_id = complex.chembl_activity_id
+    data.klifs_structure_id = complex.klifs_structure_id
     return data
