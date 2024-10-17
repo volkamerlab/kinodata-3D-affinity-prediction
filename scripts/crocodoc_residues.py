@@ -27,7 +27,7 @@ from pytorch_lightning import Trainer
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
-REDIUE_ATOM_INDEX = _DATA / "processed" / "residue_atom_index"
+RESIDUE_ATOM_INDEX = _DATA / "processed" / "residue_atom_index"
 CPU_COUNT = 12
 HAS_GPU = torch.cuda.is_available()
 FORCE_CPU = False
@@ -42,6 +42,7 @@ def make_config():
         filter_rmsd_max_value=2.0,
         split_index=0,
         edges_only=False,
+        model_type="CGNN",
     )
     config = cfg.get("crocodoc")
     config["model_path"] = None
@@ -115,8 +116,11 @@ def load_model_from_checkpoint(
     return model, config
 
 
-def prepare_data(config, split_fold):
-    to_cplx = TransformToComplexGraph(remove_heterogeneous_representation=True)
+def prepare_data(config, split_fold, need_cplx_representation=True):
+    transform = lambda x: x
+    if need_cplx_representation:
+        to_cplx = TransformToComplexGraph(remove_heterogeneous_representation=True)
+        transform = to_cplx
     rmsd_filter = FilterDockingRMSD(config["filter_rmsd_max_value"])
     data_cls = Filtered(KinodataDocked(), rmsd_filter)
     test_split = KinodataKFoldSplit(config["split_type"], 5)
@@ -137,7 +141,9 @@ def prepare_data(config, split_fold):
         ]
     )
     return [
-        to_cplx(data) for data in test_data if data.pocket_sequence not in forbidden_seq
+        transform(data)
+        for data in test_data
+        if data.pocket_sequence not in forbidden_seq
     ]
 
 
@@ -157,7 +163,7 @@ def get_ident(file: Path):
 
 
 def load_residue_atom_index(idents, parallelize=True):
-    files = list(REDIUE_ATOM_INDEX.iterdir())
+    files = list(RESIDUE_ATOM_INDEX.iterdir())
     files = [file for file in files if get_ident(file) in idents]
     progressing_iterable = tqdm(files, desc="Loading residue atom index...")
     if parallelize:
@@ -171,7 +177,8 @@ def load_residue_atom_index(idents, parallelize=True):
 if __name__ == "__main__":
     predict_reference = False
     config = make_config()
-    config["model_path"] = Path(config["model_path"])
+    if "model_path" in config and config["model_path"] is not None:
+        config["model_path"] = Path(config["model_path"])
     if config.get("model", None):
         print("Loading model from", config["model_path"])
 
@@ -182,7 +189,7 @@ if __name__ == "__main__":
         rmsd_threshold=2,
         split_type=config["split_type"],
         split_fold=config["split_index"],
-        model_type="CGNN-3D",
+        model_type=config["model_type"],
         model_info=model_info,
     )
 
