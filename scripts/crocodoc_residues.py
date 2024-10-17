@@ -185,7 +185,7 @@ if __name__ == "__main__":
     model_info = None
     if (model_path := config.get("model_path", None)) is not None:
         model_info = ModelInfo.from_dir(model_path)
-    model = load_model_from_checkpoint(
+    model, model_config = load_model_from_checkpoint(
         rmsd_threshold=2,
         split_type=config["split_type"],
         split_fold=config["split_index"],
