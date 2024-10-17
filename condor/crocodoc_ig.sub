@@ -1,6 +1,6 @@
 universe = docker
 docker_image = gjoschka/kinodata3d-b0:2.3.0-cuda12.1 
-executable = train_generic.sh
+executable = crocodoc_ig.sh
 arguments = $(rmsd) $(split) $(index) 
 output = crocodoc_ig.$(ClusterId).$(ProcId).out
 error = crocodoc_ig.$(ClusterId).$(ProcId).err
