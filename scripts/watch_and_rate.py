@@ -98,7 +98,7 @@ def read_molecule(path: Union[str, Path], remove_hydrogen: bool = True) -> Any:
     if path.suffix == ".mol":
         molecule = MolFromMolFile(str(path))
     if path.suffix == ".mol2":
-        molecule = MolFromMol2File(str(path), sanitize=False)
+        molecule = MolFromMol2File(str(path), sanitize=True)
     elif path.suffix == ".sdf":
         suppl = SDMolSupplier(str(path))
         molecule = next(iter(suppl))
@@ -110,6 +110,7 @@ def read_molecule(path: Union[str, Path], remove_hydrogen: bool = True) -> Any:
 
     if not remove_hydrogen:
         AddHs(molecule)
+    Chem.SanitizeMol(molecule)
     Kekulize(molecule)
 
     return molecule
