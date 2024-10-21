@@ -226,6 +226,8 @@ if __name__ == "__main__":
     )
     fold = int(config["split_index"])
     split_type = config["split_type"].split("-")[0]
+    model_type = config["model_type"]
+    model_type_repr = model_type.replace("-", "").lower()
     if predict_reference:
         predictions = trainer.predict(model, DataLoader(data_list, batch_size=32))
         predictions = cat_many(predictions)
@@ -282,7 +284,9 @@ if __name__ == "__main__":
         if model_path is not None:
             file_name = f"residue_delta_{str(model_path).replace('/', '_')}_part_{part}"
         else:
-            file_name = f"residue_delta_{split_type}_{fold}_part_{part}"
+            file_name = (
+                f"residue_delta_{split_type}_{fold}_{model_type_repr}_part_{part}"
+            )
         if config["edges_only"]:
             file_name += "_edges_only"
         df.to_csv(_DATA / "crocodoc_out" / "residue" / f"{file_name}.csv", index=False)
