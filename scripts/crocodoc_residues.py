@@ -140,11 +140,23 @@ def prepare_data(config, split_fold, need_cplx_representation=True):
             "_ALNVLDMSQKLYLLSSLDPYLLEMYSYLILEAPEGEIFNLLRQYLHSAMIIYRDLKPHNVLFIAA",
         ]
     )
-    return [
+    data_list = [
         transform(data)
         for data in test_data
         if data.pocket_sequence not in forbidden_seq
     ]
+
+    source_df = test_data.df
+    source_df = source_df.set_index("ident")
+
+    def add_metdata(data):
+        row = source_df.loc[data["ident"].item()]
+        data["chembl_activity_id"] = int(row["activities.activity_id"])
+        data["klifs_structure_id"] = int(row["similar.klifs_structure_id"])
+        return data
+
+    data_list = [add_metdata(data) for data in data_list]
+    return data_list
 
 
 def load_single_index(file: Path):
@@ -229,12 +241,14 @@ if __name__ == "__main__":
     model_type = config["model_type"]
     model_type_repr = model_type.replace("-", "").lower()
     if predict_reference:
-        predictions = trainer.predict(model, DataLoader(data_list, batch_size=32))
+        predictions = trainer.predict(model, DataLoader(data_list[:32], batch_size=4))
         predictions = cat_many(predictions)
         meta = cat_many(
             [
                 {
                     "ident": data["ident"],
+                    "chembl_activity_id": data["chembl_activity_id"],
+                    "klifs_structure_id": data["klifs_structure_id"],
                 }
                 for data in data_list
             ]
@@ -242,6 +256,8 @@ if __name__ == "__main__":
         df = pd.DataFrame(
             {
                 "ident": meta["ident"].cpu().numpy(),
+                "chembl_activity_id": meta["chembl_activity_id"].cpu().numpy(),
+                "klifs_structure_id": meta["klifs_structure_id"].cpu().numpy(),
                 "reference_pred": predictions["pred"].cpu().numpy(),
                 "target": predictions["target"].cpu().numpy(),
             }
