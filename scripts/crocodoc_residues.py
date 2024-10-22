@@ -151,8 +151,8 @@ def prepare_data(config, split_fold, need_cplx_representation=True):
 
     def add_metdata(data):
         row = source_df.loc[data["ident"].item()]
-        data["chembl_activity_id"] = int(row["activities.activity_id"])
-        data["klifs_structure_id"] = int(row["similar.klifs_structure_id"])
+        data["chembl_activity_id"] = torch.tensor([int(row["activities.activity_id"])])
+        data["klifs_structure_id"] = torch.tensor([int(row["klifs_structure_id"])])
         return data
 
     data_list = [add_metdata(data) for data in data_list]
