@@ -187,7 +187,7 @@ def load_residue_atom_index(idents, parallelize=True):
 
 
 if __name__ == "__main__":
-    predict_reference = False
+    predict_reference = True
     config = make_config()
     if "model_path" in config and config["model_path"] is not None:
         config["model_path"] = Path(config["model_path"])
@@ -241,7 +241,7 @@ if __name__ == "__main__":
     model_type = config["model_type"]
     model_type_repr = model_type.replace("-", "").lower()
     if predict_reference:
-        predictions = trainer.predict(model, DataLoader(data_list[:32], batch_size=4))
+        predictions = trainer.predict(model, DataLoader(data_list, batch_size=32))
         predictions = cat_many(predictions)
         meta = cat_many(
             [
@@ -263,7 +263,10 @@ if __name__ == "__main__":
             }
         )
         df.to_csv(
-            _DATA / "crocodoc_out" / "residue" / f"reference_{split_type}_{fold}.csv",
+            _DATA
+            / "crocodoc_out"
+            / "residue"
+            / f"reference_{split_type}_{fold}_{model_type_repr}.csv",
             index=False,
         )
 
@@ -281,6 +284,8 @@ if __name__ == "__main__":
             [
                 {
                     "ident": data["ident"],
+                    "chembl_activity_id": data["chembl_activity_id"],
+                    "klifs_structure_id": data["klifs_structure_id"],
                     "masked_residue": data.masked_residue,
                 }
                 for data in transformed_data_list
@@ -291,6 +296,8 @@ if __name__ == "__main__":
         df = pd.DataFrame(
             {
                 "ident": meta["ident"].cpu().numpy(),
+                "chembl_activity_id": meta["chembl_activity_id"].cpu().numpy(),
+                "klifs_structure_id": meta["klifs_structure_id"].cpu().numpy(),
                 "masked_residue": meta["masked_residue"].cpu().numpy(),
                 "masked_pred": predictions["pred"].cpu().numpy(),
                 "masked_resname": masked_resname,
