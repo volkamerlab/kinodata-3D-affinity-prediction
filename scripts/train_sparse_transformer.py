@@ -54,6 +54,7 @@ if __name__ == "__main__":
     config["perturb_pocket_positions"] = 0.0
     config["perturb_complex_positions"] = 0.1
     config["node_types"] = [NodeType.Complex]
+    config["atom_attr_size"] = AtomFeatures.size
 
     for key, value in sorted(config.items(), key=lambda i: i[0]):
         print(f"{key}: {value}")
@@ -69,6 +70,7 @@ if __name__ == "__main__":
         mask[ablate] = False
         select_transform = FeatureSelection(mask)
         ott = Compose([ott, select_transform])
+        config["atom_attr_size"] = mask.sum().item()
     if config.get("ligand_only_3d", None) is not None:
         ott = Compose([ott, ToLigandOnlyComplex()])
 
