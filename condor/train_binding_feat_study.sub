@@ -1,5 +1,5 @@
 universe = docker
-docker_image = gjoschka/massspec_with_wandb
+docker_image = gjoschka/kinodata3d-b0:2.3.0-cuda12.1
 executable = train_generic.sh
 arguments = $(script) --split_type $(split) --filter_rmsd_max_value $(rmsd) --split_index $(index) --config $(model) --ablate_binding_features $(ablate)
 output = train_kinodata.$(ClusterId).$(ProcId).out
