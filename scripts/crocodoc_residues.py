@@ -43,6 +43,7 @@ def make_config():
         split_index=0,
         edges_only=False,
         model_type="CGNN",
+        outfile=None,
     )
     config = cfg.get("crocodoc")
     config["model_path"] = None
@@ -307,11 +308,11 @@ if __name__ == "__main__":
             }
         )
         if model_path is not None:
-            file_name = f"residue_delta_{str(model_path).replace('/', '_')}_part_{part}"
+            file_name = f"residue_delta_{str(model_path).replace('/', '_')}"
         else:
-            file_name = (
-                f"residue_delta_{split_type}_{fold}_{model_type_repr}_part_{part}"
-            )
+            file_name = f"residue_delta_{split_type}_{fold}_{model_type_repr}"
+        file_name = config.get("outfile", file_name)
+        file_name = f"{file_name}_part_{part}"
         if config["edges_only"]:
             file_name += "_edges_only"
         df.to_csv(_DATA / "crocodoc_out" / "residue" / f"{file_name}.csv", index=False)

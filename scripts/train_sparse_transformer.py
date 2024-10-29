@@ -5,6 +5,7 @@ import sys
 sys.path.append(".")
 sys.path.append("..")
 import wandb
+import torch
 from torch_geometric.transforms import Compose
 
 import kinodata.configuration as configuration
@@ -15,6 +16,16 @@ from kinodata.types import NodeType
 from kinodata.data.dataset import apply_transform_instance_permament
 from kinodata.transform.to_complex_graph import TransformToComplexGraph
 from kinodata.transform.ligand_only import ToLigandOnlyComplex
+from kinodata.data.featurization.atoms import AtomFeatures
+
+
+class FeatureSelection:
+    def __init__(self, mask):
+        self.mask = mask
+
+    def __call__(self, data):
+        data.x = data.x[:, self.mask]
+        return data
 
 
 if __name__ == "__main__":
@@ -31,6 +42,7 @@ if __name__ == "__main__":
         ln3=True,
         graph_norm=False,
         interaction_modes=["covalent", "structural"],
+        ablate_binding_features=False,
     )
     config = configuration.get("data", "training", "sparse_transformer")
     config = config.update_from_file()
@@ -41,16 +53,26 @@ if __name__ == "__main__":
     config["perturb_ligand_positions"] = 0.0
     config["perturb_pocket_positions"] = 0.0
     config["perturb_complex_positions"] = 0.1
-
     config["node_types"] = [NodeType.Complex]
+    config["atom_attr_size"] = AtomFeatures.size
 
     for key, value in sorted(config.items(), key=lambda i: i[0]):
         print(f"{key}: {value}")
-    
-    ott = TransformToComplexGraph(remove_heterogeneous_representation=True) 
+
+    ott = TransformToComplexGraph(remove_heterogeneous_representation=True)
+    if config.get("ablate_binding_features"):
+        mask = torch.ones(AtomFeatures.size, dtype=torch.bool)
+        ablate = [
+            AtomFeatures.get_position("RDKitFeatures", "Donor"),
+            AtomFeatures.get_position("RDKitFeatures", "Acceptor"),
+            AtomFeatures.get_position("RDKitFeatures", "Hydrophobe"),
+        ]
+        mask[ablate] = False
+        select_transform = FeatureSelection(mask)
+        ott = Compose([ott, select_transform])
+        config["atom_attr_size"] = mask.sum().item()
     if config.get("ligand_only_3d", None) is not None:
         ott = Compose([ott, ToLigandOnlyComplex()])
-
 
     wandb.init(config=config, project="kinodata-docked-rescore", tags=["transformer"])
     train(

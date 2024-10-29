@@ -7,6 +7,8 @@ dev.ipynb
 # raw kinodata
 /data
 /surface_data
+residue_attr/
+__data/
 
 # wandb / pl logs and artifacts
 lightning_logs
