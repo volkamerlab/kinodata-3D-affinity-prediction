@@ -199,6 +199,7 @@ class ComplexInformation:
     pocket_sequence: str
     predicted_rmsd: float
     remove_hydrogen: bool
+    kekulize: bool = False
 
     @classmethod
     def from_raw(cls, raw_data: pd.DataFrame, **kwargs) -> List["ComplexInformation"]:
@@ -225,7 +226,8 @@ class ComplexInformation:
         ligand = self.molecule
         if not self.remove_hydrogen:
             AddHs(ligand)
-        Kekulize(ligand)
+        if self.kekulize:
+            Kekulize(ligand)
         return ligand
 
     @cached_property
@@ -233,7 +235,8 @@ class ComplexInformation:
         pocket = MolFromMol2File(str(self.pocket_mol2_file))
         if not self.remove_hydrogen:
             AddHs(pocket)
-        Kekulize(pocket)
+        if self.kekulize:
+            Kekulize(pocket)
         return pocket
 
 
@@ -364,6 +367,7 @@ class KinodataDocked(InMemoryDataset):
             tasks = [
                 (_complex, self.residue_representation, self.require_kissim_residues)
                 for _complex in complex_info
+                if _complex.predicted_rmsd < 2.1
             ]
             with mp.Pool(os.cpu_count()) as pool:
                 data_list = pool.map(_process_pyg, tqdm(tasks))
