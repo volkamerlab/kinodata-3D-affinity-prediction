@@ -21,6 +21,7 @@ from kinodata.model.dti import make_model as make_dti_baseline
 from kinodata.model.regression import cat_many
 from kinodata.transform import FilterDockingRMSD, TransformToComplexGraph
 from kinodata.transform.mask_residues import MaskResidues
+from kinodata.data.featurization.atoms import AtomFeatures
 from kinodata.types import *
 from kinodata.util import wandb_interface, ModelInfo
 from pytorch_lightning import Trainer
@@ -108,6 +109,10 @@ def load_model_from_checkpoint(
         model_ckpt = list(model_path.glob("**/*.ckpt"))[0]
         model_config = model_path / "config.json"
         config = load_wandb_config(model_config)
+    if config["ablate_binding_features"] == 0:
+        config["atom_attr_size"] = AtomFeatures.size
+    elif config["ablate_binding_features"] == 1:
+        config["atom_attr_size"] = AtomFeatures.size - 3
     cls = model_cls[model_type]
     config = cfg.Config(config)
     ckp = torch.load(model_ckpt, map_location=DEVICE)
