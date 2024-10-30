@@ -43,7 +43,7 @@ def make_config():
         filter_rmsd_max_value=2.0,
         split_index=0,
         edges_only=False,
-        model_type="CGNN",
+        model_type="CGNN-3D",
         outfile=None,
     )
     config = cfg.get("crocodoc")
@@ -249,7 +249,7 @@ if __name__ == "__main__":
     )
     fold = int(model_config["split_index"])
     split_type = model_config["split_type"].split("-")[0]
-    model_type = model_config["model_type"]
+    model_type = config["model_type"]
     model_type_repr = model_type.replace("-", "").lower()
     if predict_reference:
         predictions = trainer.predict(model, DataLoader(data_list, batch_size=32))
