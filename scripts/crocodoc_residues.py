@@ -117,7 +117,7 @@ def load_model_from_checkpoint(
     return model, config
 
 
-def prepare_data(config, split_fold, need_cplx_representation=True):
+def prepare_data(config, need_cplx_representation=True):
     transform = lambda x: x
     if need_cplx_representation:
         to_cplx = TransformToComplexGraph(remove_heterogeneous_representation=True)
@@ -125,7 +125,7 @@ def prepare_data(config, split_fold, need_cplx_representation=True):
     rmsd_filter = FilterDockingRMSD(config["filter_rmsd_max_value"])
     data_cls = Filtered(KinodataDocked(), rmsd_filter)
     test_split = KinodataKFoldSplit(config["split_type"], 5)
-    split = test_split.split(data_cls())[split_fold]
+    split = test_split.split(data_cls())[config["split_index"]]
     test_data = create_dataset(
         data_cls,
         dict(),
@@ -180,6 +180,7 @@ def get_ident(file: Path):
 def load_residue_atom_index(idents, parallelize=True):
     files = list(RESIDUE_ATOM_INDEX.iterdir())
     files = [file for file in files if get_ident(file) in idents]
+    assert len(files) == len(idents)
     progressing_iterable = tqdm(files, desc="Loading residue atom index...")
     if parallelize:
         with mp.Pool(CPU_COUNT) as pool:
@@ -211,7 +212,7 @@ if __name__ == "__main__":
     )
 
     print("Creating data list...")
-    data_list = prepare_data(config, config["split_index"])
+    data_list = prepare_data(model_config)
 
     print("Checking data...")
     for data in tqdm(data_list):
@@ -241,9 +242,9 @@ if __name__ == "__main__":
         auto_select_gpus=True,
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
     )
-    fold = int(config["split_index"])
-    split_type = config["split_type"].split("-")[0]
-    model_type = config["model_type"]
+    fold = int(model_config["split_index"])
+    split_type = model_config["split_type"].split("-")[0]
+    model_type = model_config["model_type"]
     model_type_repr = model_type.replace("-", "").lower()
     if predict_reference:
         predictions = trainer.predict(model, DataLoader(data_list, batch_size=32))
@@ -270,7 +271,7 @@ if __name__ == "__main__":
         df.to_csv(
             _DATA
             / "crocodoc_out"
-            / "residue"
+            / "residue_binding_feat_study"
             / f"reference_{split_type}_{fold}_{model_type_repr}.csv",
             index=False,
         )
@@ -317,7 +318,10 @@ if __name__ == "__main__":
         file_name = f"{file_name}_part_{part}"
         if config["edges_only"]:
             file_name += "_edges_only"
-        df.to_csv(_DATA / "crocodoc_out" / "residue" / f"{file_name}.csv", index=False)
+        df.to_csv(
+            _DATA / "crocodoc_out" / "residue_binding_feat_study" / f"{file_name}.csv",
+            index=False,
+        )
         part += 1
         if len(transform) == 0:
             break
