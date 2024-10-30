@@ -47,7 +47,7 @@ def make_config():
     )
     config = cfg.get("crocodoc")
     config["model_path"] = None
-    config = config.update_from_args("model_path")
+    config = config.update_from_args("model_path", "outfile")
     return config
 
 
@@ -196,6 +196,8 @@ if __name__ == "__main__":
         config["model_path"] = Path(config["model_path"])
     if config.get("model", None):
         print("Loading model from", config["model_path"])
+    if config.get("outfile", None):
+        print("Will write output to", config["outfile"])
 
     model_info = None
     if (model_path := config.get("model_path", None)) is not None:
