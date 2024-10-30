@@ -26,6 +26,7 @@ from kinodata.types import *
 from kinodata.util import wandb_interface, ModelInfo
 from pytorch_lightning import Trainer
 from torch_geometric.loader import DataLoader
+from torch_geometric.transforms import Compose
 from tqdm import tqdm
 
 RESIDUE_ATOM_INDEX = _DATA / "processed" / "residue_atom_index"
@@ -127,6 +128,13 @@ def prepare_data(config, need_cplx_representation=True):
     if need_cplx_representation:
         to_cplx = TransformToComplexGraph(remove_heterogeneous_representation=True)
         transform = to_cplx
+    if config["ablate_binding_features"] == 1:
+
+        def mask_features(data):
+            data["complex"].x = data["complex"].x[:, :-3]
+            return data
+
+        transform = Compose([transform, mask_features])
     rmsd_filter = FilterDockingRMSD(config["filter_rmsd_max_value"])
     data_cls = Filtered(KinodataDocked(), rmsd_filter)
     test_split = KinodataKFoldSplit(config["split_type"], 5)
@@ -273,11 +281,11 @@ if __name__ == "__main__":
                 "target": predictions["target"].cpu().numpy(),
             }
         )
+        file_name = f"reference_{split_type}_{fold}_{model_type_repr}"
+        if config.get("outfile", None):
+            file_name = config["outfile"]
         df.to_csv(
-            _DATA
-            / "crocodoc_out"
-            / "residue_binding_feat_study"
-            / f"reference_{split_type}_{fold}_{model_type_repr}.csv",
+            _DATA / "crocodoc_out" / "residue_binding_feat_study" / f"{file_name}.csv",
             index=False,
         )
 
