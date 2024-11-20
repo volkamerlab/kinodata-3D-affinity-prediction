@@ -48,6 +48,7 @@ def make_config():
         mask_type="pl_interactions",
         model_type="CGNN-3D",
         outfile=None,
+        edges_only=False,
     )
     config = cfg.get("crocodoc")
     config["model_path"] = None
@@ -210,7 +211,7 @@ def load_residue_atom_index(idents, parallelize=True):
 
 
 if __name__ == "__main__":
-    predict_reference = False
+    predict_reference = True
     config = make_config()
     if "model_path" in config and config["model_path"] is not None:
         config["model_path"] = Path(config["model_path"])
@@ -291,7 +292,7 @@ if __name__ == "__main__":
         if config.get("outfile", None):
             file_name = config["outfile"]
         df.to_csv(
-            _DATA / "crocodoc_out" / "residue_binding_feat_study" / f"{file_name}.csv",
+            _DATA / "crocodoc_out" / "mask_pl_edges_at_residue" / f"{file_name}.csv",
             index=False,
         )
 
@@ -333,12 +334,12 @@ if __name__ == "__main__":
             file_name = f"residue_delta_{str(model_path).replace('/', '_')}"
         else:
             file_name = f"residue_delta_{split_type}_{fold}_{model_type_repr}"
-        file_name = config.get("outfile", file_name)
+        # file_name = config.get("outfile", file_name)
         file_name = f"{file_name}_part_{part}"
         if config["edges_only"]:
             file_name += "_edges_only"
         df.to_csv(
-            _DATA / "crocodoc_out" / "residue_binding_feat_study" / f"{file_name}.csv",
+            _DATA / "crocodoc_out" / "mask_pl_edges_at_residue" / f"{file_name}.csv",
             index=False,
         )
         part += 1
