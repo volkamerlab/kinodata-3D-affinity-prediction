@@ -20,7 +20,7 @@ from torch_cluster import knn_graph
 
 from kinodata.configuration import Config
 
-from ..types import NodeEmbedding, NodeType, RelationType
+from ..types import NodeEmbedding, NodeType, RelationType, MASK_RESIDUE_KEY
 from .shared.dist_embedding import GaussianDistEmbedding
 from .sparse_transformer import SPAB
 from .regression import RegressionModel
@@ -49,15 +49,11 @@ class InteractionModule(Module):
     def out(self, edge_repr: Tensor) -> Tensor:
         return self.act(edge_repr + self.bias)
 
-    def interactions(self, data: HeteroData) -> Tuple[Tensor, OptTensor, OptTensor]:
-        ...
+    def interactions(self, data: HeteroData) -> Tuple[Tensor, OptTensor, OptTensor]: ...
 
-    def process_attr(self, edge_attr: Tensor) -> Tensor:
-        ...
+    def process_attr(self, edge_attr: Tensor) -> Tensor: ...
 
-    def process_weight(self, edge_weight: Tensor) -> Tensor:
-        ...
-    
+    def process_weight(self, edge_weight: Tensor) -> Tensor: ...
 
     def forward(self, data: HeteroData) -> Tuple[Tensor, Tensor]:
         edge_index, edge_attr, edge_weight = self.interactions(data)
@@ -77,11 +73,12 @@ class CovalentInteractions(InteractionModule):
         act: str = "none",
         bias: bool = False,
         node_type: str = None,
+        edge_size: int = NUM_BOND_TYPES,
     ) -> None:
         super().__init__(hidden_channels, act, bias)
         assert node_type is not None
         self.node_type = node_type
-        self.lin = Linear(NUM_BOND_TYPES, hidden_channels)
+        self.lin = Linear(edge_size, hidden_channels)
 
     def interactions(self, data: HeteroData) -> Tuple[Tensor, OptTensor, OptTensor]:
         edge_store = data[self.node_type, RelationType.Covalent, self.node_type]
@@ -113,6 +110,7 @@ class StructuralInteractions(InteractionModule):
         self.hacky_mask = None
 
     def interactions(self, data: HeteroData) -> Tuple[Tensor, OptTensor, OptTensor]:
+        self.hacky_mask = None
         pos = data[NodeType.Complex].pos
         batch = data[NodeType.Complex].batch
         edge_index = knn_graph(pos, self.max_num_neighbors + 1, batch, loop=True)
@@ -121,13 +119,24 @@ class StructuralInteractions(InteractionModule):
         edge_index = edge_index[:, mask]
         distances = distances[mask]
         row, col = edge_index
-        if self.mask_pl_edges:
-            is_pl_egde = torch.logical_xor(
-                data[NodeType.Complex].is_pocket_atom[row].squeeze(),
-                data[NodeType.Complex].is_pocket_atom[col].squeeze()
+        node_store = data[NodeType.Complex]
+
+        # masking
+        if MASK_RESIDUE_KEY in node_store:
+            is_part_of_masked_residue = node_store[MASK_RESIDUE_KEY].squeeze()
+            is_ligand_atom = (~node_store.is_pocket_atom).squeeze()
+            is_pl_edge_at_masked_residue = torch.logical_or(
+                torch.logical_and(is_part_of_masked_residue[row], is_ligand_atom[col]),
+                torch.logical_and(is_ligand_atom[row], is_part_of_masked_residue[col]),
             )
-            self.hacky_mask = is_pl_egde
-            
+            self.hacky_mask = ~is_pl_edge_at_masked_residue
+        elif self.mask_pl_edges:
+            is_pl_egde = torch.logical_xor(
+                node_store.is_pocket_atom[row].squeeze(),
+                node_store.is_pocket_atom[col].squeeze(),
+            )
+            self.hacky_mask = ~is_pl_egde
+
         if self.hacky_mask is not None:
             edge_index = edge_index.T[self.hacky_mask].T
             distances = distances[self.hacky_mask]
@@ -175,6 +184,7 @@ class ComplexTransformer(RegressionModel):
         interaction_modes: List[str] = [],
         dropout: float = 0.1,
         mask_pl_edges: bool = False,
+        edge_size: int = NUM_BOND_TYPES,
     ) -> None:
         super().__init__(config)
         assert len(config["node_types"]) == 1
@@ -187,7 +197,11 @@ class ComplexTransformer(RegressionModel):
         for mode in interaction_modes:
             if mode == "covalent":
                 module = CovalentInteractions(
-                    hidden_channels, act, intr_bias, config["node_types"][0]
+                    hidden_channels,
+                    act,
+                    intr_bias,
+                    config["node_types"][0],
+                    edge_size=edge_size,
                 )
             elif mode == "structural":
                 module = StructuralInteractions(
@@ -240,11 +254,11 @@ class ComplexTransformer(RegressionModel):
             + self.lin_atom_features(node_store.x)
         )
         return node_repr
-    
+
     def initial_embed_edges(self, data: HeteroData):
         edge_index, edge_repr = self.interaction_module(data)
         return edge_index, edge_repr
-        
+
     def forward(self, data: HeteroData) -> Tensor:
         node_store = data[NodeType.Complex]
         node_repr = self.initial_embed_nodes(data)

@@ -22,6 +22,7 @@ from kinodata.model.regression import cat_many
 from kinodata.transform import FilterDockingRMSD, TransformToComplexGraph
 from kinodata.transform.mask_residues import MaskResidues
 from kinodata.data.featurization.atoms import AtomFeatures
+from kinodata.data.featurization.bonds import NUM_BOND_TYPES
 from kinodata.types import *
 from kinodata.util import wandb_interface, ModelInfo
 from pytorch_lightning import Trainer
@@ -40,10 +41,11 @@ def make_config():
     cfg.register(
         "crocodoc",
         split_type="scaffold-k-fold",
+        ablate_binding_features=0,
         remove_hydrogen=True,
         filter_rmsd_max_value=2.0,
         split_index=0,
-        edges_only=False,
+        mask_type="pl_interactions",
         model_type="CGNN-3D",
         outfile=None,
     )
@@ -110,7 +112,11 @@ def load_model_from_checkpoint(
         model_ckpt = list(model_path.glob("**/*.ckpt"))[0]
         model_config = model_path / "config.json"
         config = load_wandb_config(model_config)
-    if config["ablate_binding_features"] == 0:
+    if "ablate_binding_features" not in config:
+        config["atom_attr_size"] = AtomFeatures.size - 6
+        config["edge_size"] = NUM_BOND_TYPES - 1
+        config["ablate_binding_features"] = -1
+    elif config["ablate_binding_features"] == 0:
         config["atom_attr_size"] = AtomFeatures.size
     elif config["ablate_binding_features"] == 1:
         config["atom_attr_size"] = AtomFeatures.size - 3
@@ -204,7 +210,7 @@ def load_residue_atom_index(idents, parallelize=True):
 
 
 if __name__ == "__main__":
-    predict_reference = True
+    predict_reference = False
     config = make_config()
     if "model_path" in config and config["model_path"] is not None:
         config["model_path"] = Path(config["model_path"])
@@ -248,7 +254,7 @@ if __name__ == "__main__":
         del index[k]
 
     print("Preparing residue masking transform...")
-    transform = MaskResidues(index, edges_only=config["edges_only"])
+    transform = MaskResidues(index, mask_type=config["mask_type"])
 
     trainer = Trainer(
         logger=None,
