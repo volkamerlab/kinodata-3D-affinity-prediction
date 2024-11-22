@@ -1,7 +1,7 @@
 universe = docker
 docker_image = gjoschka/kinodata3d-b0:2.3.0-cuda12.1
 executable = crocodoc_resid.sh
-arguments = $(model) $(rmsd) $(split)
+arguments = $(model) $(rmsd) $(split) $(index)
 output = crocdoc_resid.$(ClusterId).$(ProcId).out
 error = crocdoc_resid.$(ClusterId).$(ProcId).err
 log = crocdoc_resid.$(ClusterId).log
@@ -12,6 +12,10 @@ request_CPUs = 32
 request_memory = 64G
 requirements = UidDomain == "cs.uni-saarland.de"
 +WantGPUHomeMounted = true
-queue model, rmsd, split from (
-    CGNN, 2, scaffold-k-fold
+queue model, rmsd, split, index from (
+    CGNN-3D, 2, scaffold-k-fold, 0
+    CGNN-3D, 2, scaffold-k-fold, 1
+    CGNN-3D, 2, scaffold-k-fold, 2
+    CGNN-3D, 2, scaffold-k-fold, 3
+    CGNN-3D, 2, scaffold-k-fold, 4
 )
