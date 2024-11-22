@@ -21,13 +21,16 @@ from kinodata.model.dti import make_model as make_dti_baseline
 from kinodata.model.regression import cat_many
 from kinodata.transform import FilterDockingRMSD, TransformToComplexGraph
 from kinodata.transform.mask_residues import MaskResidues
+from kinodata.data.featurization.atoms import AtomFeatures
+from kinodata.data.featurization.bonds import NUM_BOND_TYPES
 from kinodata.types import *
 from kinodata.util import wandb_interface, ModelInfo
 from pytorch_lightning import Trainer
 from torch_geometric.loader import DataLoader
+from torch_geometric.transforms import Compose
 from tqdm import tqdm
 
-REDIUE_ATOM_INDEX = _DATA / "processed" / "residue_atom_index"
+RESIDUE_ATOM_INDEX = _DATA / "processed" / "residue_atom_index"
 CPU_COUNT = 12
 HAS_GPU = torch.cuda.is_available()
 FORCE_CPU = False
@@ -38,14 +41,18 @@ def make_config():
     cfg.register(
         "crocodoc",
         split_type="scaffold-k-fold",
+        ablate_binding_features=0,
         remove_hydrogen=True,
         filter_rmsd_max_value=2.0,
         split_index=0,
+        mask_type="pl_interactions",
+        model_type="CGNN-3D",
+        outfile=None,
         edges_only=False,
     )
     config = cfg.get("crocodoc")
     config["model_path"] = None
-    config = config.update_from_args("model_path")
+    config = config.update_from_args("model_path", "outfile")
     return config
 
 
@@ -106,6 +113,14 @@ def load_model_from_checkpoint(
         model_ckpt = list(model_path.glob("**/*.ckpt"))[0]
         model_config = model_path / "config.json"
         config = load_wandb_config(model_config)
+    if "ablate_binding_features" not in config:
+        config["atom_attr_size"] = AtomFeatures.size - 6
+        config["edge_size"] = NUM_BOND_TYPES - 1
+        config["ablate_binding_features"] = -1
+    elif config["ablate_binding_features"] == 0:
+        config["atom_attr_size"] = AtomFeatures.size
+    elif config["ablate_binding_features"] == 1:
+        config["atom_attr_size"] = AtomFeatures.size - 3
     cls = model_cls[model_type]
     config = cfg.Config(config)
     ckp = torch.load(model_ckpt, map_location=DEVICE)
@@ -115,12 +130,22 @@ def load_model_from_checkpoint(
     return model, config
 
 
-def prepare_data(config, split_fold):
-    to_cplx = TransformToComplexGraph(remove_heterogeneous_representation=True)
+def prepare_data(config, need_cplx_representation=True):
+    transform = lambda x: x
+    if need_cplx_representation:
+        to_cplx = TransformToComplexGraph(remove_heterogeneous_representation=True)
+        transform = to_cplx
+    if config["ablate_binding_features"] == 1:
+
+        def mask_features(data):
+            data["complex"].x = data["complex"].x[:, :-3]
+            return data
+
+        transform = Compose([transform, mask_features])
     rmsd_filter = FilterDockingRMSD(config["filter_rmsd_max_value"])
     data_cls = Filtered(KinodataDocked(), rmsd_filter)
     test_split = KinodataKFoldSplit(config["split_type"], 5)
-    split = test_split.split(data_cls())[split_fold]
+    split = test_split.split(data_cls())[config["split_index"]]
     test_data = create_dataset(
         data_cls,
         dict(),
@@ -136,9 +161,25 @@ def prepare_data(config, split_fold):
             "_ALNVLDMSQKLYLLSSLDPYLLEMYSYLILEAPEGEIFNLLRQYLHSAMIIYRDLKPHNVLFIAA",
         ]
     )
-    return [
-        to_cplx(data) for data in test_data if data.pocket_sequence not in forbidden_seq
+    data_list = [
+        transform(data)
+        for data in test_data
+        if data.pocket_sequence not in forbidden_seq
     ]
+
+    source_df = test_data.df
+    source_df = source_df.set_index("ident")
+
+    def add_metdata(data):
+        row = source_df.loc[data["ident"].item()]
+        data["chembl_activity_id"] = torch.tensor([int(row["activities.activity_id"])])
+        data["klifs_structure_id"] = torch.tensor(
+            [int(row["similar.klifs_structure_id"])]
+        )
+        return data
+
+    data_list = [add_metdata(data) for data in data_list]
+    return data_list
 
 
 def load_single_index(file: Path):
@@ -157,8 +198,9 @@ def get_ident(file: Path):
 
 
 def load_residue_atom_index(idents, parallelize=True):
-    files = list(REDIUE_ATOM_INDEX.iterdir())
+    files = list(RESIDUE_ATOM_INDEX.iterdir())
     files = [file for file in files if get_ident(file) in idents]
+    assert len(files) == len(idents)
     progressing_iterable = tqdm(files, desc="Loading residue atom index...")
     if parallelize:
         with mp.Pool(CPU_COUNT) as pool:
@@ -169,25 +211,28 @@ def load_residue_atom_index(idents, parallelize=True):
 
 
 if __name__ == "__main__":
-    predict_reference = False
+    predict_reference = True
     config = make_config()
-    config["model_path"] = Path(config["model_path"])
+    if "model_path" in config and config["model_path"] is not None:
+        config["model_path"] = Path(config["model_path"])
     if config.get("model", None):
         print("Loading model from", config["model_path"])
+    if config.get("outfile", None):
+        print("Will write output to", config["outfile"])
 
     model_info = None
     if (model_path := config.get("model_path", None)) is not None:
         model_info = ModelInfo.from_dir(model_path)
-    model = load_model_from_checkpoint(
+    model, model_config = load_model_from_checkpoint(
         rmsd_threshold=2,
         split_type=config["split_type"],
         split_fold=config["split_index"],
-        model_type="CGNN-3D",
+        model_type=config["model_type"],
         model_info=model_info,
     )
 
     print("Creating data list...")
-    data_list = prepare_data(config, config["split_index"])
+    data_list = prepare_data(model_config)
 
     print("Checking data...")
     for data in tqdm(data_list):
@@ -210,15 +255,17 @@ if __name__ == "__main__":
         del index[k]
 
     print("Preparing residue masking transform...")
-    transform = MaskResidues(index, edges_only=config["edges_only"])
+    transform = MaskResidues(index, mask_type=config["mask_type"])
 
     trainer = Trainer(
         logger=None,
         auto_select_gpus=True,
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
     )
-    fold = int(config["split_index"])
-    split_type = config["split_type"].split("-")[0]
+    fold = int(model_config["split_index"])
+    split_type = model_config["split_type"].split("-")[0]
+    model_type = config["model_type"]
+    model_type_repr = model_type.replace("-", "").lower()
     if predict_reference:
         predictions = trainer.predict(model, DataLoader(data_list, batch_size=32))
         predictions = cat_many(predictions)
@@ -226,6 +273,8 @@ if __name__ == "__main__":
             [
                 {
                     "ident": data["ident"],
+                    "chembl_activity_id": data["chembl_activity_id"],
+                    "klifs_structure_id": data["klifs_structure_id"],
                 }
                 for data in data_list
             ]
@@ -233,12 +282,17 @@ if __name__ == "__main__":
         df = pd.DataFrame(
             {
                 "ident": meta["ident"].cpu().numpy(),
+                "chembl_activity_id": meta["chembl_activity_id"].cpu().numpy(),
+                "klifs_structure_id": meta["klifs_structure_id"].cpu().numpy(),
                 "reference_pred": predictions["pred"].cpu().numpy(),
                 "target": predictions["target"].cpu().numpy(),
             }
         )
+        file_name = f"reference_{split_type}_{fold}_{model_type_repr}"
+        if config.get("outfile", None):
+            file_name = config["outfile"]
         df.to_csv(
-            _DATA / "crocodoc_out" / "residue" / f"reference_{split_type}_{fold}.csv",
+            _DATA / "crocodoc_out" / "mask_pl_edges_at_residue" / f"{file_name}.csv",
             index=False,
         )
 
@@ -256,6 +310,8 @@ if __name__ == "__main__":
             [
                 {
                     "ident": data["ident"],
+                    "chembl_activity_id": data["chembl_activity_id"],
+                    "klifs_structure_id": data["klifs_structure_id"],
                     "masked_residue": data.masked_residue,
                 }
                 for data in transformed_data_list
@@ -266,6 +322,8 @@ if __name__ == "__main__":
         df = pd.DataFrame(
             {
                 "ident": meta["ident"].cpu().numpy(),
+                "chembl_activity_id": meta["chembl_activity_id"].cpu().numpy(),
+                "klifs_structure_id": meta["klifs_structure_id"].cpu().numpy(),
                 "masked_residue": meta["masked_residue"].cpu().numpy(),
                 "masked_pred": predictions["pred"].cpu().numpy(),
                 "masked_resname": masked_resname,
@@ -273,12 +331,17 @@ if __name__ == "__main__":
             }
         )
         if model_path is not None:
-            file_name = f"residue_delta_{str(model_path).replace('/', '_')}_part_{part}"
+            file_name = f"residue_delta_{str(model_path).replace('/', '_')}"
         else:
-            file_name = f"residue_delta_{split_type}_{fold}_part_{part}"
+            file_name = f"residue_delta_{split_type}_{fold}_{model_type_repr}"
+        # file_name = config.get("outfile", file_name)
+        file_name = f"{file_name}_part_{part}"
         if config["edges_only"]:
             file_name += "_edges_only"
-        df.to_csv(_DATA / "crocodoc_out" / "residue" / f"{file_name}.csv", index=False)
+        df.to_csv(
+            _DATA / "crocodoc_out" / "mask_pl_edges_at_residue" / f"{file_name}.csv",
+            index=False,
+        )
         part += 1
         if len(transform) == 0:
             break

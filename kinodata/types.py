@@ -35,3 +35,6 @@ COVALENT_EDGE_TYPES: List[EdgeType] = [
     (NodeType.Ligand, RelationType.Covalent, NodeType.Ligand),
     (NodeType.Pocket, RelationType.Covalent, NodeType.Pocket),
 ]
+
+
+MASK_RESIDUE_KEY = "mask_residue_interactions"
