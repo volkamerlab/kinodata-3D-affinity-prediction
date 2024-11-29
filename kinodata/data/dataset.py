@@ -363,7 +363,7 @@ class KinodataDocked(InMemoryDataset):
         complex_info = ComplexInformation.from_raw(
             self.df, remove_hydrogen=self.remove_hydrogen
         )
-        if self.use_multiprocessing:
+        if False: #self.use_multiprocessing:
             tasks = [
                 (_complex, self.residue_representation, self.require_kissim_residues)
                 for _complex in complex_info
@@ -377,7 +377,7 @@ class KinodataDocked(InMemoryDataset):
                 residue_representation=self.residue_representation,
                 require_kissim_residues=self.require_kissim_residues,
             )
-            data_list = list(map(process, tqdm(complex_info)))
+            data_list = list(map(process, tqdm([ci for ci in complex_info if ci.predicted_rmsd < 2.1])))
 
         data_list = [d for d in data_list if d is not None]
         return data_list
