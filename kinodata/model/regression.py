@@ -7,7 +7,9 @@ from torch import Tensor
 import wandb
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import pytorch_lightning as pl
+from torch_geometric.data import HeteroData
 
+from kinodata.types import NodeType
 from kinodata.configuration import Config
 from kinodata.model.resolve import resolve_loss
 from kinodata.model.resolve import resolve_optim
@@ -85,7 +87,7 @@ class RegressionModel(pl.LightningModule):
 
     def training_step(self, batch, *args) -> Tensor:
         pred = self.forward(batch).view(-1, 1)
-        offset = torch.ones(3).to(pred.device) * 500
+        offset = torch.ones(3).to(pred.device) * 1000
         shift_ligand_position(batch, offset)
         pred_unbound = self.forward(batch).view(-1, 1)
         shift_ligand_position(batch, - offset)
@@ -155,4 +157,4 @@ class RegressionModel(pl.LightningModule):
             pass
 
 def shift_ligand_position(data: HeteroData, shift: Tensor):
-    data[NodeType.Complex].pos = pos + shift * (1.0 - data[NodeType.Complex].is_pocket_atom.astype(torch.float32))
+    data[NodeType.Complex].pos += shift * (1.0 - data[NodeType.Complex].is_pocket_atom.type(torch.float32))
