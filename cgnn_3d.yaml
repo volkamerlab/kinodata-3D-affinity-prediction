@@ -1,5 +1,5 @@
 hidden_channels: 256
 act: "silu"
 interaction_modes: ["covalent", "structural"]
-batch_size: 32
-accumulate_grad_batches: 4
+batch_size: 16
+accumulate_grad_batches: 8

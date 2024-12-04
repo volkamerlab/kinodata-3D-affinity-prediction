@@ -15,7 +15,6 @@ from kinodata.model.complex_transformer import ComplexTransformer, make_model
 from kinodata.types import NodeType
 from kinodata.data.dataset import apply_transform_instance_permament
 from kinodata.transform.to_complex_graph import TransformToComplexGraph
-from kinodata.transform.ligand_only import ToLigandOnlyComplex
 from kinodata.data.featurization.atoms import AtomFeatures
 
 
@@ -49,7 +48,6 @@ if __name__ == "__main__":
     config = config.update_from_args()
     config["need_distances"] = False
     config["mask_pl_edges"] = False
-    config["ligand_only_3d"] = True
     config["perturb_ligand_positions"] = 0.0
     config["perturb_pocket_positions"] = 0.0
     config["perturb_complex_positions"] = 0.1
@@ -71,10 +69,8 @@ if __name__ == "__main__":
         select_transform = FeatureSelection(mask)
         ott = Compose([ott, select_transform])
         config["atom_attr_size"] = mask.sum().item()
-    if config.get("ligand_only_3d", None) is not None:
-        ott = Compose([ott, ToLigandOnlyComplex()])
 
-    wandb.init(config=config, project="kinodata-docked-rescore", tags=["transformer"])
+    wandb.init(config=config, project="kinodata-docked-rescore", tags=["transformer", "in_n_out"])
     train(
         config,
         fn_model=make_model,
