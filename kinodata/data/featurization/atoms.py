@@ -189,5 +189,5 @@ IsAromatic = OneHotFeaturizer(
     [False, True], rdchem.Atom.GetIsAromatic, name="IsAromatic"
 )
 
-AtomFeatures = ComposeOneHot([FormalCharge, NumHydrogens, IsAromatic])
-AtomFeatures = ConcatenatedFeaturizer([AtomFeatures, RDKitFeatures()])
+AtomFeatures = ComposeOneHot([NumHydrogens, IsAromatic])
+# AtomFeatures = ConcatenatedFeaturizer([AtomFeatures, RDKitFeatures()])
