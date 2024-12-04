@@ -83,4 +83,4 @@ FormalCharge = OneHotFeaturizer(
 NumHydrogens = OneHotFeaturizer(
     [0, 1, 2, 3, 4], rdchem.Atom.GetTotalNumHs, name="NumHydrogens"
 )
-AtomFeatures = ComposeOneHot([FormalCharge, NumHydrogens])
+AtomFeatures = ComposeOneHot([NumHydrogens])
