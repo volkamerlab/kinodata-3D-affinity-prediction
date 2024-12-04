@@ -1,6 +1,7 @@
 from typing import Callable, Dict, Generic, List, Optional, Sequence, TypeVar
 import numpy as np
 from rdkit.Chem import rdchem
+from rdkit.Chem import AllChem
 
 CT = TypeVar("CT")
 
@@ -12,6 +13,19 @@ class AtomFeaturizer:
 
     def compute(self, mol) -> np.ndarray:
         ...
+
+
+class GasteigerCharges(AtomFeaturizer):
+    def __init__(self):
+        self.__name = "GasteigerCharge"
+
+    @property
+    def size(self) -> int:
+        return 1
+
+    def compute(self, mol) -> np.ndarray:
+        AllChem.ComputeGasteigerCharges(mol)
+        return [float(atom.GetProp('_GasteigerCharge')) for atom in mol.GetAtoms()]
 
 
 class OneHotFeaturizer(AtomFeaturizer, Generic[CT]):
@@ -52,6 +66,7 @@ class OneHotFeaturizer(AtomFeaturizer, Generic[CT]):
         return f"{self.__name}({self.__mapping})"
 
 
+
 class ComposeOneHot(AtomFeaturizer):
     def __init__(self, oneh_hot_featurizers: List[OneHotFeaturizer]) -> None:
         super().__init__()
@@ -83,4 +98,4 @@ FormalCharge = OneHotFeaturizer(
 NumHydrogens = OneHotFeaturizer(
     [0, 1, 2, 3, 4], rdchem.Atom.GetTotalNumHs, name="NumHydrogens"
 )
-AtomFeatures = ComposeOneHot([NumHydrogens])
+AtomFeatures = ComposeOneHot([GasteigerCharge, NumHydrogens])
