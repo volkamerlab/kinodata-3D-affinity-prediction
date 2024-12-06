@@ -25,7 +25,7 @@ class GasteigerCharges(AtomFeaturizer):
 
     def compute(self, mol) -> np.ndarray:
         AllChem.ComputeGasteigerCharges(mol)
-        return [float(atom.GetProp('_GasteigerCharge')) for atom in mol.GetAtoms()]
+        return np.array([float(atom.GetProp('_GasteigerCharge')) for atom in mol.GetAtoms()])
 
 
 class OneHotFeaturizer(AtomFeaturizer, Generic[CT]):
@@ -92,10 +92,26 @@ class ComposeOneHot(AtomFeaturizer):
         return f"{self.__class__.__name__}({', '.join([repr(f) for f in self.__one_hot_featurizers])})"
 
 
+class Compose(AtomFeaturizer):
+    def __init__(self, oneh_hot_featurizers: List[OneHotFeaturizer], other_featurizers: List[AtomFeaturizer]) -> None:
+        super().__init__()
+        self.__one_hot_featurizer = ComposeOneHot(oneh_hot_featurizers)
+        self.__other_featurizers = other_featurizers
+
+    @property
+    def size(self) -> int:
+        return self.__one_hot_featurizer.size + sum(f.size for f in self.__other_featurizers)
+
+    def compute(self, mol) -> np.ndarray:
+        oneh_feats = self.__one_hot_featurizer.compute(mol)
+        other_feats = np.concatenate([feat.compute(mol).reshape(-1, 1) for feat in self.__other_featurizers], 1)
+        return np.concatenate([oneh_feats, other_feats], 1)
+
+
 FormalCharge = OneHotFeaturizer(
     [-2, -1, 0, 1, 2], rdchem.Atom.GetFormalCharge, name="FormalCharge"
 )
 NumHydrogens = OneHotFeaturizer(
     [0, 1, 2, 3, 4], rdchem.Atom.GetTotalNumHs, name="NumHydrogens"
 )
-AtomFeatures = ComposeOneHot([GasteigerCharge, NumHydrogens])
+AtomFeatures = Compose([NumHydrogens], [GasteigerCharges()])
