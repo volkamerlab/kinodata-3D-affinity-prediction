@@ -87,7 +87,7 @@ def process_raw_data(
         removeHs=remove_hydrogen,
     )
     if activity_type_subset is not None:
-        df = df.query("activities.standard_type in @activity_type_subset")
+        df = df[df["activities.standard_type"].isin(activity_type_subset)]
     df["activities.standard_value"] = df["activities.standard_value"].astype(float)
     df["docking.predicted_rmsd"] = df["docking.predicted_rmsd"].astype(float)
 
@@ -285,7 +285,7 @@ class KinodataDocked(InMemoryDataset):
         self.require_kissim_residues = require_kissim_residues
         self.use_multiprocessing = use_multiprocessing
         if self.use_multiprocessing:
-            num_processes = num_processes if num_processes else os.cpu_count()
+            num_processes = num_processes if num_processes else max(os.cpu_count(), 35)
         self.make_pyg_data = partial(
             process_pyg,
             residue_representation=self.residue_representation,
@@ -360,10 +360,12 @@ class KinodataDocked(InMemoryDataset):
         complex_info = ComplexInformation.from_raw(
             self.df, remove_hydrogen=self.remove_hydrogen
         )
+
         if self.use_multiprocessing:
             tasks = [
                 (_complex, self.residue_representation, self.require_kissim_residues)
                 for _complex in complex_info
+                if _complex.predicted_rmsd < 2.1
             ]
             with mp.Pool(os.cpu_count()) as pool:
                 data_list = pool.map(_process_pyg, tqdm(tasks))
@@ -373,9 +375,9 @@ class KinodataDocked(InMemoryDataset):
                 residue_representation=self.residue_representation,
                 require_kissim_residues=self.require_kissim_residues,
             )
-            data_list = list(map(process, tqdm(complex_info)))
+            data_list = list(map(process, tqdm([ci for ci in complex_info if ci.predicted_rmsd < 2.1])))
 
-        data_list = [d for d in data_list if d is not None]
+        data_list = [torch.load(graph_cache(d)) for d in tqdm(data_list) if d is not None]
         return data_list
 
     def filter_transform(self, data_list: List[HeteroData]) -> List[HeteroData]:
@@ -487,14 +489,20 @@ def _process_pyg(args) -> Optional[HeteroData]:
     return process_pyg(*args)
 
 
+def graph_cache(ident):
+    return _DATA / "cache" / (str(ident) + ".pth")
+
 def process_pyg(
     complex: Optional[ComplexInformation] = None,
     residue_representation: Literal["sequence", "structural", None] = "sequence",
     require_kissim_residues: bool = False,
-) -> Optional[HeteroData]:
+) -> Optional[int]:
     if complex is None:
         logging.warning(f"process_pyg received None as complex input")
         return None
+    ident = complex.kinodata_ident
+    if graph_cache(ident).exists():
+        return ident
     data = HeteroData()
     try:
         ligand = complex.ligand
@@ -532,4 +540,5 @@ def process_pyg(
     data.activity_type = complex.activity_type
     data.ident = complex.kinodata_ident
     data.smiles = complex.compound_smiles
-    return data
+    torch.save(data, graph_cache(ident))
+    return ident
