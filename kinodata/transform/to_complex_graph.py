@@ -19,13 +19,13 @@ class TransformToComplexGraph(BaseTransform):
             NodeType.Pocket, RelationType.Covalent, NodeType.Pocket
         ]
 
-        x = torch.cat((pocket_store.x, ligand_store.x), dim=0)
+        # x = torch.cat((pocket_store.x, ligand_store.x), dim=0)
         z = torch.cat((pocket_store.z, ligand_store.z), dim=0)
         pos = torch.cat((pocket_store.pos, ligand_store.pos), dim=0)
         edge_index = torch.cat(
             (
                 pocket_edge_store.edge_index,
-                ligand_edge_store.edge_index + pocket_store.x.size(0),
+                ligand_edge_store.edge_index,  # + pocket_store.x.size(0),
             ),
             dim=1,
         )
@@ -37,7 +37,7 @@ class TransformToComplexGraph(BaseTransform):
             dim=0,
         )
 
-        data[NodeType.Complex].x = x
+        # data[NodeType.Complex].x = x
         data[NodeType.Complex].z = z
         data[NodeType.Complex].pos = pos
         data[
