@@ -60,7 +60,7 @@ class InteractionModule(Module):
 
     def forward(self, data: HeteroData) -> Tuple[Tensor, Tensor]:
         edge_index, edge_attr, edge_weight = self.interactions(data)
-        device = [x.device for x in (edge_attr, edge_weight) if x is not None][0]
+        device = [x.device for x in (edge_index, edge_attr, edge_weight) if x is not None][0]
         edge_repr = torch.zeros(edge_index.size(1), self.hidden_channels, device=device)
         if edge_attr is not None:
             edge_repr = edge_repr + self.process_attr(edge_attr)
