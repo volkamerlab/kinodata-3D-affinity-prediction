@@ -43,7 +43,7 @@ if __name__ == "__main__":
     for key, value in sorted(config.items(), key=lambda i: i[0]):
         print(f"{key}: {value}")
 
-    wandb.init(config=config, project="kinodata-docked-rescore", tags=["transformer"])
+    wandb.init(config=config, project="kinodata-docked-rescore", tags=["transformer", "ablation"])
     train(
         config,
         fn_model=make_model,

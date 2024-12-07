@@ -24,7 +24,7 @@ def atom_positions(mol) -> Tensor:
 
 def set_atoms(mol, data: HeteroData, key: str) -> HeteroData:
     data[key].z = atomic_numbers(mol)
-    data[key].x = torch.from_numpy(AtomFeatures.compute(mol)).float()
+    # data[key].x = torch.from_numpy(AtomFeatures.compute(mol)).float()
     data[key].pos = atom_positions(mol)
     return data
 
@@ -38,13 +38,13 @@ def bond_tensors(mol):
         type = bond.GetBondType()
         row.append(i)
         col.append(j)
-        bond_type_indices.append(BOND_TYPE_TO_IDX[type])
+        bond_type_indices.append(0)#BOND_TYPE_TO_IDX[type])
 
     edge_index = torch.tensor([row, col], dtype=torch.long).view(2, -1)
     bond_type_indices = torch.tensor(bond_type_indices)
 
     # one-hot encode bond type
-    edge_attr = F.one_hot(bond_type_indices, NUM_BOND_TYPES)
+    edge_attr = F.one_hot(bond_type_indices, 1) #NUM_BOND_TYPES)
 
     edge_index, edge_attr = to_undirected(edge_index, edge_attr, num_nodes)
     return edge_index, edge_attr

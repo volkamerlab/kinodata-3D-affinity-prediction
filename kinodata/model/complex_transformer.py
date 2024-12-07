@@ -84,7 +84,8 @@ class CovalentInteractions(InteractionModule):
 
     def interactions(self, data: HeteroData) -> Tuple[Tensor, OptTensor, OptTensor]:
         edge_store = data[self.node_type, RelationType.Covalent, self.node_type]
-        return edge_store.edge_index, edge_store.edge_attr, None
+        # return edge_store.edge_index, edge_store.edge_attr, None
+        return edge_store.edge_index, None, None
 
     def process_attr(self, edge_attr: Tensor) -> Tensor:
         return self.lin(edge_attr.float())
@@ -190,7 +191,7 @@ class ComplexTransformer(RegressionModel):
             self.interaction_module = intr[0]
 
         self.atomic_num_embedding = Embedding(max_atomic_number, hidden_channels)
-        self.lin_atom_features = Linear(atom_attr_size, hidden_channels)
+        # self.lin_atom_features = Linear(atom_attr_size, hidden_channels)
         self.attention_blocks = ModuleList(
             [
                 SPAB(hidden_channels, num_heads, self.act, ln1, ln2, ln3)
@@ -219,7 +220,7 @@ class ComplexTransformer(RegressionModel):
         node_store = data[NodeType.Complex]
         node_repr = self.act(
             self.atomic_num_embedding(node_store.z)
-            + self.lin_atom_features(node_store.x)
+            # + self.lin_atom_features(node_store.x)
         )
         edge_index, edge_repr = self.interaction_module(data)
         for sparse_attention_block, norm in zip(
