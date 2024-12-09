@@ -23,7 +23,6 @@ from kinodata.configuration import Config
 
 from ..types import NodeEmbedding, NodeType, RelationType, MASK_RESIDUE_KEY
 from .shared.dist_embedding import GaussianDistEmbedding
-from .model.shared import SetAttentionBlock
 from .sparse_transformer import SPAB
 from .regression import RegressionModel
 from .resolve import resolve_act
