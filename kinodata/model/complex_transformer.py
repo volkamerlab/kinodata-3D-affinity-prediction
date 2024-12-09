@@ -259,7 +259,7 @@ class ComplexTransformer(RegressionModel):
         edge_index, edge_repr = self.interaction_module(data)
         return edge_index, edge_repr
 
-    def forward(self, data: HeteroData) -> Tensor:
+    def forward(self, data: HeteroData, mask_ligand: bool = False) -> Tensor:
         node_store = data[NodeType.Complex]
         node_repr = self.initial_embed_nodes(data)
         edge_index, edge_repr = self.initial_embed_edges(data)
@@ -271,6 +271,8 @@ class ComplexTransformer(RegressionModel):
             )
             node_repr = norm(node_repr, node_store.batch)
 
+        if mask_ligand:
+            node_repr = node_repr[~data[NodeType.Complex].is_pocket_atom]
         graph_repr = self.aggr(node_repr, node_store.batch)
         return self.out(graph_repr)
 
