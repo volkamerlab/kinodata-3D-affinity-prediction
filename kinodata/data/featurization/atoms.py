@@ -190,4 +190,4 @@ IsAromatic = OneHotFeaturizer(
 )
 
 AtomFeatures = ComposeOneHot([NumHydrogens, IsAromatic])
-# AtomFeatures = ConcatenatedFeaturizer([AtomFeatures, RDKitFeatures()])
+AtomFeatures = ConcatenatedFeaturizer([AtomFeatures, RDKitFeatures()])
