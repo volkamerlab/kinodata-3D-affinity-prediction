@@ -49,7 +49,8 @@ if __name__ == "__main__":
     config = config.update_from_args()
     config["need_distances"] = False
     config["mask_pl_edges"] = False
-    config["ligand_only_3d"] = True
+    config["ligand_only_3d"] = False
+    config["require_kissim_residues"] = True
     config["perturb_ligand_positions"] = 0.0
     config["perturb_pocket_positions"] = 0.0
     config["perturb_complex_positions"] = 0.1
@@ -60,21 +61,21 @@ if __name__ == "__main__":
         print(f"{key}: {value}")
 
     ott = TransformToComplexGraph(remove_heterogeneous_representation=True)
-    if config.get("ablate_binding_features"):
-        mask = torch.ones(AtomFeatures.size, dtype=torch.bool)
-        ablate = [
-            AtomFeatures.get_position("RDKitFeatures", "Donor"),
-            AtomFeatures.get_position("RDKitFeatures", "Acceptor"),
-            AtomFeatures.get_position("RDKitFeatures", "Hydrophobe"),
-        ]
-        mask[ablate] = False
-        select_transform = FeatureSelection(mask)
-        ott = Compose([ott, select_transform])
-        config["atom_attr_size"] = mask.sum().item()
-    if config.get("ligand_only_3d", None) is not None:
-        ott = Compose([ott, ToLigandOnlyComplex()])
+    # if config.get("ablate_binding_features"):
+        # mask = torch.ones(AtomFeatures.size, dtype=torch.bool)
+        # ablate = [
+            # AtomFeatures.get_position("RDKitFeatures", "Donor"),
+            # AtomFeatures.get_position("RDKitFeatures", "Acceptor"),
+            # AtomFeatures.get_position("RDKitFeatures", "Hydrophobe"),
+        # ]
+        # mask[ablate] = False
+        # select_transform = FeatureSelection(mask)
+        # ott = Compose([ott, select_transform])
+        # config["atom_attr_size"] = mask.sum().item()
+    # if config.get("ligand_only_3d", False):
+        # ott = Compose([ott, ToLigandOnlyComplex()])
 
-    wandb.init(config=config, project="kinodata-docked-rescore", tags=["transformer"])
+    wandb.init(config=config, project="kinodata-docked-rescore", tags=["transformer", "structural_debiasing"])
     train(
         config,
         fn_model=make_model,

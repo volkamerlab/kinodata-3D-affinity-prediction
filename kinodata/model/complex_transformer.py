@@ -1,5 +1,5 @@
 from functools import partial
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Callable
 import torch
 from torch import Tensor
 from torch.nn import (
@@ -16,17 +16,20 @@ from torch_geometric.data import HeteroData
 from torch_geometric.nn.norm import GraphNorm
 from torch_geometric.nn.aggr import SoftmaxAggregation
 from torch_geometric.utils import coalesce
+from torch_geometric.utils import to_dense_batch
 from torch_cluster import knn_graph
 
 from kinodata.configuration import Config
 
 from ..types import NodeEmbedding, NodeType, RelationType, MASK_RESIDUE_KEY
 from .shared.dist_embedding import GaussianDistEmbedding
+from .model.shared import SetAttentionBlock
 from .sparse_transformer import SPAB
 from .regression import RegressionModel
 from .resolve import resolve_act
 from ..data.featurization.atoms import AtomFeatures
 from ..data.featurization.bonds import NUM_BOND_TYPES
+from .dti import make_model, Encoder, KissimTransformer
 
 OptTensor = Optional[Tensor]
 
@@ -247,6 +250,12 @@ class ComplexTransformer(RegressionModel):
             )
         )
 
+        config["residue_size"] = 12
+        kissim_encoder = config.init(KissimTransformer)
+        self.pocket_baseline = Sequential(
+            kissim_encoder, self.act, Linear(hidden_channels, 1)
+        )
+
     def initial_embed_nodes(self, data: HeteroData) -> Tensor:
         node_store = data[NodeType.Complex]
         node_repr = self.act(
@@ -272,7 +281,9 @@ class ComplexTransformer(RegressionModel):
             node_repr = norm(node_repr, node_store.batch)
 
         graph_repr = self.aggr(node_repr, node_store.batch)
-        return self.out(graph_repr)
+        affinity_prediction = self.out(graph_repr)
+        pocket_baseline_affinity = self.pocket_baseline(data.kissim_fp)
+        return affinity_prediction, pocket_baseline_affinity
 
 
 def make_model(config: Config):
