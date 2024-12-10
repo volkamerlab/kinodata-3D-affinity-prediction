@@ -251,12 +251,6 @@ class ComplexTransformer(RegressionModel):
             )
         )
 
-        config["residue_size"] = 12
-        kissim_encoder = config.init(KissimTransformer)
-        self.pocket_baseline = Sequential(
-            kissim_encoder, self.act, Linear(hidden_channels, 1)
-        )
-
     def initial_embed_nodes(self, data: HeteroData) -> Tensor:
         node_store = data[NodeType.Complex]
         node_repr = self.act(
@@ -279,12 +273,6 @@ class ComplexTransformer(RegressionModel):
             node_repr = norm(node_repr, batch)
         graph_repr = self.aggr(node_repr, batch)
         return self.out(graph_repr)
-            node_repr = norm(node_repr, node_store.batch)
-
-        graph_repr = self.aggr(node_repr, node_store.batch)
-        affinity_prediction = self.out(graph_repr)
-        pocket_baseline_affinity = self.pocket_baseline(data.kissim_fp)
-        return affinity_prediction, pocket_baseline_affinity
 
     def forward(self, data: HeteroData) -> Tensor:
         node_store = data[NodeType.Complex]

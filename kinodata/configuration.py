@@ -75,6 +75,17 @@ class Config(dict):
         bound_arguments = obj_signature.bind(*args, **sub_config)
         return obj(*bound_arguments.args, **bound_arguments.kwargs)
 
+    def call(self, callable: Callable[..., T], *args, **kwargs) -> T:
+        callable_signature = inspect.signature(callable)
+        sub_config = self.subset(callable_signature.parameters.keys())
+        sub_config.update(kwargs, allow_duplicates=False)
+        bound_arguments = callable_signature.bind(*args, **sub_config)
+        return callable(*bound_arguments.args, **bound_arguments.kwargs)
+
+    def pretty_print(self):
+        for key, value in sorted(self.items(), key=lambda i: i[0]):
+            print(f"{key}: {value}")
+
     def argparser(
         self,
         admissible_types: list = [int, float, str, Path],

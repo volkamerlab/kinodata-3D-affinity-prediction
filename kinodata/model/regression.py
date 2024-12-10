@@ -86,21 +86,13 @@ class RegressionModel(pl.LightningModule):
         wandb.define_metric("val/corr", summary="max")
 
     def training_step(self, batch, *args) -> Tensor:
-        pred = self.forward(batch).view(-1, 2)
-        baseline_pred = pred[:,1]
-        struc_delta_pred = pred[:,0]
-        affinity_pred = baseline_pred + struc_delta_pred
-        affinity_loss = self.criterion(affinity_pred, batch.y.view(-1, 1))
-        baseline_loss = self.criterion(baseline_pred, batch.y.view(-1, 1))
-        loss = baseline_loss * self.struc_reg_w + affinity_loss
+        pred = self.forward(batch).view(-1, 1)
+        loss = self.criterion(pred, batch.y.view(-1, 1))
         self.log("train/loss", loss, batch_size=pred.size(0), on_epoch=True)
         return loss
 
     def validation_step(self, batch, *args, key: str = "val"):
-        pred = self.forward(batch).view(-1, 2)
-        baseline_pred = pred[:,1]
-        struc_delta_pred = pred[:,0]
-        pred = baseline_pred + struc_delta_pred
+        pred = self.forward(batch).view(-1, 1)
         val_mae = (pred.flatten() - batch.y).abs().mean()
         self.log(f"{key}/mae", val_mae, batch_size=pred.size(0), on_epoch=True)
         return {
