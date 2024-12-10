@@ -24,7 +24,7 @@ class FeatureSelection:
         self.mask = mask
 
     def __call__(self, data):
-        data.x = data.x[:, self.mask]
+        data["complex"].x = data["complex"].x[:, self.mask]
         return data
 
 
@@ -42,14 +42,16 @@ if __name__ == "__main__":
         ln3=True,
         graph_norm=False,
         interaction_modes=["covalent", "structural"],
-        ablate_binding_features=False,
+        ablate_binding_features=True,
+        with_debiasing_baseline=True,
     )
     config = configuration.get("data", "training", "sparse_transformer")
+    for key, value in sorted(config.items(), key=lambda i: i[0]):
+        print(f"{key}: {value}")
     config = config.update_from_file()
     config = config.update_from_args()
     config["need_distances"] = False
     config["mask_pl_edges"] = False
-    config["ligand_only_3d"] = True
     config["perturb_ligand_positions"] = 0.0
     config["perturb_pocket_positions"] = 0.0
     config["perturb_complex_positions"] = 0.1
