@@ -1,5 +1,6 @@
 from functools import partial
 from typing import List, Optional, Tuple
+from matplotlib import pyplot as plt
 import torch
 from torch import Tensor
 from torch.nn import (
@@ -17,14 +18,15 @@ from torch_geometric.nn.norm import GraphNorm
 from torch_geometric.nn.aggr import SoftmaxAggregation
 from torch_geometric.utils import coalesce
 from torch_cluster import knn_graph
+import wandb
 
 from kinodata.configuration import Config
 
 from ..types import NodeEmbedding, NodeType, RelationType, MASK_RESIDUE_KEY
 from .shared.dist_embedding import GaussianDistEmbedding
 from .sparse_transformer import SPAB
-from .regression import RegressionModel
-from .resolve import resolve_act
+from .regression import RegressionModel, cat_many
+from .resolve import resolve_act, resolve_loss
 from ..data.featurization.atoms import AtomFeatures
 from ..data.featurization.bonds import NUM_BOND_TYPES
 
@@ -259,22 +261,134 @@ class ComplexTransformer(RegressionModel):
         edge_index, edge_repr = self.interaction_module(data)
         return edge_index, edge_repr
 
-    def forward(self, data: HeteroData) -> Tensor:
-        node_store = data[NodeType.Complex]
-        node_repr = self.initial_embed_nodes(data)
-        edge_index, edge_repr = self.initial_embed_edges(data)
+    def final_prediction(self, node_repr, edge_repr, edge_index, batch):
         for sparse_attention_block, norm in zip(
             self.attention_blocks, self.norm_layers
         ):
             node_repr, edge_repr = sparse_attention_block(
                 node_repr, edge_repr, edge_index
             )
-            node_repr = norm(node_repr, node_store.batch)
-
-        graph_repr = self.aggr(node_repr, node_store.batch)
+            node_repr = norm(node_repr, batch)
+        graph_repr = self.aggr(node_repr, batch)
         return self.out(graph_repr)
+
+    def forward(self, data: HeteroData) -> Tensor:
+        node_store = data[NodeType.Complex]
+        node_repr = self.initial_embed_nodes(data)
+        edge_index, edge_repr = self.initial_embed_edges(data)
+        return self.final_prediction(node_repr, edge_repr, edge_index, node_store.batch)
+
+
+class ComplexTransformerWithDebiasingBaseline(ComplexTransformer):
+
+    def set_criterion(self):
+        self.criterion = resolve_loss(self.config.loss_type, with_baseline=True)
+
+    def remove_pl_interactions(self, edge_index, edge_repr, node_store):
+        row, col = edge_index
+        is_source_pocket = node_store.is_pocket_atom[row]
+        is_target_pocket = node_store.is_pocket_atom[col]
+        is_pl_edge = torch.logical_xor(is_source_pocket, is_target_pocket).squeeze()
+
+        return edge_index[:, ~is_pl_edge], edge_repr[~is_pl_edge]
+
+    def forward(self, data: HeteroData) -> Tensor:
+        node_store = data[NodeType.Complex]
+        node_repr = self.initial_embed_nodes(data)
+        edge_index, edge_repr = self.initial_embed_edges(data)
+
+        pred_activity = self.final_prediction(
+            node_repr, edge_repr, edge_index, node_store.batch
+        )
+
+        masked_edge_index, masked_edge_repr = self.remove_pl_interactions(
+            edge_index, edge_repr, node_store
+        )
+        pred_baseline = self.final_prediction(
+            node_repr, masked_edge_repr, masked_edge_index, node_store.batch
+        )
+
+        return pred_activity, pred_baseline
+
+    def training_step(self, batch, *args) -> Tensor:
+        pred, baseline = self.forward(batch)
+        pred = pred.view(-1, 1)
+        baseline = baseline.view(-1, 1)
+        loss = self.criterion(pred, baseline, batch.y.view(-1, 1))
+        self.log("train/loss", loss, batch_size=pred.size(0), on_epoch=True)
+        return loss
+
+    def validation_step(self, batch, *args, key: str = "val"):
+        pred, baseline = self.forward(batch)
+        pred = pred.flatten()
+        baseline = baseline.flatten()
+        val_mae = (pred - batch.y).abs().mean()
+        abs_baseline = baseline.abs()
+        self.log(f"{key}/mae", val_mae, batch_size=pred.size(0), on_epoch=True)
+        self.log(
+            f"{key}/abs_baseline",
+            abs_baseline.mean(),
+            batch_size=pred.size(0),
+            on_epoch=True,
+        )
+        return {
+            f"{key}/mae": val_mae,
+            "pred": pred,
+            "abs_baseline": abs_baseline,
+            "target": batch.y,
+            "ident": batch.ident,
+        }
+
+    def process_eval_outputs(self, outputs) -> float:
+        pred = torch.cat([output["pred"] for output in outputs], 0)
+        target = torch.cat([output["target"] for output in outputs], 0)
+        abs_baseline = torch.cat([output["abs_baseline"] for output in outputs], 0)
+        corr = ((pred - pred.mean()) * (target - target.mean())).mean() / (
+            pred.std() * target.std()
+        ).cpu().item()
+        mae = (pred - target).abs().mean()
+        return pred, target, corr, mae, abs_baseline
+
+    def validation_epoch_end(self, outputs, *args, **kwargs) -> None:
+        pred, target, corr, mae, ab = self.process_eval_outputs(outputs)
+        self.log("val/corr", corr)
+
+        if self.log_scatter_plot:
+            y_min = min(pred.min().cpu().item(), target.min().cpu().item()) - 1
+            y_max = max(pred.max().cpu().item(), target.max().cpu().item()) + 1
+            fig, ax = plt.subplots()
+            ax.scatter(target.cpu().numpy(), pred.cpu().numpy(), s=0.7)
+            ax.set_xlim(y_min, y_max)
+            ax.set_ylim(y_min, y_max)
+            ax.set_ylabel("Pred")
+            ax.set_xlabel("Target")
+            ax.set_title(f"corr={corr}")
+            wandb.log({"scatter_val": wandb.Image(fig)})
+
+    def predict_step(self, batch, *args):
+        pred = self.forward(batch).flatten()
+        return {"pred": pred, "target": batch.y.flatten()}
+
+    def test_epoch_end(self, outputs, *args, **kwargs) -> None:
+        pred, target, corr, mae, ab = self.process_eval_outputs(outputs)
+        self.log("test/mae", mae)
+        self.log("test/abs_baseline", ab)
+        self.log("test/corr", corr)
+
+        if self.log_test_predictions:
+            test_predictions = wandb.Artifact("test_predictions", type="predictions")
+            data = cat_many(outputs, subset=["pred", "ident"])
+            values = [t.detach().cpu() for t in data.values()]
+            values = torch.stack(values, dim=1)
+            table = wandb.Table(columns=list(data.keys()), data=values.tolist())
+            test_predictions.add(table, "predictions")
+            wandb.log_artifact(test_predictions)
+            pass
 
 
 def make_model(config: Config):
-    cls = partial(ComplexTransformer, config)
+    if config.get("with_debiasing_baseline", False):
+        cls = partial(ComplexTransformerWithDebiasingBaseline, config)
+    else:
+        cls = partial(ComplexTransformer, config)
     return config.init(cls)

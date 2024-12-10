@@ -33,6 +33,7 @@ def cat_many(
         for key in subset
     }
 
+
 class RegressionModel(pl.LightningModule):
     log_scatter_plot: bool = False
     log_test_predictions: bool = False

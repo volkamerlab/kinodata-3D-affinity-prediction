@@ -18,7 +18,7 @@ from typing import (
     Sequence,
     Type,
 )
-from dataclasses import dataclass
+from dataclasses import dataclass, field, MISSING, fields
 
 import pandas as pd
 import requests  # type : ignore
@@ -185,37 +185,64 @@ def process_raw_data(
     return df
 
 
+def annotation(default=MISSING, transform: Callable | None = None):
+    metadata = dict()
+    metadata["is_annotation"] = True
+    metadata["transform"] = transform
+    return field(default=default, metadata=metadata)
+
+
+def iter_annotations(dc):
+    for field in fields(dc):
+        if field.metadata.get("is_annotation", False):
+            yield field
+
+
+to_singleton_tensor = lambda x, dtype: (
+    torch.tensor([x], dtype=dtype).view(1) if x is not None else None
+)
+to_float_singleton_tensor = partial(to_singleton_tensor, dtype=torch.float)
+to_long_singleton_tensor = partial(to_singleton_tensor, dtype=torch.long)
+
+
 @dataclass
 class ComplexInformation:
-    kinodata_ident: str
     compound_smiles: str
     molecule: Any
-    activity_value: float
-    activity_type: str
     pocket_mol2_file: Path
-    docking_score: float
-    posit_probability: float
     klifs_structure_id: int
     pocket_sequence: str
-    predicted_rmsd: float
-    remove_hydrogen: bool
+    kinodata_ident: str = annotation(None)
+    activity_type: str = annotation(None)
+    activity_value: float = annotation(None, to_float_singleton_tensor)
+    docking_score: float = annotation(None, to_float_singleton_tensor)
+    posit_probability: float = annotation(None, to_float_singleton_tensor)
+    predicted_rmsd: float = annotation(None, to_float_singleton_tensor)
+    remove_hydrogen: bool = True
     kekulize: bool = False
+    transform_annotations: bool = True
+
+    def __post_init__(self):
+        for field in iter_annotations(self):
+            transform = field.metadata["transform"]
+            if transform is not None:
+                setattr(self, field.name, transform(getattr(self, field.name)))
 
     @classmethod
     def from_raw(cls, raw_data: pd.DataFrame, **kwargs) -> List["ComplexInformation"]:
         return [
             cls(
-                row["ident"],
-                row["compound_structures.canonical_smiles"],
-                row["molecule"],
-                float(row["activities.standard_value"]),
-                row["activities.standard_type"],
-                Path(row["pocket_mol2_file"]),
-                float(row["docking.chemgauss_score"]),
-                float(row["docking.posit_probability"]),
-                int(row["similar.klifs_structure_id"]),
-                row["structure.pocket_sequence"],
-                float(row["docking.predicted_rmsd"]),
+                kinodata_ident=row["ident"],
+                compound_smiles=row["compound_structures.canonical_smiles"],
+                molecule=row["molecule"],
+                activity_value=float(row["activities.standard_value"]),
+                activity_type=row["activities.standard_type"],
+                pocket_mol2_file=Path(row["pocket_mol2_file"]),
+                docking_score=float(row["docking.chemgauss_score"]),
+                posit_probability=float(row["docking.posit_probability"]),
+                klifs_structure_id=int(row["similar.klifs_structure_id"]),
+                pocket_sequence=row["structure.pocket_sequence"],
+                predicted_rmsd=float(row["docking.predicted_rmsd"]),
                 **kwargs,
             )
             for _, row in raw_data.iterrows()
@@ -252,7 +279,7 @@ class KinodataDockedAgnostic:
         self._df = process_raw_data(self.raw_dir, remove_hydrogen=remove_hydrogen)
         print("Converting to data list...")
         self.data_list = ComplexInformation.from_raw(
-            self._df, remove_hydrogen=self.remove_hydrogen
+            self._df, remove_hydrogen=self.remove_hydrogen, transform_annotations=False
         )
         print("Done!")
 
@@ -527,10 +554,10 @@ def process_pyg(
             return None
         data = add_kissim_fp(data, kissim_fp, subset=PHYSICOCHEMICAL + STRUCTURAL)
 
-    data.y = torch.tensor(complex.activity_value).view(1)
-    data.docking_score = torch.tensor(complex.docking_score).view(1)
-    data.posit_prob = torch.tensor(complex.docking_score).view(1)
-    data.predicted_rmsd = torch.tensor(complex.predicted_rmsd).view(1)
+    data.y = complex.activity_value
+    data.docking_score = complex.docking_score
+    data.posit_prob = complex.docking_score
+    data.predicted_rmsd = complex.predicted_rmsd
     data.pocket_sequence = complex.pocket_sequence
     data.scaffold = ligand_scaffold
     data.activity_type = complex.activity_type
