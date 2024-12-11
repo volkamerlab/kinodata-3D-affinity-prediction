@@ -1,3 +1,4 @@
+import pandas as pd
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import (
     ModelCheckpoint,
@@ -5,8 +6,9 @@ from pytorch_lightning.callbacks import (
     EarlyStopping,
 )
 from pytorch_lightning.loggers.wandb import WandbLogger
-
+import wandb
 from kinodata.data.data_module import make_kinodata_module
+from .predict import predict_df
 
 
 def train(config, fn_data=make_kinodata_module, fn_model=None):
@@ -37,3 +39,14 @@ def train(config, fn_data=make_kinodata_module, fn_model=None):
 
     trainer.fit(model, datamodule=data_module)
     trainer.test(ckpt_path="best", datamodule=data_module)
+
+    # log all predictions of best model
+    df_train = predict_df(model, data_module.train_dataloader(), trainer, "best")
+    df_val = predict_df(model, data_module.val_dataloader(), trainer, "best")
+    df_test = predict_df(model, data_module.test_dataloader(), trainer, "best")
+    df_train["split"] = "train"
+    df_val["split"] = "val"
+    df_test["split"] = "test"
+    df = pd.concat([df_train, df_val, df_test])
+    table = wandb.Table(dataframe=df)
+    wandb.log({"all_predictions": table})

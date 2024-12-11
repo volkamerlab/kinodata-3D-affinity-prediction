@@ -102,7 +102,9 @@ def process_raw_data(
     )
     best_structure = (
         df.sort_values(by="docking.predicted_rmsd", ascending=True)
-        .groupby(group_key)[group_key + ["docking.predicted_rmsd", "molecule", "activities.activity_id"]]
+        .groupby(group_key)[
+            group_key + ["docking.predicted_rmsd", "molecule", "activities.activity_id"]
+        ]
         .head(1)
     )
     deduped = pd.merge(mean_activity, best_structure, how="outer", on=group_key)
@@ -113,7 +115,12 @@ def process_raw_data(
         on=group_key,
         suffixes=(".orig", None),
     )
-    for col in ("activities.standard_value", "docking.predicted_rmsd", "molecule", "activities.activity_id"):
+    for col in (
+        "activities.standard_value",
+        "docking.predicted_rmsd",
+        "molecule",
+        "activities.activity_id",
+    ):
         del df[f"{col}.orig"]
     # df.set_index("ID", inplace=True)
     print(f"{df.shape[0]} complexes remain after deduplication.")
@@ -199,7 +206,6 @@ class ComplexInformation:
     remove_hydrogen: bool
     activity_id: int = 0
     assay_id: int = 0
-    
 
     @classmethod
     def from_raw(cls, raw_data: pd.DataFrame, **kwargs) -> List["ComplexInformation"]:
@@ -217,6 +223,7 @@ class ComplexInformation:
                 row["structure.pocket_sequence"],
                 float(row["docking.predicted_rmsd"]),
                 activity_id=row["activities.activity_id"],
+                assay_id=row["assays.chembl_id"],
                 **kwargs,
             )
             for _, row in raw_data.iterrows()
@@ -227,7 +234,6 @@ class ComplexInformation:
         ligand = self.molecule
         if not self.remove_hydrogen:
             AddHs(ligand)
-        Kekulize(ligand)
         return ligand
 
     @cached_property
@@ -235,7 +241,6 @@ class ComplexInformation:
         pocket = MolFromMol2File(str(self.pocket_mol2_file))
         if not self.remove_hydrogen:
             AddHs(pocket)
-        Kekulize(pocket)
         return pocket
 
 
@@ -534,4 +539,9 @@ def process_pyg(
     data.activity_type = complex.activity_type
     data.ident = complex.kinodata_ident
     data.smiles = complex.compound_smiles
+
+    data.chembl_activity_id = complex.activity_id
+    data.chembl_assay_id = complex.assay_id
+    data.klifs_structure_id = complex.klifs_structure_id
+
     return data
