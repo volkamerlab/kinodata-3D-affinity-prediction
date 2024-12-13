@@ -72,6 +72,28 @@ class GroupNormalizeTarget(BaseTransform):
             Literal[HANDLERS.raise_error, HANDLERS.use_global] | None
         ) = None,
     ):
+        """
+        Normalize regression target values within groups.
+
+        Parameters:
+        -----------
+        group_key : str
+            The key used to group the data.
+        raw_target_key : str, optional
+            The key for the raw target values (default is "y").
+        target_delta_key : str, optional
+            The key for the target delta values (default is "y_delta").
+        group_mean_key : str, optional
+            The key for the group mean values (default is "y_group_mean").
+        group_std_key : str, optional
+            The key for the group standard deviation values (default is "y_group_std").
+        scale : bool, optional
+            Whether to scale the data (default is False).
+        unknown_group_handler : Literal[HANDLERS.raise_error, HANDLERS.use_global] or None, optional
+            The handler for unknown groups (default is None). If set to HANDLERS.raise_error,
+            an error will be raised for unknown groups. If set to HANDLERS.use_global,
+            global (average of averages/stds) mean and standard deviation will be used for unknown groups.
+        """
         super().__init__()
         self.group_key = group_key
         self.raw_target_key = raw_target_key
@@ -97,8 +119,31 @@ class GroupNormalizeTarget(BaseTransform):
         group_mean_key: str = "y_group_mean",
         group_std_key: str = "y_group_std",
         scale: bool = False,
+        unknown_group_handler: (
+            Literal[HANDLERS.raise_error, HANDLERS.use_global] | None
+        ) = None,
         add_transform_inplace: bool = True,
     ):
+        """
+        Apply the normalization transform to the given datasets.
+        NOTE: As per default, the transform is added to the datasets in place!
+
+        Parameters:
+        cls (type): The class type of the transform.
+        group_key (str): The key used to group the data.
+        train_dataset (InMemoryDataset): The training dataset to fit the transform.
+        *other_datasets (InMemoryDataset): Additional datasets to apply the transform.
+        raw_target_key (str, optional): The key for the raw target values. Default is "y".
+        target_delta_key (str, optional): The key for the target delta values. Default is "y_delta".
+        group_mean_key (str, optional): The key for the group mean values. Default is "y_group_mean".
+        group_std_key (str, optional): The key for the group standard deviation values. Default is "y_group_std".
+        scale (bool, optional): Whether to scale the data. Default is False.
+        unknown_group_handler (Literal[HANDLERS.raise_error, HANDLERS.use_global] or None, optional): The handler for unknown groups. Default is None.
+        add_transform_inplace (bool, optional): Whether to add the transform in place or clone the datasets. Default is True.
+
+        Returns:
+        tuple: A tuple containing the transform and the list of datasets with the transform applied.
+        """
         transform = cls(
             group_key,
             raw_target_key,
@@ -106,6 +151,7 @@ class GroupNormalizeTarget(BaseTransform):
             group_mean_key,
             group_std_key,
             scale,
+            unknown_group_handler,
         )
         transform._fit(train_dataset)
 
@@ -192,6 +238,7 @@ class GroupNormalizeTarget(BaseTransform):
         delta_model: torch.nn.Module | Callable[[Data], torch.Tensor],
         expect_transformed_data: bool = False,
     ) -> torch.Tensor:
+
         def predict_raw(data: Data) -> torch.Tensor:
             if expect_transformed_data:
                 group_mean = getattr(data, self.group_mean_key)
