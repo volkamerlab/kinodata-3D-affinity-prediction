@@ -10,8 +10,7 @@ class AtomFeaturizer:
     def size(self) -> int:
         return 0
 
-    def compute(self, mol) -> np.ndarray:
-        ...
+    def compute(self, mol) -> np.ndarray: ...
 
 
 class OneHotFeaturizer(AtomFeaturizer, Generic[CT]):
@@ -83,4 +82,7 @@ FormalCharge = OneHotFeaturizer(
 NumHydrogens = OneHotFeaturizer(
     [0, 1, 2, 3, 4], rdchem.Atom.GetTotalNumHs, name="NumHydrogens"
 )
-AtomFeatures = ComposeOneHot([FormalCharge, NumHydrogens])
+IsAromatic = OneHotFeaturizer(
+    [False, True], rdchem.Atom.GetIsAromatic, name="IsAromatic"
+)
+AtomFeatures = ComposeOneHot([NumHydrogens, IsAromatic])

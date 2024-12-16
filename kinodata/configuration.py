@@ -192,7 +192,7 @@ register(
     additional_atom_features=False,
     remove_hydrogen=True,
     filter_rmsd_max_value=2.0,
-    split_type="pocket-k-fold",
+    split_type="assay-k-fold",
     split_index=0,
     k_fold=5,
     perturb_ligand_positions=0.0,
@@ -201,19 +201,6 @@ register(
     add_docking_scores=False,
 )
 
-# deprecated
-register(
-    "egnn",
-    model_type="egnn",
-    num_mp_layers=3,
-    hidden_channels=128,
-    act="silu",
-    final_act="softplus",
-    mp_type="rbf",
-    mp_reduce="sum",
-    rbf_size=32,
-    readout_aggregation_type="sum",
-)
 
 register(
     "training",

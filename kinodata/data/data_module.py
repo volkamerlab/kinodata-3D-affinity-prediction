@@ -8,6 +8,7 @@ import pandas as pd
 from torch_geometric.data import InMemoryDataset
 from torch_geometric.loader.dataloader import DataLoader
 from torch_geometric.transforms import Compose
+
 try:
     from torch_geometric.data.lightning_datamodule import LightningDataset
 except ModuleNotFoundError:  # compatibility

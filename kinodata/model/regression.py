@@ -130,7 +130,11 @@ class RegressionModel(pl.LightningModule):
 
     def predict_step(self, batch, *args):
         pred = self.forward(batch).flatten()
-        return {"pred": pred, "target": batch.y.flatten()}
+        return {
+            "pred": pred,
+            "target": batch.y.flatten(),
+            "chembl_activity_id": batch.chembl_activity_id,
+        }
 
     def test_step(self, batch, *args, **kwargs):
         info = self.validation_step(batch, key="test")

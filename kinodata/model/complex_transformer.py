@@ -49,14 +49,11 @@ class InteractionModule(Module):
     def out(self, edge_repr: Tensor) -> Tensor:
         return self.act(edge_repr + self.bias)
 
-    def interactions(self, data: HeteroData) -> Tuple[Tensor, OptTensor, OptTensor]:
-        ...
+    def interactions(self, data: HeteroData) -> Tuple[Tensor, OptTensor, OptTensor]: ...
 
-    def process_attr(self, edge_attr: Tensor) -> Tensor:
-        ...
+    def process_attr(self, edge_attr: Tensor) -> Tensor: ...
 
-    def process_weight(self, edge_weight: Tensor) -> Tensor:
-        ...
+    def process_weight(self, edge_weight: Tensor) -> Tensor: ...
 
     def forward(self, data: HeteroData) -> Tuple[Tensor, Tensor]:
         edge_index, edge_attr, edge_weight = self.interactions(data)
@@ -143,12 +140,12 @@ class ComplexTransformer(RegressionModel):
     def __init__(
         self,
         config: Config,
-        hidden_channels: int,
-        num_heads: int,
-        num_attention_blocks: int,
-        interaction_radius: float,
-        max_num_neighbors: int,
-        act: str,
+        hidden_channels: int = 256,
+        num_heads: int = 8,
+        num_attention_blocks: int = 3,
+        interaction_radius: float = 5,
+        max_num_neighbors: int = 16,
+        act: str = "silu",
         max_atomic_number: int = 100,
         atom_attr_size: int = AtomFeatures.size,
         ln1: bool = True,
@@ -160,8 +157,6 @@ class ComplexTransformer(RegressionModel):
         dropout: float = 0.1,
     ) -> None:
         super().__init__(config)
-        assert len(config["node_types"]) == 1
-        assert config["node_types"][0] == NodeType.Complex
         self.act = resolve_act(act)
         self.d_cut = interaction_radius
         self.max_num_neighbors = max_num_neighbors
@@ -170,7 +165,7 @@ class ComplexTransformer(RegressionModel):
         for mode in interaction_modes:
             if mode == "covalent":
                 module = CovalentInteractions(
-                    hidden_channels, act, intr_bias, config["node_types"][0]
+                    hidden_channels, act, intr_bias, NodeType.Complex
                 )
             elif mode == "structural":
                 module = StructuralInteractions(
