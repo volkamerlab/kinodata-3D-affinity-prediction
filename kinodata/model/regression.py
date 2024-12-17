@@ -3,6 +3,7 @@ from typing import Dict, List, Optional
 import matplotlib.pyplot as plt
 import torch
 from torch import Tensor
+from torch import nn
 import wandb
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -11,6 +12,7 @@ import pytorch_lightning as pl
 from kinodata.configuration import Config
 from kinodata.model.resolve import resolve_loss
 from kinodata.model.resolve import resolve_optim
+from kinodata.transform.baseline_masking import MaskLigandPosition
 
 
 def cat_many(
@@ -38,12 +40,10 @@ class RegressionModel(pl.LightningModule):
     log_scatter_plot: bool = False
     log_test_predictions: bool = False
 
-    def __init__(
-        self,
-        config: Config,
-    ) -> None:
+    def __init__(self, config: Config, prediction_model_cls: type[nn.Module]) -> None:
         super().__init__()
         self.config = config
+        self.model = config.init(prediction_model_cls)
         self.save_hyperparameters(config)  # triggers wandb hook
         self.define_metrics()
         self.set_criterion()
@@ -52,7 +52,7 @@ class RegressionModel(pl.LightningModule):
         self.criterion = resolve_loss(self.config.loss_type)
 
     def forward(self, batch) -> Tensor:
-        raise NotImplementedError
+        return self.model(batch)
 
     def configure_optimizers(self):
         Opt = resolve_optim(self.hparams.optim)
@@ -115,19 +115,6 @@ class RegressionModel(pl.LightningModule):
         pred, target, corr, mae = self.process_eval_outputs(outputs)
         self.log("val/corr", corr)
 
-        if self.log_scatter_plot:
-            y_min = min(pred.min().cpu().item(), target.min().cpu().item()) - 1
-            y_max = max(pred.max().cpu().item(), target.max().cpu().item()) + 1
-            fig, ax = plt.subplots()
-            ax.scatter(target.cpu().numpy(), pred.cpu().numpy(), s=0.7)
-            ax.set_xlim(y_min, y_max)
-            ax.set_ylim(y_min, y_max)
-            ax.set_ylabel("Pred")
-            ax.set_xlabel("Target")
-            ax.set_title(f"corr={corr}")
-            wandb.log({"scatter_val": wandb.Image(fig)})
-            plt.close(fig)
-
     def predict_step(self, batch, *args):
         pred = self.forward(batch).flatten()
         return {
@@ -145,12 +132,15 @@ class RegressionModel(pl.LightningModule):
         self.log("test/mae", mae)
         self.log("test/corr", corr)
 
-        if self.log_test_predictions:
-            test_predictions = wandb.Artifact("test_predictions", type="predictions")
-            data = cat_many(outputs, subset=["pred", "ident"])
-            values = [t.detach().cpu() for t in data.values()]
-            values = torch.stack(values, dim=1)
-            table = wandb.Table(columns=list(data.keys()), data=values.tolist())
-            test_predictions.add(table, "predictions")
-            wandb.log_artifact(test_predictions)
-            pass
+
+class DebiasingBaselineRegression(RegressionModel):
+
+    def __init__(self, config, prediction_model_cls):
+        super().__init__(config, prediction_model_cls)
+        if self.config.get("biasing_mask", None) is None:
+            raise ValueError("Biasing mask must be provided for debiasing baseline")
+        if config.biasing_mask == "remove_pl_interactions":
+            self.biasing_mask = self.config.get("pl_interactions")
+
+    def forward(self, batch) -> Tensor:
+        return self.model(batch).view(-1, 1)

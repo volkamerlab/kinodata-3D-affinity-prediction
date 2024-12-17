@@ -101,8 +101,10 @@ class StructuralInteractions(InteractionModule):
         self.interaction_radius = interaction_radius
         self.max_num_neighbors = max_num_neighbors
         self.rbf_size = rbf_size if rbf_size else hidden_channels
-        self.distance_embedding = GaussianDistEmbedding(rbf_size, interaction_radius)
-        self.lin = Linear(rbf_size, hidden_channels, bias=False)
+        self.distance_embedding = GaussianDistEmbedding(
+            self.rbf_size, self.interaction_radius
+        )
+        self.lin = Linear(self.rbf_size, self.hidden_channels, bias=False)
 
     def interactions(self, data: HeteroData) -> Tuple[Tensor, OptTensor, OptTensor]:
         pos = data[NodeType.Complex].pos
@@ -136,10 +138,9 @@ class CombinedInteractions(Module):
         return edge_index, self.act(edge_repr + self.bias)
 
 
-class ComplexTransformer(RegressionModel):
+class ComplexTransformerModel(Module):
     def __init__(
         self,
-        config: Config,
         hidden_channels: int = 256,
         num_heads: int = 8,
         num_attention_blocks: int = 3,
@@ -156,7 +157,7 @@ class ComplexTransformer(RegressionModel):
         interaction_modes: List[str] = [],
         dropout: float = 0.1,
     ) -> None:
-        super().__init__(config)
+        super().__init__()
         self.act = resolve_act(act)
         self.d_cut = interaction_radius
         self.max_num_neighbors = max_num_neighbors
@@ -210,25 +211,33 @@ class ComplexTransformer(RegressionModel):
             )
         )
 
-    def forward(self, data: HeteroData) -> NodeEmbedding:
+    def initial_node_embedding(self, data: HeteroData) -> Tensor:
         node_store = data[NodeType.Complex]
-        node_repr = self.act(
+        return self.act(
             self.atomic_num_embedding(node_store.z)
             + self.lin_atom_features(node_store.x)
         )
-        edge_index, edge_repr = self.interaction_module(data)
+
+    def message_passing(
+        self, node_repr: Tensor, edge_repr: Tensor, edge_index: Tensor, batch: Tensor
+    ) -> Tuple[Tensor, Tensor]:
         for sparse_attention_block, norm in zip(
             self.attention_blocks, self.norm_layers
         ):
             node_repr, edge_repr = sparse_attention_block(
                 node_repr, edge_repr, edge_index
             )
-            node_repr = norm(node_repr, node_store.batch)
+            node_repr = norm(node_repr, batch)
+        return node_repr, edge_repr
 
-        graph_repr = self.aggr(node_repr, node_store.batch)
+    def forward(self, data: HeteroData) -> NodeEmbedding:
+        batch = data[NodeType.Complex].batch
+        node_repr = self.initial_node_embedding(data)
+        edge_index, edge_repr = self.interaction_module(data)
+        node_repr, _ = self.message_passing(node_repr, edge_repr, edge_index, batch)
+        graph_repr = self.aggr(node_repr, batch)
         return self.out(graph_repr)
 
 
 def make_model(config: Config):
-    cls = partial(ComplexTransformer, config)
-    return config.init(cls)
+    return RegressionModel(config, ComplexTransformerModel)

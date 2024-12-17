@@ -20,6 +20,9 @@ class TransformToComplexGraph(BaseTransform):
         ]
 
         x = torch.cat((pocket_store.x, ligand_store.x), dim=0)
+        is_pocket_atom = torch.cat(
+            (torch.ones(pocket_store.x.size(0)), torch.zeros(ligand_store.x.size(0)))
+        ).to(torch.bool)
         z = torch.cat((pocket_store.z, ligand_store.z), dim=0)
         pos = torch.cat((pocket_store.pos, ligand_store.pos), dim=0)
         edge_index = torch.cat(
@@ -40,12 +43,13 @@ class TransformToComplexGraph(BaseTransform):
         data[NodeType.Complex].x = x
         data[NodeType.Complex].z = z
         data[NodeType.Complex].pos = pos
-        data[
-            NodeType.Complex, RelationType.Covalent, NodeType.Complex
-        ].edge_index = edge_index
-        data[
-            NodeType.Complex, RelationType.Covalent, NodeType.Complex
-        ].edge_attr = edge_attr
+        data[NodeType.Complex].is_pocket_atom = is_pocket_atom
+        data[NodeType.Complex, RelationType.Covalent, NodeType.Complex].edge_index = (
+            edge_index
+        )
+        data[NodeType.Complex, RelationType.Covalent, NodeType.Complex].edge_attr = (
+            edge_attr
+        )
 
         if self.remove_heterogeneous_representation:
             del data[NodeType.Ligand]
