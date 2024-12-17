@@ -12,7 +12,7 @@ from torch.nn import (
     Dropout,
     BatchNorm1d,
 )
-from torch_geometric.data import HeteroData
+from torch_geometric.data import HeteroData, Data
 from torch_geometric.nn.norm import GraphNorm
 from torch_geometric.nn.aggr import SoftmaxAggregation
 from torch_geometric.utils import coalesce
@@ -23,7 +23,7 @@ from kinodata.configuration import Config
 from ..types import NodeEmbedding, NodeType, RelationType
 from .shared.dist_embedding import GaussianDistEmbedding
 from .sparse_transformer import SPAB
-from .regression import RegressionModel
+from .regression import RegressionModel, DebiasingBaselineRegression
 from .resolve import resolve_act
 from ..data.featurization.atoms import AtomFeatures
 from ..data.featurization.bonds import NUM_BOND_TYPES
@@ -238,6 +238,25 @@ class ComplexTransformerModel(Module):
         graph_repr = self.aggr(node_repr, batch)
         return self.out(graph_repr)
 
+    def compute_reprs(self, data: HeteroData) -> tuple[Tensor, Data]:
+        batch = data[NodeType.Complex].batch
+        node_repr = self.initial_node_embedding(data)
+        edge_index, edge_repr = self.interaction_module(data)
+        node_repr, edge_repr = self.message_passing(
+            node_repr, edge_repr, edge_index, batch
+        )
+        graph_repr = self.aggr(node_repr, batch)
+        return graph_repr, Data(
+            x=node_repr,
+            edge_index=edge_index,
+            edge_attr=edge_repr,
+        )
+
 
 def make_model(config: Config):
-    return RegressionModel(config, ComplexTransformerModel)
+    reggression_type = config.get("regression_type", "regression")
+    if reggression_type == "regression":
+        return RegressionModel(config, ComplexTransformerModel)
+    if reggression_type == "debiasing":
+        return DebiasingBaselineRegression(config, ComplexTransformerModel)
+    raise ValueError(reggression_type)
