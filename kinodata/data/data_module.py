@@ -146,11 +146,16 @@ def make_kinodata_module(
             )
         )
 
-    if config.need_distances:
-        ...
+    if config.get("mask_pocket", False):
+        transforms.append(T.MaskPocket())
+
+    if config.get("mask_ligand", False):
+        transforms.append(T.MaskLigand())
+
+    if config.get("mask_ligand_position", False):
+        transforms.append(T.MaskLigandPosition())
 
     if config.add_docking_scores:
-        assert config.need_distances
         raise NotImplementedError
 
     train_transform = compose(augmentations + transforms)
