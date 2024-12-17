@@ -9,7 +9,7 @@ import wandb
 import kinodata.configuration as configuration
 from kinodata.training import train
 from kinodata.data.data_module import make_kinodata_module
-from kinodata.model.complex_transformer import ComplexTransformer, make_model
+from kinodata.model.complex_transformer import make_model
 from kinodata.types import NodeType
 from kinodata.data.dataset import apply_transform_instance_permament
 from kinodata.transform.to_complex_graph import TransformToComplexGraph
