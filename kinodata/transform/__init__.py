@@ -6,3 +6,4 @@ from .add_distances import (
 from .perturb_position import PerturbAtomPositions
 from .filter_metadata import FilterDockingRMSD, MetadataFilter
 from .to_complex_graph import TransformToComplexGraph
+from .baseline_masking import MaskLigand, MaskPocket, MaskLigandPosition
