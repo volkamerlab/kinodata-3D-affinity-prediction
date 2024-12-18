@@ -12,11 +12,12 @@ from .predict import predict_df
 
 
 def train(config, fn_data=make_kinodata_module, fn_model=None):
-    logger = WandbLogger(log_model="all")
+    logger = WandbLogger(log_model=True)
     model = fn_model(config)
     data_module = fn_data(config)
     validation_checkpoint = ModelCheckpoint(
         monitor="val/mae",
+        save_top_k=3,
         mode="min",
     )
     lr_monitor = LearningRateMonitor("epoch")
