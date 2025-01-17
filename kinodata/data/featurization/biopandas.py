@@ -1,11 +1,12 @@
 from collections import defaultdict
+from functools import partial
 import logging
 from pathlib import Path
 from typing import Any, List, Optional, Sequence, Tuple, Union
 
 import torch
 import numpy as np
-from torch_scatter import scatter_add
+from torch_geometric.utils import scatter
 from torch_geometric.data import HeteroData
 from torch_geometric.utils import to_undirected
 import pandas as pd
@@ -14,6 +15,8 @@ from kinodata.data.io import read_klifs_mol2
 from kinodata.types import NodeType, RelationType
 from .residue import sitealign_feature_lookup, amino_acid_to_int
 from rdkit.Chem import GetPeriodicTable
+
+scatter_add = partial(scatter, reduce="add")
 
 pt = GetPeriodicTable()
 
