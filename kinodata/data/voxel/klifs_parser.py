@@ -23,7 +23,10 @@ class KlifsSymbolParser(MolecularParser):
     def _remap_klifs_atom_symbol(self, symbol: str) -> str:
         # CA (carbon alpha), CB (carbon beta), ...
         if symbol.upper() == symbol:
-            return symbol[0]
+            symbol = symbol[0]
+        # occurs 4 times, idek
+        if symbol == "A":
+            return "C"
         # https://www.ebi.ac.uk/pdbe-srv/pdbechem/atom/show?cid=CRO&name=CG1
         if symbol == "Cg1":
             return "C"
@@ -37,9 +40,6 @@ class KlifsSymbolParser(MolecularParser):
             return "O"
         if symbol == "N1":
             return "N"
-        # occurs 4 times, idek
-        if symbol == "A":
-            return "C"
         if symbol == "C3*":
             return "C"
         if symbol == "O5*":
