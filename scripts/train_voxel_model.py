@@ -89,7 +89,7 @@ class VoxelModel(LightningModule):
         mae = (pred.flatten() - y.flatten()).abs().mean()
         self.log(f"{key}/loss", loss)
         self.log(f"{key}/mae", mae)
-        self.corr_metrics[key](pred.flatten(), y.flatten())
+        self.corr_metrics[key](pred.flatten().detach().cpu(), y.flatten().cpu())
         return x, y, pred, loss
 
     def _shared_on_epoch_end(self, key):
