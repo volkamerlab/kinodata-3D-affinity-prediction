@@ -243,20 +243,14 @@ def train(
             return DataLoader(test_data, batch_size=batch_size, shuffle=False)
 
     model = VoxelModel(in_channels=in_channels, hidden_channels=hidden_channels)
-    pred = model(batch[0])
-    print(pred.size())
-
     logger = WandbLogger(log_model=True)
-
     callbacks = [
         ModelCheckpoint(monitor="val/loss"),
         EarlyStopping(monitor="val/mae", min_delta=1e-2, patience=5),
     ]
-
     trainer = Trainer(
         max_epochs=100, accelerator="auto", logger=logger, callbacks=callbacks
     )
-
     data_module = DataModule()
     trainer.fit(model, data_module)
     trainer.test(model, data_module, ckpt_path="best")
