@@ -22,8 +22,10 @@ class KlifsSymbolParser(MolecularParser):
 
     def _remap_klifs_atom_symbol(self, symbol: str) -> str:
         # CA (carbon alpha), CB (carbon beta), ...
-        if symbol.upper() == symbol:
-            symbol = symbol[0]
+        if symbol.startswith("C") and symbol.upper() == symbol:
+            return "C"
+        if symbol.startswith("H") and symbol.upper() == symbol:
+            return "H"
         # occurs 4 times, idek
         if symbol == "A":
             return "C"
@@ -33,9 +35,10 @@ class KlifsSymbolParser(MolecularParser):
         # https://www.ebi.ac.uk/pdbe-srv/pdbechem/atom/show?cid=CRO&name=CG1
         if symbol == "Cg":
             return "C"
-        # Leucine https://www.ebi.ac.uk/pdbe-srv/pdbechem/atom/show?cid=LEU&name=OXT
+        # Leucine oxygen https://www.ebi.ac.uk/pdbe-srv/pdbechem/atom/show?cid=LEU&name=OXT
         if symbol == "Oxt":
             return "O"
+        # Threononine oxygen https://www.ebi.ac.uk/pdbe-srv/pdbechem/atom/show?cid=THR&name=OG1
         if symbol == "Og1":
             return "O"
         if symbol == "N1":
