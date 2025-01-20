@@ -3,7 +3,7 @@ from pathlib import Path
 import torch
 from ..dataset import ComplexInformation
 from docktgrid import VoxelDataset as DocktgridVoxelDataset
-from docktgrid import MolecularParser
+from docktgrid import MolecularParser, MolecularData
 from dataclasses import dataclass
 import pandas as pd
 import numpy as np
@@ -36,6 +36,13 @@ ligand_register = MolecularDataRegister(KlifsSymbolParser())
 pocket_register = MolecularDataRegister(KlifsPocketParser())
 
 
+def _prohibited_compelx(lig: MolecularData, ptn: MolecularData) -> bool:
+    symbols = set(lig.element_symbols.tolist()) + set(ptn.element_symbols.tolist())
+    if "A" in symbols:
+        return True
+    return False
+
+
 class VoxelDataset(DocktgridVoxelDataset):
 
     def __init__(
@@ -54,6 +61,21 @@ class VoxelDataset(DocktgridVoxelDataset):
         )
         assert len(metadata) == len(labels)
         self.metadata = torch.tensor(metadata)
+
+        mask = []
+        masked_lig_files = []
+        masked_ptn_files = []
+        for lig, ptn in zip(ligand_files, protein_files):
+            assert isinstance(lig, MolecularData)
+            assert isinstance(ptn, MolecularData)
+            if _prohibited_compelx(lig, ptn):
+                mask.append(True)
+                continue
+            masked_lig_files.append(lig)
+            masked_ptn_files.append(ptn)
+            mask.append(False)
+        self.labels = self.labels[mask]
+        self.metadata = self.metadata[mask]
 
     def __getitem__(self, idx):
         voxs, label = super().__getitem__(idx)
