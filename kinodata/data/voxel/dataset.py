@@ -37,7 +37,7 @@ pocket_register = MolecularDataRegister(KlifsPocketParser())
 
 
 def _prohibited_compelx(lig: MolecularData, ptn: MolecularData) -> bool:
-    symbols = set(list(lig.element_symbols)) + set(list(ptn.element_symbols))
+    symbols = set.union(set(list(lig.element_symbols)), set(list(ptn.element_symbols)))
     if "A" in symbols:
         return True
     return False
