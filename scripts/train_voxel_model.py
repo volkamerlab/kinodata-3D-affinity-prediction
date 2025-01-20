@@ -345,7 +345,7 @@ def train(
         EarlyStopping(monitor="val/mae", min_delta=1e-2, patience=5),
     ]
 
-    trainer = Trainer(max_epochs=10, accelerator="cpu", logger=logger)
+    trainer = Trainer(max_epochs=10, accelerator="auto", logger=logger)
 
     trainer.fit(model, DataModule())
     trainer.test(model, DataModule(), ckpt_path="best")
