@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import os
 import torch
 import wandb
 from docktgrid.molecule import MolecularComplex, MolecularData
@@ -73,7 +74,7 @@ class VoxelModel(LightningModule):
             block(hidden_channels * 2, 1, 1, 1, 0, act=False, norm=False),
         )
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         z: torch.Tensor = self.cnn_model(x)
         pred = z.view(z.size(0), -1).sum(1)
         return pred
@@ -234,15 +235,31 @@ def train(
     class DataModule(LightningDataModule):
 
         def train_dataloader(self):
-            return DataLoader(train_data, batch_size=batch_size, shuffle=True)
+            return DataLoader(
+                train_data,
+                batch_size=batch_size,
+                shuffle=True,
+                num_workers=os.cpu_count(),
+            )
 
         def val_dataloader(self):
-            return DataLoader(val_data, batch_size=batch_size, shuffle=False)
+            return DataLoader(
+                val_data,
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=os.cpu_count(),
+            )
 
         def test_dataloader(self):
-            return DataLoader(test_data, batch_size=batch_size, shuffle=False)
+            return DataLoader(
+                test_data,
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=os.cpu_count(),
+            )
 
     model = VoxelModel(in_channels=in_channels, hidden_channels=hidden_channels)
+    model = torch.compile(model)
     logger = WandbLogger(log_model=True)
     callbacks = [
         ModelCheckpoint(monitor="val/loss"),
