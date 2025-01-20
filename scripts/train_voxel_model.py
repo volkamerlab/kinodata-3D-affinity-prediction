@@ -9,7 +9,7 @@ import wandb
 from docktgrid.molecule import MolecularComplex, MolecularData
 from lightning.pytorch import LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
-from lightning.pytorch.loggers import CSVLogger
+from lightning.pytorch.loggers import WandbLogger
 from sklearn.model_selection import GroupKFold
 from torch.nn import BatchNorm3d, Conv3d, Identity, MaxPool3d, ReLU, Sequential
 from torch.optim import Adam
@@ -289,7 +289,19 @@ def train(
     split_type: str = "scaffold-k-fold",
     seed: int = 0,
     fold: int = 0,
+    wandb_mode: str = "online",
 ):
+    wandb.init(
+        project="kinodata-voxel",
+        mode=wandb_mode,
+        config=dict(
+            batch_size=batch_size,
+            split_type=split_type,
+            seed=seed,
+            fold=fold,
+        ),
+    )
+
     kinodata3d_df = pd.read_csv(DATA_DIR / "docktgrid" / "kinodata3d.csv")
     df_split = None
     if split_type == "scaffold-k-fold":
@@ -336,17 +348,20 @@ def train(
     pred = model(batch[0])
     print(pred.size())
 
-    logger = CSVLogger("logs", name="voxel_model")
+    logger = WandbLogger(log_model=True)
 
     callbacks = [
         ModelCheckpoint(monitor="val/loss"),
         EarlyStopping(monitor="val/mae", min_delta=1e-2, patience=5),
     ]
 
-    trainer = Trainer(max_epochs=10, accelerator="auto", logger=logger)
+    trainer = Trainer(
+        max_epochs=100, accelerator="auto", logger=logger, callbacks=callbacks
+    )
 
-    trainer.fit(model, DataModule())
-    trainer.test(model, DataModule(), ckpt_path="best")
+    data_module = DataModule()
+    trainer.fit(model, data_module)
+    trainer.test(model, data_module, ckpt_path="best")
 
 
 from inspect import Parameter, signature
