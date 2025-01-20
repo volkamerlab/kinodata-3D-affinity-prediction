@@ -8,12 +8,11 @@ presented in the [Kinodata-3D publication](https://chemrxiv.org/engage/chemrxiv/
 We currently only support installation from source.
 ### (1) Clone this repo
 ### (2) Set up Python environment
-Use [mamba](https://mamba.readthedocs.io/en/latest/micromamba-installation.html#umamba-install) (or conda) to set up a Python environment,
+Install the depedenencies specified in the `pyproject.toml` (or `uv.lock`) file, e.g. using [uv](https://github.com/astral-sh/uv)
 ```
-mamba env create -f environment.yml
-mamba activate kinodata
+uv sync
 ```
-and install this package in editable/develop mode
+and install this package in editable/development mode
 ```
 pip install -e .
 ```
