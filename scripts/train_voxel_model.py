@@ -23,109 +23,6 @@ from kinodata.data.voxel.dataset import make_voxel_dataset_split
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 
-_DEBUG_IDS = [
-    "2043754",
-    "22798937",
-    "1491221",
-    "17626997",
-    "2547512",
-    "17886447",
-    "2564660",
-    "18420015",
-    "18918195",
-    "17772440",
-    "3294285",
-    "24789104",
-    "17633369",
-    "17676447",
-    "18673767",
-    "18287192",
-    "18861740",
-    "3440562",
-    "17612316",
-    "24769569",
-    "17739970",
-    "20640644",
-    "16498887",
-    "15765340",
-    "17682649",
-    "17642881",
-    "1759182",
-    "17625721",
-    "16506353",
-    "2239320",
-    "18939646",
-    "17601869",
-    "7956440",
-    "17680676",
-    "12631725",
-    "17776709",
-    "22955424",
-    "17763327",
-    "23152101",
-    "7991181",
-    "17625120",
-    "17723116",
-    "17767123",
-    "12046199",
-    "1077022",
-    "17638429",
-    "22802112",
-    "17749761",
-    "11018075",
-    "2082093",
-    "16371338",
-    "12195443",
-    "16739505",
-    "2465597",
-    "17727939",
-    "17704488",
-    "7578026",
-    "17623089",
-    "6280872",
-    "17687221",
-    "18439835",
-    "17641042",
-    "17663155",
-    "17740461",
-    "15651885",
-    "22435303",
-    "16871453",
-    "16883355",
-    "17799330",
-    "17625677",
-    "17613833",
-    "6299710",
-    "22960812",
-    "2397038",
-    "19432498",
-    "12099345",
-    "16336960",
-    "16760025",
-    "3203149",
-    "16906654",
-    "19245602",
-    "16566146",
-    "18402842",
-    "17738760",
-    "2901443",
-    "18859714",
-    "17737491",
-    "3442995",
-    "17625317",
-    "2260964",
-    "17614719",
-    "10975117",
-    "17693641",
-    "23288957",
-    "16746178",
-    "12175199",
-    "16309562",
-    "16895201",
-    "5246429",
-    "17698102",
-]
-
 
 def _collect_vdw_key_errors(train_data, val_data, test_data):
     key_errors = []
@@ -150,7 +47,7 @@ def _collect_vdw_key_errors(train_data, val_data, test_data):
 
 class VoxelModel(LightningModule):
 
-    def __init__(self, in_channels: int, hidden_size: int = 32):
+    def __init__(self, in_channels: int, hidden_channels: int = 32):
         super().__init__()
         self.corr_metrics = {key: PearsonCorrCoef() for key in ["train", "val", "test"]}
         self.save_hyperparameters()
@@ -163,17 +60,17 @@ class VoxelModel(LightningModule):
             )
 
         self.cnn_model = Sequential(
-            block(in_channels, hidden_size, 1, 1, 0),
-            block(hidden_size, hidden_size, 3, 1, 1),
+            block(in_channels, hidden_channels, 1, 1, 0),
+            block(hidden_channels, hidden_channels, 3, 1, 1),
             MaxPool3d(2),
-            block(hidden_size, hidden_size * 2, 3, 1, 1),
-            block(hidden_size * 2, hidden_size * 2, 3, 1, 1),
+            block(hidden_channels, hidden_channels * 2, 3, 1, 1),
+            block(hidden_channels * 2, hidden_channels * 2, 3, 1, 1),
             MaxPool3d(2),
-            block(hidden_size * 2, hidden_size * 4, 3, 1, 1),
-            block(hidden_size * 4, hidden_size * 4, 3, 1, 1),
+            block(hidden_channels * 2, hidden_channels * 4, 3, 1, 1),
+            block(hidden_channels * 4, hidden_channels * 4, 3, 1, 1),
             MaxPool3d(2),
-            block(hidden_size * 4, hidden_size * 2, 3, 1, 1),
-            block(hidden_size * 2, 1, 1, 1, 0, act=False, norm=False),
+            block(hidden_channels * 4, hidden_channels * 2, 3, 1, 1),
+            block(hidden_channels * 2, 1, 1, 1, 0, act=False, norm=False),
         )
 
     def forward(self, x: torch.Tensor):
@@ -290,6 +187,7 @@ def train(
     seed: int = 0,
     fold: int = 0,
     wandb_mode: str = "online",
+    hidden_channels: int = 64,
 ):
     wandb.init(
         project="kinodata-voxel",
@@ -344,7 +242,7 @@ def train(
         def test_dataloader(self):
             return DataLoader(test_data, batch_size=batch_size, shuffle=False)
 
-    model = VoxelModel(in_channels=in_channels)
+    model = VoxelModel(in_channels=in_channels, hidden_channels=hidden_channels)
     pred = model(batch[0])
     print(pred.size())
 
