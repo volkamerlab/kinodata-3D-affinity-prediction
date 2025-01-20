@@ -74,6 +74,8 @@ class VoxelDataset(DocktgridVoxelDataset):
             masked_lig_files.append(lig)
             masked_ptn_files.append(ptn)
             mask.append(False)
+        self.lig_files = masked_lig_files
+        self.ptn_files = masked_ptn_files
         self.labels = self.labels[mask]
         self.metadata = self.metadata[mask]
 
