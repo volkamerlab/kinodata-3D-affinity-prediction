@@ -1,25 +1,25 @@
+from argparse import ArgumentParser
 from itertools import count
 from pathlib import Path
-from typing import Literal
 
 import numpy as np
 import pandas as pd
 import torch
-from torch.utils.data import DataLoader
-from torch.nn import Conv3d, MaxPool3d, ReLU, Sequential, BatchNorm3d, Identity
-from torch.optim import Adam
+import wandb
+from docktgrid.molecule import MolecularComplex, MolecularData
+from lightning.pytorch import LightningDataModule, LightningModule, Trainer
+from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
+from lightning.pytorch.loggers import CSVLogger
 from sklearn.model_selection import GroupKFold
+from torch.nn import BatchNorm3d, Conv3d, Identity, MaxPool3d, ReLU, Sequential
+from torch.optim import Adam
+from torch.utils.data import DataLoader
+from torchmetrics.regression import PearsonCorrCoef
 from tqdm import tqdm
 
-from kinodata.data.voxel.dataset import make_voxel_dataset_split
-from kinodata.data.grouped_split import _generator_to_list
 from kinodata.data.data_split import Split
-from lightning.pytorch import LightningModule, LightningDataModule, Trainer
-from lightning.pytorch.loggers import CSVLogger
-from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
-from torchmetrics.regression import PearsonCorrCoef
-from docktgrid.molecule import MolecularData, MolecularComplex
-
+from kinodata.data.grouped_split import _generator_to_list
+from kinodata.data.voxel.dataset import make_voxel_dataset_split
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 
@@ -286,9 +286,7 @@ def make_k_fold_split(
 
 def train(
     batch_size: int = 1,
-    split_type: Literal[
-        "scaffold-k-fold", "random-k-fold", "pocket-k-fold"
-    ] = "scaffold-k-fold",
+    split_type: str = "scaffold-k-fold",
     seed: int = 0,
     fold: int = 0,
 ):
@@ -351,6 +349,36 @@ def train(
     trainer.test(model, DataModule(), ckpt_path="best")
 
 
+from inspect import Parameter, signature
+
+train_sig = signature(train)
+parser = ArgumentParser()
+for name, arg in train_sig.parameters.items():
+    if arg.annotation != Parameter.empty:
+        arg_type = arg.annotation
+    elif arg.default == None:
+        arg_type = str
+    elif arg.default != Parameter.empty:
+        arg_type = type(arg.default)
+    else:
+        arg_type = str
+    parser_arg = parser.add_argument(
+        f"--{arg.name}",
+        type=arg_type,
+        required=arg.default == Parameter.empty,
+        default=arg.default if arg.default != Parameter.empty else None,
+    )
+
+
 if __name__ == "__main__":
+    parser.print_usage()
     print("DATA_DIR", DATA_DIR)
-    train(32)
+
+    print("Parsing args...")
+    args = parser.parse_args()
+
+    print("Binding args to train signature...")
+    bound_args = train_sig.bind(**vars(args))
+
+    print("Training...")
+    train(*bound_args.args, **bound_args.kwargs)
