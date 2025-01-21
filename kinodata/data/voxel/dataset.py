@@ -59,21 +59,20 @@ class VoxelDataset(DocktgridVoxelDataset):
         super().__init__(
             protein_files, ligand_files, labels, voxel, molparser, transform, root_dir
         )
-        assert len(metadata) == len(labels)
         self.metadata = torch.tensor(metadata)
 
         mask = []
         masked_lig_files = []
         masked_ptn_files = []
-        for lig, ptn in zip(ligand_files, protein_files):
+        for lig, ptn in zip(self.lig_files, self.ptn_files):
             assert isinstance(lig, MolecularData)
             assert isinstance(ptn, MolecularData)
             if _prohibited_compelx(lig, ptn):
-                mask.append(True)
+                mask.append(False)
                 continue
             masked_lig_files.append(lig)
             masked_ptn_files.append(ptn)
-            mask.append(False)
+            mask.append(True)
         self.lig_files = masked_lig_files
         self.ptn_files = masked_ptn_files
         self.labels = self.labels[mask]
