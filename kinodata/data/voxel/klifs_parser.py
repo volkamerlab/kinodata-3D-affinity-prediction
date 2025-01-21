@@ -47,6 +47,8 @@ class KlifsSymbolParser(MolecularParser):
             return "C"
         if symbol == "O5*":
             return "O"
+        if symbol == "Nz":
+            return "N"
         return symbol
 
     def get_element_symbols_mol2(self):
@@ -76,3 +78,8 @@ class KlifsPocketParser(KlifsSymbolParser):
             )
         else:
             raise NotImplementedError(f"File format {ext} not implemented.")
+
+    def get_element_symbols_mol2(self) -> list[str]:
+        symbols = self.df_atom["atom_type"].values
+        symbols = [symbol.split(".")[0] for symbol in symbols]
+        return symbols
