@@ -193,14 +193,14 @@ def make_k_fold_split(
 
 
 def train(
-    batch_size: int = 1,
+    batch_size: int = 64,
     split_type: str = "scaffold-k-fold",
     seed: int = 0,
     fold: int = 0,
     wandb_mode: str = "online",
     hidden_channels: int = 32,
-    lr: float = 1e-4,
-    lr_decay: float = 1e-5,
+    lr: float = 3e-4,
+    lr_decay: float = 2e-5,
     random_rotation_augmentations: bool = False,
 ):
     wandb.init(
