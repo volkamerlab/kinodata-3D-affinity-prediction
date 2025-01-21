@@ -127,7 +127,7 @@ def make_dataset(
     metadata: pd.DataFrame,
     voxel: VoxelGrid = _default_voxel,
     transform=None,
-    parallelize=True,
+    parallelize=False,
 ) -> VoxelDataset:
     _parse_files = _parse_files_nonparallel
     if parallelize:
