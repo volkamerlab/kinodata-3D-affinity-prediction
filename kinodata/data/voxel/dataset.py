@@ -133,11 +133,6 @@ def make_dataset(
     if parallelize:
         _parse_files = _parse_files_parallel
     print(f"Creating dataset with {len(metadata)} samples...")
-    activity_ids = []
-    pocket_files = []
-    ligand_fules = []
-    labels = []
-
     activity_ids = metadata.index.values
     labels = metadata["activities.standard_value"].values
     pocket_files = metadata["pocket_file"].values
@@ -145,6 +140,8 @@ def make_dataset(
 
     pocket_data = _parse_files(pocket_files, pocket_register)
     ligand_data = _parse_files(ligand_files, ligand_register)
+    assert isinstance(pocket_data[0], MolecularData)
+    assert isinstance(ligand_data[0], MolecularData)
     return VoxelDataset(
         pocket_data,
         ligand_data,
