@@ -1,3 +1,8 @@
+import torch
+
+torch.multiprocessing.set_start_method("spawn")
+
+
 from argparse import ArgumentParser
 from itertools import count
 from pathlib import Path
@@ -15,7 +20,6 @@ from lightning.pytorch.loggers import WandbLogger
 from sklearn.model_selection import GroupKFold
 from torch.nn import BatchNorm3d, Conv3d, Identity, MaxPool3d, ReLU, Sequential
 from torch.optim import AdamW
-import torch
 from torch.utils.data import DataLoader
 from torchmetrics.regression import PearsonCorrCoef
 from tqdm import tqdm
@@ -24,7 +28,6 @@ from kinodata.data.data_split import Split
 from kinodata.data.grouped_split import _generator_to_list
 from kinodata.data.voxel.dataset import make_voxel_dataset_split
 
-torch.multiprocessing.set_start_method("spawn")
 DATA_DIR = Path(__file__).parent.parent / "data"
 
 
