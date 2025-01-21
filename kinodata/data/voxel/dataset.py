@@ -26,7 +26,7 @@ class DistributedParser:
 
     def parse(self, file_paths: list[Path]) -> list[MolecularData]:
         with mp.Pool(self.num_workers) as pool:
-            mol_data = pool.apply(self._parse_one, file_paths)
+            mol_data = pool.map(self._parse_one, file_paths)
         return list(mol_data)
 
     def _parse_one(self, file_path: Path):
