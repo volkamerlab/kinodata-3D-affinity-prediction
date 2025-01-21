@@ -8,12 +8,13 @@ import os
 import torch
 import wandb
 from docktgrid.molecule import MolecularComplex, MolecularData
+from docktgrid.transforms import RandomRotation
 from lightning.pytorch import LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
 from sklearn.model_selection import GroupKFold
 from torch.nn import BatchNorm3d, Conv3d, Identity, MaxPool3d, ReLU, Sequential
-from torch.optim import Adam
+from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from torchmetrics.regression import PearsonCorrCoef
 from tqdm import tqdm
@@ -48,7 +49,13 @@ def _collect_vdw_key_errors(train_data, val_data, test_data):
 
 class VoxelModel(LightningModule):
 
-    def __init__(self, in_channels: int, hidden_channels: int = 32):
+    def __init__(
+        self,
+        in_channels: int,
+        hidden_channels: int = 32,
+        lr: float = 1e-4,
+        lr_decay: float = 1e-5,
+    ):
         super().__init__()
         self.corr_metrics = {key: PearsonCorrCoef() for key in ["train", "val", "test"]}
         self.save_hyperparameters()
@@ -60,18 +67,19 @@ class VoxelModel(LightningModule):
                 BatchNorm3d(dout) if norm else Identity(),
             )
 
+        nhid = self.hparams.hidden_channels
         self.cnn_model = Sequential(
-            block(in_channels, hidden_channels, 1, 1, 0),
-            block(hidden_channels, hidden_channels, 3, 1, 1),
+            block(in_channels, nhid, 1, 1, 0),
+            block(nhid, nhid, 3, 1, 1),
             MaxPool3d(2),
-            block(hidden_channels, hidden_channels * 2, 3, 1, 1),
-            block(hidden_channels * 2, hidden_channels * 2, 3, 1, 1),
+            block(nhid, nhid * 2, 3, 1, 1),
+            block(nhid * 2, nhid * 2, 3, 1, 1),
             MaxPool3d(2),
-            block(hidden_channels * 2, hidden_channels * 4, 3, 1, 1),
-            block(hidden_channels * 4, hidden_channels * 4, 3, 1, 1),
+            block(nhid * 2, nhid * 4, 3, 1, 1),
+            block(nhid * 4, nhid * 4, 3, 1, 1),
             MaxPool3d(2),
-            block(hidden_channels * 4, hidden_channels * 2, 3, 1, 1),
-            block(hidden_channels * 2, 1, 1, 1, 0, act=False, norm=False),
+            block(nhid * 4, nhid * 2, 3, 1, 1),
+            block(nhid * 2, 1, 1, 1, 0, act=False, norm=False),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -80,7 +88,9 @@ class VoxelModel(LightningModule):
         return pred
 
     def configure_optimizers(self):
-        return Adam(self.parameters(), lr=1e-3)
+        return AdamW(
+            self.parameters(), lr=self.hparams.lr, weight_decay=self.hparams.lr_decay
+        )
 
     def _step(self, batch, key, *args, **kwargs):
         x = batch[0]
@@ -188,7 +198,10 @@ def train(
     seed: int = 0,
     fold: int = 0,
     wandb_mode: str = "online",
-    hidden_channels: int = 64,
+    hidden_channels: int = 32,
+    lr: float = 1e-4,
+    lr_decay: float = 1e-5,
+    random_rotation_augmentations: bool = False,
 ):
     wandb.init(
         project="kinodata-voxel",
@@ -222,8 +235,18 @@ def train(
     val_split = df_split[df_split["split"] == "val"]["activity_id"].values
     test_split = df_split[df_split["split"] == "test"]["activity_id"].values
 
+    train_transform = None
+    inference_transform = None
+    if random_rotation_augmentations:
+        train_transform = RandomRotation()
+
     train_data, val_data, test_data = make_voxel_dataset_split(
-        DATA_DIR, train_split, val_split, test_split
+        DATA_DIR,
+        train_split,
+        val_split,
+        test_split,
+        train_transform=train_transform,
+        inference_transform=inference_transform,
     )
 
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
@@ -258,7 +281,12 @@ def train(
                 num_workers=os.cpu_count(),
             )
 
-    model = VoxelModel(in_channels=in_channels, hidden_channels=hidden_channels)
+    model = VoxelModel(
+        in_channels=in_channels,
+        hidden_channels=hidden_channels,
+        lr=lr,
+        lr_decay=lr_decay,
+    )
     model = torch.compile(model)
     logger = WandbLogger(log_model=True)
     callbacks = [

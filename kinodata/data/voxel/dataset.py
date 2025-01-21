@@ -97,6 +97,7 @@ def _ensure_opt_int_array(arr) -> np.ndarray | None:
 def make_dataset(
     metadata: pd.DataFrame,
     voxel: VoxelGrid = _default_voxel,
+    transform=None,
 ) -> VoxelDataset:
     print(f"Creating dataset with {len(metadata)} samples...")
     activity_ids = []
@@ -115,6 +116,7 @@ def make_dataset(
         voxel,
         MolecularParser(),
         metadata=activity_ids,
+        transform=transform,
     )
 
 
@@ -125,6 +127,8 @@ def make_voxel_dataset_split(
     test_split: np.ndarray | None,
     voxel: VoxelGrid = _default_voxel,
     kinodata3d_df: pd.DataFrame = None,
+    train_transform=None,
+    inference_transform=None,
 ):
     train_split = _ensure_opt_int_array(train_split)
     val_split = _ensure_opt_int_array(val_split)
@@ -146,14 +150,14 @@ def make_voxel_dataset_split(
     )
     kinodata3d_df.set_index("activities.activity_id", inplace=True)
 
-    train_dataset = make_dataset(kinodata3d_df.loc[train_split], voxel)
+    train_dataset = make_dataset(kinodata3d_df.loc[train_split], voxel, train_transform)
     val_dataset = (
-        make_dataset(kinodata3d_df.loc[val_split], voxel)
+        make_dataset(kinodata3d_df.loc[val_split], voxel, inference_transform)
         if val_split is not None
         else None
     )
     test_datset = (
-        make_dataset(kinodata3d_df.loc[test_split], voxel)
+        make_dataset(kinodata3d_df.loc[test_split], voxel, inference_transform)
         if test_split is not None
         else None
     )
