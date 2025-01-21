@@ -2,12 +2,14 @@ import os
 from pathlib import Path
 
 import torch
+from tqdm import tqdm
 from ..dataset import ComplexInformation
 from docktgrid import VoxelDataset as DocktgridVoxelDataset
 from docktgrid import MolecularParser, MolecularData
 from dataclasses import dataclass
 import pandas as pd
 import numpy as np
+import joblib
 from .klifs_parser import KlifsSymbolParser, KlifsPocketParser
 
 from docktgrid.voxel_dataset import VoxelDataset
@@ -26,11 +28,14 @@ class DistributedParser:
 
     def parse(self, file_paths: list[Path]) -> list[MolecularData]:
         with mp.Pool(self.num_workers) as pool:
-            mol_data = pool.map(self._parse_one, file_paths)
-        return list(mol_data)
+            mol_data = pool.map(self._parse_one, tqdm(file_paths))
+        assert isinstance(
+            mol_data[0], MolecularData
+        ), f"Expected MolecularData got {mol_data[0].__class__.__name__}, {type(mol_data[0])}"
+        return mol_data
 
     def _parse_one(self, file_path: Path):
-        self.parser.parse_file(str(file_path), file_path.suffix)
+        return self.parser.parse_file(str(file_path), file_path.suffix)
 
 
 class MolecularDataRegister:
@@ -115,7 +120,7 @@ def _ensure_opt_int_array(arr) -> np.ndarray | None:
 
 
 def _parse_files_nonparallel(files, register):
-    return [register[file] for file in files]
+    return [register[file] for file in tqdm(files)]
 
 
 def _parse_files_parallel(files, register):
@@ -127,7 +132,7 @@ def make_dataset(
     metadata: pd.DataFrame,
     voxel: VoxelGrid = _default_voxel,
     transform=None,
-    parallelize=False,
+    parallelize=False,  # currently this makes it worse
 ) -> VoxelDataset:
     _parse_files = _parse_files_nonparallel
     if parallelize:

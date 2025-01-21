@@ -202,6 +202,9 @@ def train(
     lr: float = 3e-4,
     lr_decay: float = 2e-5,
     random_rotation_augmentations: bool = False,
+    data_sample: int = 0,
+    compile_model: bool = True,
+    num_workers: int = os.cpu_count(),
 ):
     wandb.init(
         project="kinodata-voxel",
@@ -231,6 +234,10 @@ def train(
         raise ValueError(f"Unknown split type {split_type}")
     assert isinstance(df_split, pd.DataFrame)
     df_split = df_split[df_split["fold"] == fold]
+
+    if data_sample > 0:
+        df_split = df_split.sample(data_sample, random_state=seed)
+
     train_split = df_split[df_split["split"] == "train"]["activity_id"].values
     val_split = df_split[df_split["split"] == "val"]["activity_id"].values
     test_split = df_split[df_split["split"] == "test"]["activity_id"].values
@@ -262,7 +269,7 @@ def train(
                 train_data,
                 batch_size=batch_size,
                 shuffle=True,
-                num_workers=os.cpu_count(),
+                num_workers=num_workers,
             )
 
         def val_dataloader(self):
@@ -270,7 +277,7 @@ def train(
                 val_data,
                 batch_size=batch_size,
                 shuffle=False,
-                num_workers=os.cpu_count(),
+                num_workers=num_workers,
             )
 
         def test_dataloader(self):
@@ -278,7 +285,7 @@ def train(
                 test_data,
                 batch_size=batch_size,
                 shuffle=False,
-                num_workers=os.cpu_count(),
+                num_workers=num_workers,
             )
 
     model = VoxelModel(
@@ -287,14 +294,15 @@ def train(
         lr=lr,
         lr_decay=lr_decay,
     )
-    model = torch.compile(model)
+    if compile_model:
+        model = torch.compile(model)
     logger = WandbLogger(log_model=True)
     callbacks = [
         ModelCheckpoint(monitor="val/loss"),
         EarlyStopping(monitor="val/mae", min_delta=1e-2, patience=5),
     ]
     trainer = Trainer(
-        max_epochs=100, accelerator="auto", logger=logger, callbacks=callbacks
+        max_epochs=100, accelerator="cpu", logger=logger, callbacks=callbacks
     )
     data_module = DataModule()
     trainer.fit(model, data_module)
