@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import torch
@@ -12,8 +13,24 @@ from .klifs_parser import KlifsSymbolParser, KlifsPocketParser
 from docktgrid.voxel_dataset import VoxelDataset
 from docktgrid import VoxelGrid
 from docktgrid.view import BasicView
+import multiprocessing as mp
 
 _default_voxel = VoxelGrid([BasicView()], 1, (24, 24, 24))
+
+
+class DistributedParser:
+
+    def __init__(self, parser, num_workers=os.cpu_count()):
+        self.parser = parser
+        self.num_workers = num_workers
+
+    def parse(self, file_paths: list[Path]) -> list[MolecularData]:
+        with mp.Pool(self.num_workers) as pool:
+            mol_data = pool.apply(self._parse_one, file_paths)
+        return list(mol_data)
+
+    def _parse_one(self, file_path: Path):
+        self.parser.parse_file(str(file_path), file_path.suffix)
 
 
 class MolecularDataRegister:
@@ -28,8 +45,11 @@ class MolecularDataRegister:
         if file_path in self._molecular_data:
             return self._molecular_data[file_path]
         mol_data = self.parser.parse_file(file_path, ext)
-        self._molecular_data[file_path] = mol_data
+        self[file_path] = mol_data
         return mol_data
+
+    def __setitem__(self, file_path: Path | str, mol_data: MolecularData):
+        self._molecular_data[str(file_path)] = mol_data
 
 
 ligand_register = MolecularDataRegister(KlifsSymbolParser())
@@ -94,21 +114,37 @@ def _ensure_opt_int_array(arr) -> np.ndarray | None:
     return np.array(arr, dtype=int)
 
 
+def _parse_files_nonparallel(files, register):
+    return [register[file] for file in files]
+
+
+def _parse_files_parallel(files, register):
+    parser = DistributedParser(register.parser)
+    return parser.parse(files)
+
+
 def make_dataset(
     metadata: pd.DataFrame,
     voxel: VoxelGrid = _default_voxel,
     transform=None,
+    parallelize=True,
 ) -> VoxelDataset:
+    _parse_files = _parse_files_nonparallel
+    if parallelize:
+        _parse_files = _parse_files_parallel
     print(f"Creating dataset with {len(metadata)} samples...")
     activity_ids = []
-    pocket_data = []
-    ligand_data = []
+    pocket_files = []
+    ligand_fules = []
     labels = []
-    for activity_id, row in metadata.iterrows():
-        activity_ids.append(activity_id)
-        pocket_data.append(pocket_register[row["pocket_file"]])
-        ligand_data.append(ligand_register[row["ligand_file"]])
-        labels.append(row["activities.standard_value"])
+
+    activity_ids = metadata.index.values
+    labels = metadata["activities.standard_value"].values
+    pocket_files = metadata["pocket_file"].values
+    ligand_files = metadata["ligand_file"].values
+
+    pocket_data = _parse_files(pocket_files, pocket_register)
+    ligand_data = _parse_files(ligand_files, ligand_register)
     return VoxelDataset(
         pocket_data,
         ligand_data,
