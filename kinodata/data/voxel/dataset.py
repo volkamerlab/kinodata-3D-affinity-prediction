@@ -5,7 +5,7 @@ import torch
 from tqdm import tqdm
 from ..dataset import ComplexInformation
 from docktgrid import VoxelDataset as DocktgridVoxelDataset
-from docktgrid import MolecularParser, MolecularData
+from docktgrid import MolecularParser, MolecularData, MolecularComplex
 from dataclasses import dataclass
 import pandas as pd
 import numpy as np
@@ -104,7 +104,16 @@ class VoxelDataset(DocktgridVoxelDataset):
         self.metadata = self.metadata[mask]
 
     def __getitem__(self, idx):
-        voxs, label = super().__getitem__(idx)
+        molecule = MolecularComplex(
+            self.ptn_files[idx], self.lig_files[idx], self.molparser, self.root_dir
+        )
+        label = self.labels[idx]
+
+        for transform in self.transform or []:
+            transform(molecule)
+
+        voxs = self.voxel.voxelize(molecule)
+
         return (
             voxs,
             label,

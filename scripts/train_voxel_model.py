@@ -13,7 +13,6 @@ import os
 import torch
 import wandb
 from docktgrid.molecule import MolecularComplex, MolecularData
-from docktgrid.transforms import RandomRotation
 from lightning.pytorch import LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
@@ -27,6 +26,7 @@ from tqdm import tqdm
 from kinodata.data.data_split import Split
 from kinodata.data.grouped_split import _generator_to_list
 from kinodata.data.voxel.dataset import make_voxel_dataset_split
+from kinodata.transform.voxel import RandomRotation, PerturbPosition
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 
@@ -206,7 +206,8 @@ def train(
     hidden_channels: int = 32,
     lr: float = 3e-4,
     lr_decay: float = 2e-5,
-    random_rotation_augmentations: bool = False,
+    random_rotation_augmentations: bool = True,
+    perturb_complex_positions: float = 0.15,
     data_sample: int = 10000,
     compile_model: bool = False,
     num_workers: int = 0,
@@ -247,10 +248,12 @@ def train(
     val_split = df_split[df_split["split"] == "val"]["activity_id"].values
     test_split = df_split[df_split["split"] == "test"]["activity_id"].values
 
-    train_transform = None
+    train_transform = []
     inference_transform = None
     if random_rotation_augmentations:
-        train_transform = RandomRotation()
+        train_transform.append(RandomRotation())
+    if perturb_complex_positions > 0:
+        train_transform.append(PerturbPosition(std=perturb_complex_positions))
 
     train_data, val_data, test_data = make_voxel_dataset_split(
         DATA_DIR,
