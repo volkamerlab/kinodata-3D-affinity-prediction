@@ -208,7 +208,7 @@ def train(
     lr_decay: float = 2e-5,
     random_rotation_augmentations: bool = False,
     data_sample: int = 10000,
-    compile_model: bool = True,
+    compile_model: bool = False,
     num_workers: int = 32,
 ):
     wandb.init(
