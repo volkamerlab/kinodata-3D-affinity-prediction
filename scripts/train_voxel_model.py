@@ -269,29 +269,24 @@ def train(
 
     class DataModule(LightningDataModule):
 
-        def train_dataloader(self):
+        def _dataloader(self, data, **kwargs):
+            if "persistent_workers" not in kwargs:
+                kwargs["persistent_workers"] = num_workers > 0
             return DataLoader(
-                train_data,
+                data,
                 batch_size=batch_size,
-                shuffle=True,
                 num_workers=num_workers,
+                **kwargs,
             )
+
+        def train_dataloader(self):
+            return self._dataloader(train_data, shuffle=True)
 
         def val_dataloader(self):
-            return DataLoader(
-                val_data,
-                batch_size=batch_size,
-                shuffle=False,
-                num_workers=num_workers,
-            )
+            return self._dataloader(val_data, shuffle=False)
 
         def test_dataloader(self):
-            return DataLoader(
-                test_data,
-                batch_size=batch_size,
-                shuffle=False,
-                num_workers=num_workers,
-            )
+            return self._dataloader(test_data, shuffle=False)
 
     model = VoxelModel(
         in_channels=in_channels,
