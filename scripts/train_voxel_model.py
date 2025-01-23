@@ -204,11 +204,11 @@ def train(
     fold: int = 0,
     wandb_mode: str = "online",
     hidden_channels: int = 32,
-    lr: float = 3e-4,
+    lr: float = 1e-4,
     lr_decay: float = 2e-5,
     random_rotation_augmentations: bool = True,
     perturb_complex_positions: float = 0.15,
-    data_sample: int = 10000,
+    data_sample: int = 0,
     compile_model: bool = False,
     num_workers: int = 0,
 ):
