@@ -302,7 +302,7 @@ def train(
     logger = WandbLogger(log_model=True)
     callbacks = [
         ModelCheckpoint(monitor="val/loss"),
-        EarlyStopping(monitor="val/mae", min_delta=1e-2, patience=5),
+        EarlyStopping(monitor="val/mae", min_delta=1e-2, patience=15),
     ]
     trainer = Trainer(
         max_epochs=100, accelerator="auto", logger=logger, callbacks=callbacks
