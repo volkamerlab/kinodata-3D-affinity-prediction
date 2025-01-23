@@ -198,7 +198,7 @@ def make_k_fold_split(
 
 
 def train(
-    batch_size: int = 64,
+    batch_size: int = 32,
     split_type: str = "scaffold-k-fold",
     seed: int = 0,
     fold: int = 0,
@@ -209,7 +209,7 @@ def train(
     random_rotation_augmentations: bool = False,
     data_sample: int = 10000,
     compile_model: bool = False,
-    num_workers: int = 32,
+    num_workers: int = 0,
 ):
     wandb.init(
         project="kinodata-voxel",
