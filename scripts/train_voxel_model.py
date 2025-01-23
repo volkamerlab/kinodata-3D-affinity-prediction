@@ -207,9 +207,9 @@ def train(
     lr: float = 3e-4,
     lr_decay: float = 2e-5,
     random_rotation_augmentations: bool = False,
-    data_sample: int = 0,
+    data_sample: int = 10000,
     compile_model: bool = True,
-    num_workers: int = os.cpu_count(),
+    num_workers: int = 32,
 ):
     wandb.init(
         project="kinodata-voxel",
@@ -307,7 +307,7 @@ def train(
         EarlyStopping(monitor="val/mae", min_delta=1e-2, patience=5),
     ]
     trainer = Trainer(
-        max_epochs=100, accelerator="cpu", logger=logger, callbacks=callbacks
+        max_epochs=100, accelerator="auto", logger=logger, callbacks=callbacks
     )
     data_module = DataModule()
     trainer.fit(model, data_module)
