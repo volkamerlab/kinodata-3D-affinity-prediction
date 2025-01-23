@@ -23,6 +23,7 @@ class KlifsSymbolParser(MolecularParser):
     def _remap_klifs_atom_symbol(self, symbol: str) -> str:
         # CA (carbon alpha), CB (carbon beta), ...
         if symbol.startswith("C") and symbol.upper() == symbol:
+            assert symbol.upper() not in ["CL", "CU", "CR"]
             return "C"
         if symbol.startswith("H") and symbol.upper() == symbol:
             return "H"
@@ -52,7 +53,9 @@ class KlifsSymbolParser(MolecularParser):
         return symbol
 
     def get_element_symbols_mol2(self):
-        symbols = super().get_element_symbols_mol2()
+        symbols = self.df_atom["atom_type"].values
+        symbols = [symbol.split(".")[0] for symbol in symbols]
+        symbols = [self._remap_klifs_atom_symbol(symbol) for symbol in symbols]
         return [self._remap_klifs_atom_symbol(symbol) for symbol in symbols]
 
 
@@ -78,8 +81,3 @@ class KlifsPocketParser(KlifsSymbolParser):
             )
         else:
             raise NotImplementedError(f"File format {ext} not implemented.")
-
-    def get_element_symbols_mol2(self) -> list[str]:
-        symbols = self.df_atom["atom_type"].values
-        symbols = [symbol.split(".")[0] for symbol in symbols]
-        return symbols
