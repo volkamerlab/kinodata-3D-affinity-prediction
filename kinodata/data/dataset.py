@@ -203,7 +203,7 @@ class ComplexInformation:
     klifs_structure_id: int
     pocket_sequence: str
     predicted_rmsd: float
-    remove_hydrogen: bool
+    remove_hydrogen: bool = True
     activity_id: int = 0
     assay_id: int = 0
 
