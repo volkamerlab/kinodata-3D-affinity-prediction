@@ -1,5 +1,7 @@
 import torch
 
+from kinodata.training.predict import predict_df
+
 torch.multiprocessing.set_start_method("spawn", force=True)
 
 
@@ -132,6 +134,19 @@ class VoxelModel(LightningModule):
     def test_step(self, batch, *args, **kwargs):
         x, y, pred, loss = self._step(batch, "test", *args, **kwargs)
         return loss
+
+    def predict_step(self, batch, *args):
+        x = batch[0]
+        y = batch[1]
+        chembl_activity_id = batch[3]
+        if isinstance(chembl_activity_id, torch.Tensor):
+            chembl_activity_id = chembl_activity_id.cpu().flatten()
+        pred = self.forward(x).flatten()
+        return {
+            "pred": pred,
+            "target": y,
+            "chembl_activity_id": chembl_activity_id,
+        }
 
 
 def make_k_fold_split(
@@ -310,6 +325,17 @@ def train(
     data_module = DataModule()
     trainer.fit(model, data_module)
     trainer.test(model, data_module, ckpt_path="best")
+
+    # log all predictions of best model
+    df_train = predict_df(model, data_module.train_dataloader(), trainer, "best")
+    df_val = predict_df(model, data_module.val_dataloader(), trainer, "best")
+    df_test = predict_df(model, data_module.test_dataloader(), trainer, "best")
+    df_train["split"] = "train"
+    df_val["split"] = "val"
+    df_test["split"] = "test"
+    df = pd.concat([df_train, df_val, df_test])
+    table = wandb.Table(dataframe=df)
+    wandb.log({"all_predictions": table})
 
 
 from inspect import Parameter, signature
