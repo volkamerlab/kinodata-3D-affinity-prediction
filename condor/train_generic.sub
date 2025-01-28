@@ -1,5 +1,5 @@
 universe = docker
-docker_image = gjoschka/massspec_with_wandb
+docker_image = gjoschka/kinodata3d-pt2.5.1-cu121-cudnn9
 executable = train_generic.sh
 arguments = $(script) --split_type $(split) --filter_rmsd_max_value $(rmsd) --split_index $(index) --config $(model)
 output = train_kinodata.$(ClusterId).$(ProcId).out
@@ -13,14 +13,5 @@ request_memory = 128G
 requirements = UidDomain == "cs.uni-saarland.de"
 +WantGPUHomeMounted = true
 queue index, model, rmsd, script, split from (
-   0, cgnn.yaml, 2, train_sparse_sparse_transformer, pocket-k-fold
-   0, cgnn.yaml, 2, train_sparse_sparse_transformer, scaffold-k-fold
-   1, cgnn.yaml, 2, train_sparse_sparse_transformer, pocket-k-fold
-   1, cgnn.yaml, 2, train_sparse_sparse_transformer, scaffold-k-fold
-   2, cgnn.yaml, 2, train_sparse_sparse_transformer, pocket-k-fold
-   2, cgnn.yaml, 2, train_sparse_sparse_transformer, scaffold-k-fold
-   3, cgnn.yaml, 2, train_sparse_sparse_transformer, pocket-k-fold
-   3, cgnn.yaml, 2, train_sparse_sparse_transformer, scaffold-k-fold
-   4, cgnn.yaml, 2, train_sparse_sparse_transformer, pocket-k-fold
-   4, cgnn.yaml, 2, train_sparse_sparse_transformer, scaffold-k-fold
+   0, cgnn3d.yaml, 2, train_sparse_transformer, scaffold-k-fold
 )
