@@ -2,11 +2,13 @@
 ARG PYTORCH_VERSION
 ARG CUDA_NAME
 ARG CUDA_SHORT_NAME
+ARG CUDNN_VERSION
 
-FROM pytorch/pytorch:${PYTORCH_VERSION}-${CUDA_NAME}-cudnn8-runtime
+FROM pytorch/pytorch:${PYTORCH_VERSION}-${CUDA_NAME}-cudnn${CUDNN_VERSION}-runtime
 # Set the working directory
 WORKDIR /workspace
 
+RUN python -c "print(__import__('platform').python_version())"
 RUN echo ${PYTORCH_VERSION}
 RUN echo ${CUDA_NAME}
 RUN echo ${CUDA_SHORT_NAME}
