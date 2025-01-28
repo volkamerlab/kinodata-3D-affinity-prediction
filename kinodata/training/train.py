@@ -26,7 +26,7 @@ def train(config, fn_data=make_kinodata_module, fn_model=None):
 
     trainer = pl.Trainer(
         logger=logger,
-        auto_select_gpus=True,
+        devices="auto",
         max_epochs=config.epochs,
         accelerator=config.accelerator,
         accumulate_grad_batches=config.accumulate_grad_batches,
