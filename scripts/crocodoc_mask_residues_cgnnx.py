@@ -182,34 +182,6 @@ def prepare_data(config, need_cplx_representation=True):
     return data_list
 
 
-def load_single_index(file: Path):
-    with open(file, "r") as f:
-        try:
-            dictionary = json.load(f)
-        except json.decoder.JSONDecodeError:
-            dictionary = None
-    ident = int(file.stem.split("_")[-1])
-    return (ident, dictionary)
-
-
-def get_ident(file: Path):
-    ident = int(file.stem.split("_")[-1])
-    return ident
-
-
-def load_residue_atom_index(idents, parallelize=True):
-    files = list(RESIDUE_ATOM_INDEX.iterdir())
-    files = [file for file in files if get_ident(file) in idents]
-    assert len(files) == len(idents)
-    progressing_iterable = tqdm(files, desc="Loading residue atom index...")
-    if parallelize:
-        with mp.Pool(CPU_COUNT) as pool:
-            tuples = pool.map(load_single_index, progressing_iterable)
-    else:
-        tuples = [load_single_index(f) for f in progressing_iterable]
-    return dict(tuples)
-
-
 if __name__ == "__main__":
     predict_reference = True
     config = make_config()
@@ -242,8 +214,12 @@ if __name__ == "__main__":
         assert data[NodeType.Complex].x.shape[0] > edge_index.max()
 
     idents = set([int(data["ident"].item()) for data in data_list])
-
-    index = load_residue_atom_index(idents, parallelize=False)
+    if (not MaskResidues.RESIDUE_INDEX_DIR.exists()) or (
+        not any(MaskResidues.RESIDUE_INDEX_DIR.iterdir())
+    ):
+        print("Residue index not found, creating...")
+        MaskResidues.precompute_residue_index()
+    index = MaskResidues.load_residue_index(idents)
     del_list = []
 
     for k, v in index.items():
@@ -259,7 +235,7 @@ if __name__ == "__main__":
 
     trainer = Trainer(
         logger=None,
-        auto_select_gpus=True,
+        devices="auto",
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
     )
     fold = int(model_config["split_index"])
