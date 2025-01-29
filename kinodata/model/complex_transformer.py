@@ -168,12 +168,12 @@ class ComplexTransformer(RegressionModel):
     def __init__(
         self,
         config: Config,
-        hidden_channels: int,
-        num_heads: int,
-        num_attention_blocks: int,
-        interaction_radius: float,
-        max_num_neighbors: int,
-        act: str,
+        hidden_channels: int = 256,
+        num_heads: int = 8,
+        num_attention_blocks: int = 3,
+        interaction_radius: float = 5,
+        max_num_neighbors: int = 16,
+        act: str = "silu",
         max_atomic_number: int = 100,
         atom_attr_size: int = AtomFeatures.size,
         ln1: bool = True,
@@ -187,8 +187,6 @@ class ComplexTransformer(RegressionModel):
         edge_size: int = NUM_BOND_TYPES,
     ) -> None:
         super().__init__(config)
-        assert len(config["node_types"]) == 1
-        assert config["node_types"][0] == NodeType.Complex
         self.act = resolve_act(act)
         self.d_cut = interaction_radius
         self.max_num_neighbors = max_num_neighbors
@@ -200,7 +198,7 @@ class ComplexTransformer(RegressionModel):
                     hidden_channels,
                     act,
                     intr_bias,
-                    config["node_types"][0],
+                    NodeType.Complex,
                     edge_size=edge_size,
                 )
             elif mode == "structural":

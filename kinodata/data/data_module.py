@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, Optional, Type, Union
 import pandas as pd
 import numpy as np
 from torch_geometric.data import InMemoryDataset
+
 # from torch_geometric.data.lightning_datamodule import LightningDataset
 from torch_geometric.data.lightning import LightningDataset
 from torch_geometric.data.dataset import IndexType
@@ -19,6 +20,7 @@ from kinodata.data.dataset import (
     Filtered,
 )
 import kinodata.transform as T
+from kinodata.transform.normalize import GroupNormalizeTarget
 from kinodata.types import NodeType
 
 
@@ -47,6 +49,7 @@ def create_dataset(
     if one_time_transform is not None:
         dataset = one_time_transform(dataset)
     return dataset[split]
+
 
 def make_data_module(
     split: Split,
@@ -187,5 +190,18 @@ def make_kinodata_module(
         test_kwargs={"transform": val_transform},
         one_time_transform=one_time_transform,
     )
+    if (group_key := config.get("target_normalization_group", None)) is not None:
+        # TODO maybe we want to return the transform for further use?
+        norm_transform, (train_dataset, val_dataset, test_dataset) = (
+            GroupNormalizeTarget.apply(
+                group_key,
+                data_module.train_dataset,
+                data_module.val_dataset,
+                data_module.test_dataset,
+            )
+        )
+        data_module.train_dataset = train_dataset
+        data_module.val_dataset = val_dataset
+        data_module.test_dataset = test_dataset
 
     return data_module

@@ -24,7 +24,6 @@ def cat_many(
         if isinstance(sub_data[key], torch.Tensor):
             return sub_data[key]
         if isinstance(sub_data[key], list):
-            # what have i done
             return torch.tensor([int(x) for x in sub_data[key]])
         raise ValueError(sub_data, key, "cannot convert to tensor")
 
@@ -32,6 +31,7 @@ def cat_many(
         key: torch.cat([ensure_tensor(sub_data, key) for sub_data in data], dim=dim)
         for key in subset
     }
+
 
 class RegressionModel(pl.LightningModule):
     log_scatter_plot: bool = False
@@ -85,11 +85,7 @@ class RegressionModel(pl.LightningModule):
 
     def training_step(self, batch, *args) -> Tensor:
         pred = self.forward(batch).view(-1, 1)
-        offset = torch.ones(3).to(pred.device) * 500
-        shift_ligand_position(batch, offset)
-        pred_unbound = self.forward(batch).view(-1, 1)
-        shift_ligand_position(batch, - offset)
-        loss = self.criterion(pred, batch.y.view(-1, 1)) + resolve_loss('mse')(pred_unbound, batch.y.view(-1, 1) * 0.)
+        loss = self.criterion(pred, batch.y.view(-1, 1))
         self.log("train/loss", loss, batch_size=pred.size(0), on_epoch=True)
         return loss
 
@@ -133,7 +129,11 @@ class RegressionModel(pl.LightningModule):
 
     def predict_step(self, batch, *args):
         pred = self.forward(batch).flatten()
-        return {"pred": pred, "target": batch.y.flatten()}
+        return {
+            "pred": pred,
+            "target": batch.y.flatten(),
+            "chembl_activity_id": batch.chembl_activity_id,
+        }
 
     def test_step(self, batch, *args, **kwargs):
         info = self.validation_step(batch, key="test")
@@ -153,6 +153,3 @@ class RegressionModel(pl.LightningModule):
             test_predictions.add(table, "predictions")
             wandb.log_artifact(test_predictions)
             pass
-
-def shift_ligand_position(data: HeteroData, shift: Tensor):
-    data[NodeType.Complex].pos = pos + shift * (1.0 - data[NodeType.Complex].is_pocket_atom.astype(torch.float32))

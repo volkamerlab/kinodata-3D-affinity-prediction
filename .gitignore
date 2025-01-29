@@ -3,6 +3,7 @@ conda_hack.py
 
 # fast prototyping in notebooks
 dev.ipynb
+timecapsule
 
 # raw kinodata
 /data

@@ -58,6 +58,7 @@ class KinodataKFoldSplit:
             "scaffold-k-fold",
             "pocket-k-fold",
             "random-k-fold",
+            "assay-k-fold",
         ), f"Unknown split type {split_type}"
         self.k = k
         self.split_type = split_type
@@ -91,6 +92,13 @@ class KinodataKFoldSplit:
             scaffolds, idents = zip(*[(data.scaffold, data.ident) for data in dataset])
             scaffolds = np.array(scaffolds)
             splits = group_k_fold_split(group_index=scaffolds, k=self.k)
+            return splits
+        if self.split_type == "assay-k-fold":
+            assays, idents = zip(
+                *[(data.chembl_assay_id, data.ident) for data in dataset]
+            )
+            assays = np.array(assays)
+            splits = group_k_fold_split(group_index=assays, k=self.k)
             return splits
         if self.split_type == "pocket-k-fold":
             pocket_data = pd.DataFrame(

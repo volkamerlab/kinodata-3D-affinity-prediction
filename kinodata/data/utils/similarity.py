@@ -177,12 +177,12 @@ class BLOSUMSubstitutionSimilarity:
 
 
 def pairwise_tanimoto_similarity(
-    smiles: Sequence[str], nbits: int = 1028
+    smiles: Sequence[str], nbits: int = 2048, radius: int = 2
 ) -> np.ndarray:
     mols = [MolFromSmiles(sm) for sm in smiles]
-    fps = [AllChem.GetMorganFingerprintAsBitVect(m, 2, nbits) for m in mols]
+    fps = [AllChem.GetMorganFingerprintAsBitVect(m, radius, nbits) for m in mols]
     similarities = np.eye(len(smiles))
-    for i, fp in enumerate(fps):
+    for i, fp in tqdm(enumerate(fps)):
         similarities_i = BulkTanimotoSimilarity(fp, fps[i:])
         similarities[i, i:] = similarities_i
         similarities[i:, i] = similarities_i

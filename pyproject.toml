@@ -1,0 +1,26 @@
+[project]
+name = "kinodata-3d-affinity-prediction"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "biopandas>=0.5.1",
+    "biotite>=1.1.0",
+    "black>=24.10.0",
+    "docktgrid>=0.0.2",
+    "lightning>=2.5.0.post0",
+    "matplotlib>=3.10.0",
+    "notebook>=7.3.2",
+    "pandas>=2.2.3",
+    "rdkit>=2024.9.4",
+    "scikit-learn>=1.6.1",
+    "scipy>=1.15.1",
+    "seaborn>=0.13.2",
+    "torch>=2.5.1",
+    "torch-cluster>=1.6.3",
+    "torch-geometric>=2.6.1",
+    "torchmetrics>=1.6.1",
+    "tqdm>=4.67.1",
+    "wandb>=0.19.4",
+]

@@ -102,7 +102,9 @@ def process_raw_data(
     )
     best_structure = (
         df.sort_values(by="docking.predicted_rmsd", ascending=True)
-        .groupby(group_key)[group_key + ["docking.predicted_rmsd", "molecule"]]
+        .groupby(group_key)[
+            group_key + ["docking.predicted_rmsd", "molecule", "activities.activity_id"]
+        ]
         .head(1)
     )
     deduped = pd.merge(mean_activity, best_structure, how="outer", on=group_key)
@@ -113,7 +115,12 @@ def process_raw_data(
         on=group_key,
         suffixes=(".orig", None),
     )
-    for col in ("activities.standard_value", "docking.predicted_rmsd", "molecule"):
+    for col in (
+        "activities.standard_value",
+        "docking.predicted_rmsd",
+        "molecule",
+        "activities.activity_id",
+    ):
         del df[f"{col}.orig"]
     # df.set_index("ID", inplace=True)
     print(f"{df.shape[0]} complexes remain after deduplication.")
@@ -151,7 +158,6 @@ def process_raw_data(
 
     print("Adding pocket sequences...")
     # KLIFS API now sometimes decides to timeout
-    print(df.shape)
     while True:
         try:
             with CachedSequences(pocket_sequence_file) as sequence_cache:
@@ -168,7 +174,6 @@ def process_raw_data(
             print(f"Querying KLIFS for sequence from structure id raised {e}")
             print("Retrying..")
             sleep(10)
-    print(df.shape)
 
     # if pocket_sequence_file.exists():
     #     print(f"from cached file {pocket_sequence_file}.")
@@ -198,8 +203,10 @@ class ComplexInformation:
     klifs_structure_id: int
     pocket_sequence: str
     predicted_rmsd: float
-    remove_hydrogen: bool
+    remove_hydrogen: bool = True
     kekulize: bool = False
+    activity_id: int = 0
+    assay_id: int = 0
 
     @classmethod
     def from_raw(cls, raw_data: pd.DataFrame, **kwargs) -> List["ComplexInformation"]:
@@ -216,6 +223,8 @@ class ComplexInformation:
                 int(row["similar.klifs_structure_id"]),
                 row["structure.pocket_sequence"],
                 float(row["docking.predicted_rmsd"]),
+                activity_id=row["activities.activity_id"],
+                assay_id=row["assays.chembl_id"],
                 **kwargs,
             )
             for _, row in raw_data.iterrows()
@@ -536,4 +545,9 @@ def process_pyg(
     data.activity_type = complex.activity_type
     data.ident = complex.kinodata_ident
     data.smiles = complex.compound_smiles
+
+    data.chembl_activity_id = complex.activity_id
+    data.chembl_assay_id = complex.assay_id
+    data.klifs_structure_id = complex.klifs_structure_id
+
     return data
