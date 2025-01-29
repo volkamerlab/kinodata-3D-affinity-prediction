@@ -79,11 +79,11 @@ class VoxelModel(LightningModule):
             block(in_channels, nhid, 1, 1, 0),
             block(nhid, nhid, 3, 1, 1),
             MaxPool3d(2),
+            block(nhid, nhid, 3, 1, 1),
             block(nhid, nhid * 2, 3, 1, 1),
-            block(nhid * 2, nhid * 2, 3, 1, 1),
             MaxPool3d(2),
+            block(nhid * 2, nhid * 2, 3, 1, 1),
             block(nhid * 2, nhid * 4, 3, 1, 1),
-            block(nhid * 4, nhid * 4, 3, 1, 1),
             MaxPool3d(2),
             block(nhid * 4, nhid * 2, 3, 1, 1),
             block(nhid * 2, 1, 1, 1, 0, act=False, norm=False),
@@ -106,7 +106,7 @@ class VoxelModel(LightningModule):
         loss = (pred.flatten() - y.flatten()).pow(2).mean()
         mae = (pred.flatten() - y.flatten()).abs().mean()
         self.log(f"{key}/loss", loss)
-        self.log(f"{key}/mae", mae)
+        self.log(f"{key}/mae", mae, on_epoch=True)
         self.corr_metrics[key](pred.flatten().detach().cpu(), y.flatten().cpu())
         return x, y, pred, loss
 
