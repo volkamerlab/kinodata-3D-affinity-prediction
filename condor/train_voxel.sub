@@ -13,9 +13,9 @@ request_memory = 128G
 requirements = UidDomain == "cs.uni-saarland.de"
 +WantGPUHomeMounted = true
 queue split_type, fold, hidden_channels from (
-   scaffold-k-fold, 0, 32
-   scaffold-k-fold, 1, 32
-   scaffold-k-fold, 2, 32
-   scaffold-k-fold, 3, 32
-   scaffold-k-fold, 4, 32
+   scaffold-k-fold, 0, 48
+   scaffold-k-fold, 1, 48
+   scaffold-k-fold, 2, 48
+   scaffold-k-fold, 3, 48
+   scaffold-k-fold, 4, 48
 )
