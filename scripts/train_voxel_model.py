@@ -1,5 +1,7 @@
 import torch
 
+from kinodata.training.predict import predict_df
+
 torch.multiprocessing.set_start_method("spawn", force=True)
 
 
@@ -77,11 +79,11 @@ class VoxelModel(LightningModule):
             block(in_channels, nhid, 1, 1, 0),
             block(nhid, nhid, 3, 1, 1),
             MaxPool3d(2),
+            block(nhid, nhid, 3, 1, 1),
             block(nhid, nhid * 2, 3, 1, 1),
-            block(nhid * 2, nhid * 2, 3, 1, 1),
             MaxPool3d(2),
+            block(nhid * 2, nhid * 2, 3, 1, 1),
             block(nhid * 2, nhid * 4, 3, 1, 1),
-            block(nhid * 4, nhid * 4, 3, 1, 1),
             MaxPool3d(2),
             block(nhid * 4, nhid * 2, 3, 1, 1),
             block(nhid * 2, 1, 1, 1, 0, act=False, norm=False),
@@ -104,7 +106,7 @@ class VoxelModel(LightningModule):
         loss = (pred.flatten() - y.flatten()).pow(2).mean()
         mae = (pred.flatten() - y.flatten()).abs().mean()
         self.log(f"{key}/loss", loss)
-        self.log(f"{key}/mae", mae)
+        self.log(f"{key}/mae", mae, on_epoch=True)
         self.corr_metrics[key](pred.flatten().detach().cpu(), y.flatten().cpu())
         return x, y, pred, loss
 
@@ -132,6 +134,19 @@ class VoxelModel(LightningModule):
     def test_step(self, batch, *args, **kwargs):
         x, y, pred, loss = self._step(batch, "test", *args, **kwargs)
         return loss
+
+    def predict_step(self, batch, *args):
+        x = batch[0]
+        y = batch[1]
+        chembl_activity_id = batch[3]
+        if isinstance(chembl_activity_id, torch.Tensor):
+            chembl_activity_id = chembl_activity_id.cpu().flatten()
+        pred = self.forward(x).flatten()
+        return {
+            "pred": pred,
+            "target": y,
+            "chembl_activity_id": chembl_activity_id,
+        }
 
 
 def make_k_fold_split(
@@ -205,9 +220,9 @@ def train(
     wandb_mode: str = "online",
     hidden_channels: int = 32,
     lr: float = 1e-4,
-    lr_decay: float = 2e-5,
+    lr_decay: float = 1e-3,
     random_rotation_augmentations: bool = True,
-    perturb_complex_positions: float = 0.15,
+    perturb_complex_positions: float = 0.08,
     data_sample: int = 0,
     compile_model: bool = False,
     num_workers: int = 0,
@@ -310,6 +325,17 @@ def train(
     data_module = DataModule()
     trainer.fit(model, data_module)
     trainer.test(model, data_module, ckpt_path="best")
+
+    # log all predictions of best model
+    df_train = predict_df(model, data_module.train_dataloader(), trainer, "best")
+    df_val = predict_df(model, data_module.val_dataloader(), trainer, "best")
+    df_test = predict_df(model, data_module.test_dataloader(), trainer, "best")
+    df_train["split"] = "train"
+    df_val["split"] = "val"
+    df_test["split"] = "test"
+    df = pd.concat([df_train, df_val, df_test])
+    table = wandb.Table(dataframe=df)
+    wandb.log({"all_predictions": table})
 
 
 from inspect import Parameter, signature

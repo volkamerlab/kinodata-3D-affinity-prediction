@@ -87,20 +87,19 @@ class KinodataKFoldSplit:
         assert cache_dir is not None
         return [cache_dir / f"{i}:{self.k}.csv" for i in range(1, self.k + 1)]
 
+    def _split_grouped(self, group_index):
+        group_index = np.array(group_index)
+        return group_k_fold_split(group_index=group_index, k=self.k)
+
     def _split(self, dataset: KinodataDocked):
+        if self.split_type == "random-k-fold":
+            idents = [data.ident for data in dataset]
+            return random_k_fold_split(idents, self.k)
         if self.split_type == "scaffold-k-fold":
-            scaffolds, idents = zip(*[(data.scaffold, data.ident) for data in dataset])
-            scaffolds = np.array(scaffolds)
-            splits = group_k_fold_split(group_index=scaffolds, k=self.k)
-            return splits
-        if self.split_type == "assay-k-fold":
-            assays, idents = zip(
-                *[(data.chembl_assay_id, data.ident) for data in dataset]
-            )
-            assays = np.array(assays)
-            splits = group_k_fold_split(group_index=assays, k=self.k)
-            return splits
-        if self.split_type == "pocket-k-fold":
+            groups = [data.scaffold for data in dataset]
+        elif self.split_type == "assay-k-fold":
+            groups = [data.chembl_assay_id for data in dataset]
+        elif self.split_type == "pocket-k-fold":
             pocket_data = pd.DataFrame(
                 {
                     "index": np.arange(len(dataset.data.pocket_sequence)),
@@ -113,25 +112,35 @@ class KinodataKFoldSplit:
                 fn_similarity=self.pocket_similarity_measure(),
             ).sort_values(by="index", ascending=True)
             assert df_cluster_labels.shape[0] == pocket_data.shape[0]
-            return group_k_fold_split(
-                np.array(df_cluster_labels[self.pocket_clustering.cluster_key].values),
-                k=self.k,
+            groups = np.array(
+                df_cluster_labels[self.pocket_clustering.cluster_key].values
             )
-        if self.split_type == "random-k-fold":
-            idents = [data.ident for data in dataset]
-            return random_k_fold_split(idents, self.k)
+        else:
+            raise ValueError(f"Unknown split type {self.split_type}")
+        splits = self._split_grouped(groups)
+        return splits
 
     def split(self, dataset: KinodataDocked) -> List[Split]:
         split_files = self.split_files(dataset)
         if all(f.exists() for f in split_files):
             return [Split.from_csv(f) for f in split_files]
 
-        splits: List[Split] = self._split(dataset)
+        activity_ids = [data.activity_id for data in dataset]
+        splits = self._split(dataset)
 
         for split, f in zip(splits, split_files):
             if not f.parents[0].exists():
                 f.parents[0].mkdir()
-            split.to_data_frame().to_csv(f, index=False)
+            df_split = split.to_data_frame()
+            reordered_activity_ids = np.concatenate(
+                (
+                    activity_ids[split.train_split],
+                    activity_ids[split.val_split],
+                    activity_ids[split.test_split],
+                )
+            )
+            df_split["activity_id"] = reordered_activity_ids
+            df_split.to_csv(f, index=False)
             split.source_file = str(f)
 
         return splits

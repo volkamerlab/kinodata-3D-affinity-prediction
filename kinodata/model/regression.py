@@ -1,12 +1,13 @@
 from typing import Dict, List, Optional
 
-import matplotlib.pyplot as plt
 import torch
 from torch import nn
 from torch import Tensor
 import wandb
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import pytorch_lightning as pl
+from torchmetrics.regression import PearsonCorrCoef
+from torchmetrics import MetricCollection
 
 from kinodata.configuration import Config
 from kinodata.model.resolve import resolve_loss
@@ -82,23 +83,49 @@ class RegressionModel(pl.LightningModule):
         wandb.init()
         wandb.define_metric("val/mae", summary="min")
         wandb.define_metric("val/corr", summary="max")
+        self.correlation_metrics = {
+            "train": PearsonCorrCoef(),
+            "val": PearsonCorrCoef(),
+            "test": PearsonCorrCoef(),
+        }
+        for metric in self.correlation_metrics.values():
+            metric.reset()
 
     def training_step(self, batch, *args) -> Tensor:
         pred = self.forward(batch).view(-1, 1)
         loss = self.criterion(pred, batch.y.view(-1, 1))
         self.log("train/loss", loss, batch_size=pred.size(0), on_epoch=True)
+        self.correlation_metrics["train"](
+            pred.detach().cpu().flatten(), batch.y.cpu().flatten()
+        )
         return loss
 
     def validation_step(self, batch, *args, key: str = "val"):
         pred = self.forward(batch).flatten()
         val_mae = (pred - batch.y).abs().mean()
         self.log(f"{key}/mae", val_mae, batch_size=pred.size(0), on_epoch=True)
+        self.correlation_metrics[key](
+            pred.detach().cpu().flatten(), batch.y.cpu().flatten()
+        )
         return {
             f"{key}/mae": val_mae,
             "pred": pred,
             "target": batch.y,
             "ident": batch.ident,
         }
+
+    def _shared_on_epoch_end(self, *args, key: str = None):
+        self.log(f"{key}/corr", self.correlation_metrics[key].compute())
+        self.correlation_metrics[key].reset()
+
+    def on_train_epoch_end(self):
+        return self._shared_on_epoch_end(key="train")
+
+    def on_validation_epoch_end(self):
+        return self._shared_on_epoch_end(key="val")
+
+    def on_test_epoch_end(self):
+        return self._shared_on_epoch_end(key="test")
 
     def process_eval_outputs(self, outputs) -> float:
         pred = torch.cat([output["pred"] for output in outputs], 0)
@@ -108,24 +135,6 @@ class RegressionModel(pl.LightningModule):
         ).cpu().item()
         mae = (pred - target).abs().mean()
         return pred, target, corr, mae
-
-    def validation_epoch_end(self, outputs, *args, **kwargs) -> None:
-        super().validation_epoch_end(outputs)
-        pred, target, corr, mae = self.process_eval_outputs(outputs)
-        self.log("val/corr", corr)
-
-        if self.log_scatter_plot:
-            y_min = min(pred.min().cpu().item(), target.min().cpu().item()) - 1
-            y_max = max(pred.max().cpu().item(), target.max().cpu().item()) + 1
-            fig, ax = plt.subplots()
-            ax.scatter(target.cpu().numpy(), pred.cpu().numpy(), s=0.7)
-            ax.set_xlim(y_min, y_max)
-            ax.set_ylim(y_min, y_max)
-            ax.set_ylabel("Pred")
-            ax.set_xlabel("Target")
-            ax.set_title(f"corr={corr}")
-            wandb.log({"scatter_val": wandb.Image(fig)})
-            plt.close(fig)
 
     def predict_step(self, batch, *args):
         pred = self.forward(batch).flatten()
@@ -138,18 +147,3 @@ class RegressionModel(pl.LightningModule):
     def test_step(self, batch, *args, **kwargs):
         info = self.validation_step(batch, key="test")
         return info
-
-    def test_epoch_end(self, outputs, *args, **kwargs) -> None:
-        pred, target, corr, mae = self.process_eval_outputs(outputs)
-        self.log("test/mae", mae)
-        self.log("test/corr", corr)
-
-        if self.log_test_predictions:
-            test_predictions = wandb.Artifact("test_predictions", type="predictions")
-            data = cat_many(outputs, subset=["pred", "ident"])
-            values = [t.detach().cpu() for t in data.values()]
-            values = torch.stack(values, dim=1)
-            table = wandb.Table(columns=list(data.keys()), data=values.tolist())
-            test_predictions.add(table, "predictions")
-            wandb.log_artifact(test_predictions)
-            pass
