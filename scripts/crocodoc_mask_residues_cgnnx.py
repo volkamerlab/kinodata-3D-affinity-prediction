@@ -30,6 +30,8 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import Compose
 from tqdm import tqdm
 
+import kinodata.wandb_utils as wb
+
 RESIDUE_ATOM_INDEX = _DATA / "processed" / "residue_atom_index"
 CPU_COUNT = 12
 HAS_GPU = torch.cuda.is_available()
@@ -48,11 +50,12 @@ def make_config():
         mask_type="pl_interactions",
         model_type="CGNN-3D",
         outfile=None,
+        training_run_id=None,
         edges_only=False,
     )
     config = cfg.get("crocodoc")
     config["model_path"] = None
-    config = config.update_from_args("model_path", "outfile")
+    config = config.update_from_args("model_path", "outfile", "training_run_id")
     return config
 
 
@@ -185,23 +188,31 @@ def prepare_data(config, need_cplx_representation=True):
 if __name__ == "__main__":
     predict_reference = True
     config = make_config()
-    if "model_path" in config and config["model_path"] is not None:
-        config["model_path"] = Path(config["model_path"])
-    if config.get("model", None):
-        print("Loading model from", config["model_path"])
-    if config.get("outfile", None):
-        print("Will write output to", config["outfile"])
+    if (run_id := config.get("training_run_id", None)) is not None:
+        model, model_config = wb.load_model_lazy(
+            run_id=run_id,
+            model_cls=make_complex_transformer,
+            alias="best",
+            return_config=True,
+        )
+    else:
+        if "model_path" in config and config["model_path"] is not None:
+            config["model_path"] = Path(config["model_path"])
+        if config.get("model", None):
+            print("Loading model from", config["model_path"])
+        if config.get("outfile", None):
+            print("Will write output to", config["outfile"])
 
-    model_info = None
-    if (model_path := config.get("model_path", None)) is not None:
-        model_info = ModelInfo.from_dir(model_path)
-    model, model_config = load_model_from_checkpoint(
-        rmsd_threshold=2,
-        split_type=config["split_type"],
-        split_fold=config["split_index"],
-        model_type=config["model_type"],
-        model_info=model_info,
-    )
+        model_info = None
+        if (model_path := config.get("model_path", None)) is not None:
+            model_info = ModelInfo.from_dir(model_path)
+        model, model_config = load_model_from_checkpoint(
+            rmsd_threshold=2,
+            split_type=config["split_type"],
+            split_fold=config["split_index"],
+            model_type=config["model_type"],
+            model_info=model_info,
+        )
 
     print("Creating data list...")
     data_list = prepare_data(model_config)
@@ -264,11 +275,12 @@ if __name__ == "__main__":
                 "target": predictions["target"].cpu().numpy(),
             }
         )
-        file_name = f"reference_{split_type}_{fold}_{model_type_repr}"
         if config.get("outfile", None):
-            file_name = config["outfile"]
+            file_name = f"reference_{config['outfile']}"
+        else:
+            file_name = f"reference_{split_type}_{fold}_{model_type_repr}"
         df.to_csv(
-            _DATA / "crocodoc_out" / "mask_pl_edges_at_residue" / f"{file_name}.csv",
+            _DATA / "crocodoc_out" / "cgnn" / f"{file_name}.csv",
             index=False,
         )
 
@@ -306,7 +318,9 @@ if __name__ == "__main__":
                 "masked_res_letter": masked_res_letter,
             }
         )
-        if model_path is not None:
+        if config.get("outfile", None) is not None:
+            file_name = config["outfile"]
+        elif model_path is not None:
             file_name = f"residue_delta_{str(model_path).replace('/', '_')}"
         else:
             file_name = f"residue_delta_{split_type}_{fold}_{model_type_repr}"
