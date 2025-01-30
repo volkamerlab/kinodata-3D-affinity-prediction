@@ -138,7 +138,7 @@ def prepare_data(config, need_cplx_representation=True):
     if need_cplx_representation:
         to_cplx = TransformToComplexGraph(remove_heterogeneous_representation=True)
         transform = to_cplx
-    if config["ablate_binding_features"] == 1:
+    if config.get("ablate_binding_features", None) == 1:
 
         def mask_features(data):
             data["complex"].x = data["complex"].x[:, :-3]
