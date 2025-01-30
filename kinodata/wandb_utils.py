@@ -114,6 +114,7 @@ def load_model_lazy(
     model_cls: Callable[[Config], nn.Module] = None,
     alias: str = None,
     override_config: Dict[str, Any] = None,
+    return_config: bool = False,
 ):
     if run_id is not None:
         run = run_by_id(run_id)
@@ -132,4 +133,6 @@ def load_model_lazy(
         config.update(override_config)
     model = model_cls(config)
     model.load_state_dict(state_dict["state_dict"])
+    if return_config:
+        return model, config
     return model
