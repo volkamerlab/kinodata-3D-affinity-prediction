@@ -194,6 +194,7 @@ if __name__ == "__main__":
             model_cls=make_complex_transformer,
             alias="best",
             return_config=True,
+            override_config={"atom_attr_size": 9},
         )
     else:
         if "model_path" in config and config["model_path"] is not None:
