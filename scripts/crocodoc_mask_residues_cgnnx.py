@@ -330,7 +330,7 @@ if __name__ == "__main__":
         if config["edges_only"]:
             file_name += "_edges_only"
         df.to_csv(
-            _DATA / "crocodoc_out" / "mask_pl_edges_at_residue" / f"{file_name}.csv",
+            _DATA / "crocodoc_out" / "cgnn" / f"{file_name}.csv",
             index=False,
         )
         part += 1
