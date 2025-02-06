@@ -61,6 +61,9 @@ class KlifsSymbolParser(MolecularParser):
 
 class KlifsPocketParser(KlifsSymbolParser):
 
+    def __init__(self, columns=klifs_mol2_columns):
+        self.columns = columns
+
     def parse_file(self, mol_file: str, ext: str) -> MolecularData:
         """Parse molecular file and return a MolecularData object."""
         self.ppdb = PandasPdb()
@@ -74,7 +77,7 @@ class KlifsPocketParser(KlifsSymbolParser):
                 mol, self.get_coords_pdb(), self.get_element_symbols_pdb()
             )
         elif ext.lower() in ("mol2", ".mol2"):  # MOL2 file format
-            mol = self.pmol2.read_mol2(mol_file, columns=klifs_mol2_columns)
+            mol = self.pmol2.read_mol2(mol_file, columns=self.columns)
             self.df_atom = mol.df
             return MolecularData(
                 mol, self.get_coords_mol2(), self.get_element_symbols_mol2()

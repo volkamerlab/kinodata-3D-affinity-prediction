@@ -14,6 +14,7 @@ dependencies = [
     "notebook>=7.3.2",
     "pandas>=2.2.3",
     "rdkit>=2024.9.4",
+    "resmo>=0.0.7",
     "scikit-learn>=1.6.1",
     "scipy>=1.15.1",
     "seaborn>=0.13.2",
@@ -25,4 +26,8 @@ dependencies = [
     "tqdm>=4.67.1",
     "typer>=0.15.1",
     "wandb>=0.19.4",
+    "xmltodict>=0.14.2",
 ]
+
+[tool.uv]
+no-build-isolation-package = ["torch-scatter", "torch-cluster"]

@@ -3,21 +3,17 @@ from pathlib import Path
 
 import torch
 from tqdm import tqdm
-from ..dataset import ComplexInformation
 from docktgrid import VoxelDataset as DocktgridVoxelDataset
 from docktgrid import MolecularParser, MolecularData, MolecularComplex
-from dataclasses import dataclass
 import pandas as pd
 import numpy as np
-import joblib
 from .klifs_parser import KlifsSymbolParser, KlifsPocketParser
 
-from docktgrid.voxel_dataset import VoxelDataset
 from docktgrid import VoxelGrid
 from docktgrid.view import BasicView
 import multiprocessing as mp
 
-_default_voxel = VoxelGrid([BasicView()], 1, (24, 24, 24))
+default_voxel = VoxelGrid([BasicView()], 1, (24, 24, 24))
 
 
 class DistributedParser:
@@ -61,7 +57,7 @@ ligand_register = MolecularDataRegister(KlifsSymbolParser())
 pocket_register = MolecularDataRegister(KlifsPocketParser())
 
 
-def _prohibited_compelx(lig: MolecularData, ptn: MolecularData) -> bool:
+def _prohibited_complex(lig: MolecularData, ptn: MolecularData) -> bool:
     symbols = set.union(set(list(lig.element_symbols)), set(list(ptn.element_symbols)))
     if "A" in symbols:
         return True
@@ -92,7 +88,7 @@ class VoxelDataset(DocktgridVoxelDataset):
         for lig, ptn in zip(self.lig_files, self.ptn_files):
             assert isinstance(lig, MolecularData)
             assert isinstance(ptn, MolecularData)
-            if _prohibited_compelx(lig, ptn):
+            if _prohibited_complex(lig, ptn):
                 mask.append(False)
                 continue
             masked_lig_files.append(lig)
@@ -139,7 +135,7 @@ def _parse_files_parallel(files, register):
 
 def make_dataset(
     metadata: pd.DataFrame,
-    voxel: VoxelGrid = _default_voxel,
+    voxel: VoxelGrid = default_voxel,
     transform=None,
     parallelize=False,  # currently this makes it worse
 ) -> VoxelDataset:
@@ -167,23 +163,12 @@ def make_dataset(
     )
 
 
-def make_voxel_dataset_split(
+def get_kinodata3d_df(
     data_dir: Path,
-    train_split: np.ndarray,
-    val_split: np.ndarray | None,
-    test_split: np.ndarray | None,
-    voxel: VoxelGrid = _default_voxel,
     kinodata3d_df: pd.DataFrame = None,
-    train_transform=None,
-    inference_transform=None,
-):
-    train_split = _ensure_opt_int_array(train_split)
-    val_split = _ensure_opt_int_array(val_split)
-    test_split = _ensure_opt_int_array(test_split)
-
+) -> pd.DataFrame:
     docktgrid_dir = data_dir / "docktgrid"
     pocket_dir = data_dir / "raw" / "mol2" / "pocket"
-
     if kinodata3d_df is None:
         kinodata3d_df = pd.read_csv(docktgrid_dir / "kinodata3d.csv")
     activity_id = kinodata3d_df["activities.activity_id"].astype(int)
@@ -196,6 +181,24 @@ def make_voxel_dataset_split(
         lambda aid: docktgrid_dir / f"ligand_{aid}.mol2"
     )
     kinodata3d_df.set_index("activities.activity_id", inplace=True)
+    return kinodata3d_df
+
+
+def make_voxel_dataset_split(
+    data_dir: Path,
+    train_split: np.ndarray,
+    val_split: np.ndarray | None,
+    test_split: np.ndarray | None,
+    voxel: VoxelGrid = default_voxel,
+    kinodata3d_df: pd.DataFrame = None,
+    train_transform=None,
+    inference_transform=None,
+):
+    train_split = _ensure_opt_int_array(train_split)
+    val_split = _ensure_opt_int_array(val_split)
+    test_split = _ensure_opt_int_array(test_split)
+
+    kinodata3d_df = get_kinodata3d_df(data_dir, kinodata3d_df)
 
     train_dataset = make_dataset(kinodata3d_df.loc[train_split], voxel, train_transform)
     val_dataset = (

@@ -2,8 +2,6 @@ import torch
 
 from kinodata.training.predict import predict_df
 
-torch.multiprocessing.set_start_method("spawn", force=True)
-
 
 from argparse import ArgumentParser
 from itertools import count
@@ -11,9 +9,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import os
-import torch
-import wandb
 from docktgrid.molecule import MolecularComplex, MolecularData
 from lightning.pytorch import LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
@@ -25,12 +20,14 @@ from torch.utils.data import DataLoader
 from torchmetrics.regression import PearsonCorrCoef
 from tqdm import tqdm
 
-from kinodata.data.data_split import Split
+import wandb
 from kinodata.data.grouped_split import _generator_to_list
 from kinodata.data.voxel.dataset import make_voxel_dataset_split
-from kinodata.transform.voxel import RandomRotation, PerturbPosition
+from kinodata.transform.voxel import PerturbPosition, RandomRotation
 
 DATA_DIR = Path(__file__).parent.parent / "data"
+
+torch.multiprocessing.set_start_method("spawn", force=True)
 
 
 def _collect_vdw_key_errors(train_data, val_data, test_data):
@@ -212,6 +209,39 @@ def make_k_fold_split(
     return df
 
 
+def get_data_split_activity_ids(
+    split_type: str,
+    seed: int,
+    fold: int,
+    data_sample: int = 0,
+):
+    kinodata3d_df = pd.read_csv(DATA_DIR / "docktgrid" / "kinodata3d.csv")
+    df_split = None
+    if split_type == "scaffold-k-fold":
+        df_split = make_k_fold_split(
+            kinodata3d_df["scaffold"].values,
+            kinodata3d_df["activities.activity_id"].values,
+            seed=seed,
+            cache=DATA_DIR / "processed" / "chembl_splits" / "scaffold_k_fold.csv",
+        )
+    elif split_type == "random-k-fold":
+        raise NotImplementedError("Random k-fold not implemented.")
+    elif split_type == "pocket-k-fold":
+        raise NotImplementedError("Pocket k-fold not implemented.")
+    else:
+        raise ValueError(f"Unknown split type {split_type}")
+    assert isinstance(df_split, pd.DataFrame)
+    df_split = df_split[df_split["fold"] == fold]
+
+    if data_sample > 0:
+        df_split = df_split.sample(data_sample, random_state=seed)
+
+    train_split = df_split[df_split["split"] == "train"]["activity_id"].values
+    val_split = df_split[df_split["split"] == "val"]["activity_id"].values
+    test_split = df_split[df_split["split"] == "test"]["activity_id"].values
+    return train_split, val_split, test_split
+
+
 def train(
     batch_size: int = 32,
     split_type: str = "scaffold-k-fold",
@@ -238,37 +268,19 @@ def train(
         ),
     )
 
-    kinodata3d_df = pd.read_csv(DATA_DIR / "docktgrid" / "kinodata3d.csv")
-    df_split = None
-    if split_type == "scaffold-k-fold":
-        df_split = make_k_fold_split(
-            kinodata3d_df["scaffold"].values,
-            kinodata3d_df["activities.activity_id"].values,
-            seed=seed,
-            cache=DATA_DIR / "processed" / "chembl_splits" / "scaffold_k_fold.csv",
-        )
-    elif split_type == "random-k-fold":
-        raise NotImplementedError("Random k-fold not implemented.")
-    elif split_type == "pocket-k-fold":
-        raise NotImplementedError("Pocket k-fold not implemented.")
-    else:
-        raise ValueError(f"Unknown split type {split_type}")
-    assert isinstance(df_split, pd.DataFrame)
-    df_split = df_split[df_split["fold"] == fold]
-
-    if data_sample > 0:
-        df_split = df_split.sample(data_sample, random_state=seed)
-
-    train_split = df_split[df_split["split"] == "train"]["activity_id"].values
-    val_split = df_split[df_split["split"] == "val"]["activity_id"].values
-    test_split = df_split[df_split["split"] == "test"]["activity_id"].values
-
     train_transform = []
     inference_transform = None
     if random_rotation_augmentations:
         train_transform.append(RandomRotation())
     if perturb_complex_positions > 0:
         train_transform.append(PerturbPosition(std=perturb_complex_positions))
+
+    train_split, val_split, test_split = get_data_split_activity_ids(
+        split_type,
+        seed,
+        fold,
+        data_sample=data_sample,
+    )
 
     train_data, val_data, test_data = make_voxel_dataset_split(
         DATA_DIR,
