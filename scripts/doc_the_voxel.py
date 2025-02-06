@@ -13,13 +13,13 @@ from resmo.generate_modified_data import generate_modified_data
 from resmo.protein_model import Mol2ProteinModel
 from resmo.modification import MaskResidue
 import wandb
+import typer
 
 
-if __name__ == "__main__":
-    fold = 0
+def main(fold: int = 0, model: str = ""):
     run = wandb.init(project="kinodata-voxel")
     artifact = run.use_artifact(
-        "nextaids/kinodata-voxel/model-13lruo10:v0", type="model"
+        f"nextaids/kinodata-voxel/model-{model}:best", type="model"
     )
     artifact_dir = artifact.download()
     artifact_dir = Path(artifact_dir)
@@ -54,7 +54,6 @@ if __name__ == "__main__":
     loader = DataLoader(dataset, batch_size=8)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     data = next(iter(loader))
-    in_channels = data[0].size(1)
     print(data)
     model = VoxelModel.load_from_checkpoint(artifact_dir / "model.ckpt")
     model = model.to(device)
@@ -76,3 +75,7 @@ if __name__ == "__main__":
     df = pd.DataFrame(df)
     print(df.head())
     df.to_csv(f"voxel_crocodoc_{fold}.csv", index=False)
+
+
+if __name__ == "__main__":
+    typer.run(main)
