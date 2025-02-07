@@ -34,17 +34,15 @@ def main(fold: int = 0, model: str = ""):
     print(df.columns)
     clean_protein_files = df["pocket_file"].values
     ligand_files = df["ligand_file"].values
+    modification = MaskResidue()
 
     def generate_data():
-        for modified_pocket, ligand_file in zip(
-            generate_modified_data(
-                clean_protein_files, Mol2ProteinModel, MaskResidue()
-            ),
-            ligand_files,
-        ):
-            signature = modified_pocket.modification_signature
-            protein_file = modified_pocket.temp_file_with_protein_data(".mol2")
-            yield protein_file, ligand_file, signature.model_dump()
+        for ligand_file, protein_file in zip(ligand_files, clean_protein_files):
+            pocket_model = Mol2ProteinModel.from_file(protein_file)
+            for modified_pocket in modification.apply_all(pocket_model):
+                signature = modified_pocket.modification_signature
+                protein_file = modified_pocket.temp_file_with_protein_data(".mol2")
+                yield protein_file, ligand_file, signature.model_dump()
 
     dataset = IterableVoxelDataset(generate_data(), default_voxel)
     for data in dataset:
@@ -53,6 +51,7 @@ def main(fold: int = 0, model: str = ""):
 
     loader = DataLoader(dataset, batch_size=8)
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    print("Using device", device)
     data = next(iter(loader))
     print(data)
     model = VoxelModel.load_from_checkpoint(artifact_dir / "model.ckpt")
@@ -74,7 +73,7 @@ def main(fold: int = 0, model: str = ""):
             df["masked_residue_name"].extend(metadata["residue_name"])
     df = pd.DataFrame(df)
     print(df.head())
-    df.to_csv(f"voxel_crocodoc_{fold}.csv", index=False)
+    df.to_csv(f"voxel_crocodoc_{fold}_{model}.csv", index=False)
 
 
 if __name__ == "__main__":
