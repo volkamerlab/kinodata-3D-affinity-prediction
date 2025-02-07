@@ -49,7 +49,7 @@ def main(fold: int = 0, model: str = ""):
         data
         break
 
-    loader = DataLoader(dataset, batch_size=8)
+    loader = DataLoader(dataset, batch_size=64)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print("Using device", device)
     data = next(iter(loader))
