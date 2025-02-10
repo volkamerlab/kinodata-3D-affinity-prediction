@@ -16,10 +16,10 @@ import wandb
 import typer
 
 
-def main(fold: int = 0, model: str = ""):
+def main(fold: int = 0, model_name: str = ""):
     run = wandb.init(project="kinodata-voxel")
     artifact = run.use_artifact(
-        f"nextaids/kinodata-voxel/model-{model}:best", type="model"
+        f"nextaids/kinodata-voxel/model-{model_name}:best", type="model"
     )
     artifact_dir = artifact.download()
     artifact_dir = Path(artifact_dir)
@@ -73,7 +73,7 @@ def main(fold: int = 0, model: str = ""):
             df["masked_residue_name"].extend(metadata["residue_name"])
     df = pd.DataFrame(df)
     print(df.head())
-    df.to_csv(f"voxel_crocodoc_{fold}_{model}.csv", index=False)
+    df.to_csv(f"voxel_crocodoc_{fold}_{model_name}.csv", index=False)
 
 
 if __name__ == "__main__":
