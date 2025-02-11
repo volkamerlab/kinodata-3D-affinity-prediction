@@ -30,21 +30,22 @@ def main(fold: int = 0, model_name: str = ""):
     )
     df = get_kinodata3d_df(DATA_DIR)
     df = df.loc[test_split]
-    print(df.head(), df.shape)
-    print(df.columns)
     clean_protein_files = df["pocket_file"].values
     ligand_files = df["ligand_file"].values
     modification = MaskResidue()
 
     def generate_data():
-        for ligand_file, protein_file in zip(ligand_files, clean_protein_files):
-            pocket_model = Mol2ProteinModel.from_file(protein_file)
+        for ligand_file, clean_protein_file in zip(ligand_files, clean_protein_files):
+            pocket_model = Mol2ProteinModel.from_file(clean_protein_file)
             for modified_pocket in modification.apply_all(pocket_model):
                 signature = modified_pocket.modification_signature
-                protein_file = modified_pocket.temp_file_with_protein_data(".mol2")
-                yield protein_file, ligand_file, signature.model_dump()
+                modified_protein_file = modified_pocket.temp_file_with_protein_data(
+                    ".mol2"
+                )
+                yield modified_protein_file, ligand_file, signature.model_dump()
 
     dataset = IterableVoxelDataset(generate_data(), default_voxel)
+    # test iter
     for data in dataset:
         data
         break
@@ -52,8 +53,6 @@ def main(fold: int = 0, model_name: str = ""):
     loader = DataLoader(dataset, batch_size=64)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print("Using device", device)
-    data = next(iter(loader))
-    print(data)
     model = VoxelModel.load_from_checkpoint(artifact_dir / "model.ckpt")
     model = model.to(device)
 
