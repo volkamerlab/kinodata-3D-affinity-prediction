@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Generator
+from typing import IO, Any, Generator
 import torch
 from torch.utils.data import IterableDataset
 from docktgrid.molecule import MolecularComplex
@@ -13,19 +13,22 @@ class IterableVoxelDataset(IterableDataset):
         self,
         data_stream: Generator,
         voxel: VoxelGrid,
+        mol2_columns: dict[int, tuple[str, str]] = None,
     ):
         self.data_stream = data_stream
-        self.protein_parser = KlifsPocketParser(columns=None)
+        self.protein_parser = KlifsPocketParser(columns=mol2_columns)
         self.ligand_parser = KlifsSymbolParser()
         self.voxel = voxel
 
     def _parse_ligand_file(self, f: Path):
         ext = f.suffix
-        return self.ligand_parser.parse_file(f, ext)
+        return self.ligand_parser.parse_file(str(f), ext)
 
-    def _parse_protein_file(self, f):
-        ext = f.name.split(".")[-1]
-        return self.protein_parser.parse_file(f.name, ext)
+    def _parse_protein_file(self, f: Path | Any):
+        if not isinstance(f, Path):
+            f = Path(f.name)
+        ext = f.suffix
+        return self.protein_parser.parse_file(str(f), ext)
 
     def __iter__(self):
         for protein_file, ligand_file, metadata in self.data_stream:

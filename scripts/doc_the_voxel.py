@@ -7,6 +7,7 @@ from tqdm import tqdm
 from train_voxel_model import get_data_split_activity_ids, DATA_DIR, VoxelModel
 from kinodata.data.voxel.dataset import get_kinodata3d_df, default_voxel
 from kinodata.data.voxel.lazy_iterable_dataset import IterableVoxelDataset
+from kinodata.data.voxel.klifs_parser import klifs_mol2_columns
 
 from torch.utils.data import DataLoader
 from resmo.generate_modified_data import generate_modified_data
@@ -19,14 +20,10 @@ import typer
 def main(
     fold: int = 0,
     model_name: str = "",
-    reference_only: bool = False,
+    compute_reference: bool = True,
+    compute_masked: bool = True,
 ):
     run = wandb.init(project="kinodata-voxel")
-    artifact = run.use_artifact(
-        f"nextaids/kinodata-voxel/model-{model_name}:best", type="model"
-    )
-    artifact_dir = artifact.download()
-    artifact_dir = Path(artifact_dir)
     _, _, test_split = get_data_split_activity_ids(
         "scaffold-k-fold",
         0,
@@ -51,40 +48,51 @@ def main(
     def generate_reference_data():
         for ligand_file, clean_protein_file in zip(ligand_files, clean_protein_files):
             metadata = {
-                "ligand_file": ligand_file,
-                "source_file": clean_protein_file,
+                "ligand_file": str(ligand_file),
+                "source_file": str(clean_protein_file),
             }
             yield clean_protein_file, ligand_file, metadata
 
     dataset = IterableVoxelDataset(generate_data(), default_voxel)
-    reference_dataset = IterableVoxelDataset(generate_reference_data(), default_voxel)
-
+    reference_dataset = IterableVoxelDataset(
+        generate_reference_data(), default_voxel, mol2_columns=klifs_mol2_columns
+    )
     loader = DataLoader(dataset, batch_size=64)
     reference_loader = DataLoader(reference_dataset, batch_size=64)
+
+    _ = next(iter(loader))
+    _ = next(iter(reference_loader))
+
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print("Using device", device)
+    model_artf = run.use_artifact(
+        f"nextaids/kinodata-voxel/model-{model_name}:best", type="model"
+    )
+    artifact_dir = model_artf.download()
+    artifact_dir = Path(artifact_dir)
     model = VoxelModel.load_from_checkpoint(artifact_dir / "model.ckpt")
     model = model.to(device)
 
-    print("Generating masked predictions")
-    df_reference = defaultdict(list)
-    with torch.inference_mode():
-        for batch in tqdm(reference_loader):
-            metadata = batch[-1]
-            inp = batch[0].to(device)
-            pred = model(inp)
+    if compute_reference:
+        print("Generating masked predictions")
+        df_reference = defaultdict(list)
+        with torch.inference_mode():
+            for batch in tqdm(reference_loader):
+                metadata = batch[-1]
+                inp = batch[0].to(device)
+                pred = model(inp)
 
-            df_reference["reference_pred"].extend(list(pred.cpu().numpy()))
-            df_reference["ligand_file"].extend(metadata["ligand_file"])
-            df_reference["protein_file"].extend(metadata["source_file"])
+                df_reference["reference_pred"].extend(list(pred.cpu().numpy()))
+                df_reference["ligand_file"].extend(metadata["ligand_file"])
+                df_reference["protein_file"].extend(metadata["source_file"])
 
-    df_reference = pd.DataFrame(df_reference)
-    print(df_reference.head())
-    df_reference.to_csv(
-        f"voxel_crocodoc_reference_{fold}_{model_name}.csv", index=False
-    )
+        df_reference = pd.DataFrame(df_reference)
+        print(df_reference.head())
+        df_reference.to_csv(
+            f"voxel_crocodoc_reference_{fold}_{model_name}.csv", index=False
+        )
 
-    if not reference_only:
+    if compute_masked:
         print("Generating masked predictions")
         df = defaultdict(list)
         with torch.inference_mode():
