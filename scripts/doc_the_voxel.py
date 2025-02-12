@@ -43,7 +43,10 @@ def main(
                 modified_protein_file = modified_pocket.temp_file_with_protein_data(
                     ".mol2"
                 )
-                yield modified_protein_file, ligand_file, signature.model_dump()
+                yield Path(
+                    modified_protein_file.name
+                ), ligand_file, signature.model_dump()
+                modified_protein_file.close()
 
     def generate_reference_data():
         for ligand_file, clean_protein_file in zip(ligand_files, clean_protein_files):
@@ -60,6 +63,7 @@ def main(
     loader = DataLoader(dataset, batch_size=64)
     reference_loader = DataLoader(reference_dataset, batch_size=64)
 
+    # sanity check loaders
     _ = next(iter(loader))
     _ = next(iter(reference_loader))
 

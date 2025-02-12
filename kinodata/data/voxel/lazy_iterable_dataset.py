@@ -24,14 +24,13 @@ class IterableVoxelDataset(IterableDataset):
         ext = f.suffix
         return self.ligand_parser.parse_file(str(f), ext)
 
-    def _parse_protein_file(self, f: Path | Any):
-        if not isinstance(f, Path):
-            f = Path(f.name)
+    def _parse_protein_file(self, f: Path):
         ext = f.suffix
         return self.protein_parser.parse_file(str(f), ext)
 
     def __iter__(self):
         for protein_file, ligand_file, metadata in self.data_stream:
+            assert isinstance(protein_file, Path)
             protein_data = self._parse_protein_file(protein_file)
             ligand_data = self._parse_ligand_file(ligand_file)
             complex = MolecularComplex(protein_data, ligand_data)
