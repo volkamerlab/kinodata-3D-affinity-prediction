@@ -12,7 +12,7 @@ request_CPUs = 32
 request_memory = 128G
 requirements = UidDomain == "cs.uni-saarland.de"
 +WantGPUHomeMounted = true
-queue fold, model from (
+queue fold, model, reference_only from (
    4, 7mxftiu2, True
    3, z26rokyn, True
    2, pvfx56lm, True
