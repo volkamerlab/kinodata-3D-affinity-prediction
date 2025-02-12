@@ -16,7 +16,11 @@ import wandb
 import typer
 
 
-def main(fold: int = 0, model_name: str = ""):
+def main(
+    fold: int = 0,
+    model_name: str = "",
+    reference_only: bool = False,
+):
     run = wandb.init(project="kinodata-voxel")
     artifact = run.use_artifact(
         f"nextaids/kinodata-voxel/model-{model_name}:best", type="model"
@@ -44,35 +48,62 @@ def main(fold: int = 0, model_name: str = ""):
                 )
                 yield modified_protein_file, ligand_file, signature.model_dump()
 
+    def generate_reference_data():
+        for ligand_file, clean_protein_file in zip(ligand_files, clean_protein_files):
+            metadata = {
+                "ligand_file": ligand_file,
+                "source_file": clean_protein_file,
+            }
+            yield clean_protein_file, ligand_file, metadata
+
     dataset = IterableVoxelDataset(generate_data(), default_voxel)
-    # test iter
-    for data in dataset:
-        data
-        break
+    reference_dataset = IterableVoxelDataset(generate_reference_data(), default_voxel)
 
     loader = DataLoader(dataset, batch_size=64)
+    reference_loader = DataLoader(reference_dataset, batch_size=64)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print("Using device", device)
     model = VoxelModel.load_from_checkpoint(artifact_dir / "model.ckpt")
     model = model.to(device)
 
-    df = defaultdict(list)
+    print("Generating masked predictions")
+    df_reference = defaultdict(list)
     with torch.inference_mode():
-        for batch in tqdm(loader):
+        for batch in tqdm(reference_loader):
             metadata = batch[-1]
             inp = batch[0].to(device)
             pred = model(inp)
 
-            df["pred"].extend(list(pred.cpu().numpy()))
-            df["ligand_file"].extend(metadata["ligand_file"])
-            df["protein_file"].extend(metadata["source_file"])
-            df["masked_residue_index"].extend(
-                list(metadata["residue_index"].cpu().numpy())
-            )
-            df["masked_residue_name"].extend(metadata["residue_name"])
-    df = pd.DataFrame(df)
-    print(df.head())
-    df.to_csv(f"voxel_crocodoc_{fold}_{model_name}.csv", index=False)
+            df_reference["reference_pred"].extend(list(pred.cpu().numpy()))
+            df_reference["ligand_file"].extend(metadata["ligand_file"])
+            df_reference["protein_file"].extend(metadata["source_file"])
+
+    df_reference = pd.DataFrame(df_reference)
+    print(df_reference.head())
+    df_reference.to_csv(
+        f"voxel_crocodoc_reference_{fold}_{model_name}.csv", index=False
+    )
+
+    if not reference_only:
+        print("Generating masked predictions")
+        df = defaultdict(list)
+        with torch.inference_mode():
+            for batch in tqdm(loader):
+                metadata = batch[-1]
+                inp = batch[0].to(device)
+                pred = model(inp)
+
+                df["pred"].extend(list(pred.cpu().numpy()))
+                df["ligand_file"].extend(metadata["ligand_file"])
+                df["protein_file"].extend(metadata["source_file"])
+                df["masked_residue_index"].extend(
+                    list(metadata["residue_index"].cpu().numpy())
+                )
+                df["masked_residue_name"].extend(metadata["residue_name"])
+
+        df = pd.DataFrame(df)
+        print(df.head())
+        df.to_csv(f"voxel_crocodoc_{fold}_{model_name}.csv", index=False)
 
 
 if __name__ == "__main__":
