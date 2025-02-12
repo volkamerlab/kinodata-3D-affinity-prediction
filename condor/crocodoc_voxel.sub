@@ -1,7 +1,7 @@
 universe = docker
 docker_image = gjoschka/kinodata3d-b0:2.3.0-cuda12.1
 executable = crocodoc_voxel.sh
-arguments =  $(fold) $(model) $(reference_only)
+arguments =  $(fold) $(model)
 output = train_kinodata_voxel.$(ClusterId).$(ProcId).out
 error = train_kinodata_voxel.$(ClusterId).$(ProcId).err
 log = train_kinodata_voxel.$(ClusterId).log
@@ -12,10 +12,10 @@ request_CPUs = 32
 request_memory = 128G
 requirements = UidDomain == "cs.uni-saarland.de"
 +WantGPUHomeMounted = true
-queue fold, model, reference_only from (
-   4, 7mxftiu2, --no-reference_only
-   3, z26rokyn, --no-reference-only
-   2, pvfx56lm, --no-reference-only
-   1, tir2cc7b, --no-reference-only
-   0, 13lruo10, --no-reference-only
+queue fold, model from (
+   4, 7mxftiu2,
+   3, z26rokyn,
+   2, pvfx56lm,
+   1, tir2cc7b,
+   0, 13lruo10,
 )
