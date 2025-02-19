@@ -14,7 +14,21 @@ from lightning.pytorch import LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
 from sklearn.model_selection import GroupKFold
-from torch.nn import BatchNorm3d, Conv3d, Identity, MaxPool3d, ReLU, Sequential
+from torch.nn import (
+    BatchNorm3d,
+    Conv3d,
+    LazyConv3d,
+    Identity,
+    MaxPool3d,
+    ReLU,
+    Sequential,
+    LazyLinear,
+    Flatten,
+    BatchNorm1d,
+    Dropout,
+)
+from torch.nn.functional import relu, silu
+from torch import Tensor, nn
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from torchmetrics.regression import PearsonCorrCoef
@@ -63,6 +77,9 @@ class VoxelModel(LightningModule):
         super().__init__()
         self.corr_metrics = {key: PearsonCorrCoef() for key in ["train", "val", "test"]}
         self.save_hyperparameters()
+        self.define_model()
+
+    def define_model(self):
 
         def block(din, dout, kernel_size, stride, padding, act=True, norm=True):
             return Sequential(
@@ -73,7 +90,7 @@ class VoxelModel(LightningModule):
 
         nhid = self.hparams.hidden_channels
         self.cnn_model = Sequential(
-            block(in_channels, nhid, 1, 1, 0),
+            block(self.hparams.in_channels, nhid, 1, 1, 0),
             block(nhid, nhid, 3, 1, 1),
             MaxPool3d(2),
             block(nhid, nhid, 3, 1, 1),
@@ -144,6 +161,123 @@ class VoxelModel(LightningModule):
             "target": y,
             "chembl_activity_id": chembl_activity_id,
         }
+
+
+class PafnucyBlock(nn.Module):
+
+    def __init__(
+        self,
+        kernel_size: int | None = None,
+        hidden_channels: int | None = None,
+        in_channels: int | None = None,
+    ):
+        super().__init__()
+        if in_channels is None:
+            in_channels = hidden_channels
+        if kernel_size is None:
+            kernel_size = 3
+        if in_channels != hidden_channels:
+            self.proj_lin = nn.Conv3d(
+                in_channels, hidden_channels, 1, padding=0, stride=1
+            )
+        else:
+            self.proj_lin = Identity()
+        self.cnn1 = nn.Conv3d(
+            in_channels, hidden_channels, kernel_size, padding="same", stride=1
+        )
+        self.bn1 = nn.BatchNorm3d(hidden_channels)
+        self.cnn2 = nn.Conv3d(hidden_channels, hidden_channels, 1, padding=0, stride=1)
+        self.bn2 = nn.BatchNorm3d(hidden_channels)
+
+    def forward(self, x: Tensor):
+        z = self.cnn1(x)
+        z = self.bn1(z)
+        z = relu(z)
+        z = self.cnn2(z)
+        z = self.bn2(z)
+        return relu(z + self.proj_lin(x))
+
+
+class PafnucyPool(nn.Module):
+
+    def __init__(
+        self,
+        hidden_channels: int,
+        type: str = "max",
+    ):
+        super().__init__()
+        match type:
+            case "max":
+                self.pool = nn.MaxPool3d(2)
+            case "avg":
+                self.pool = nn.AvgPool3d(2)
+            case "learned":
+                self.pool = nn.Conv3d(hidden_channels, hidden_channels, 2, stride=2)
+            case _:
+                raise ValueError(f"Unknown pooling type {type}")
+
+    def forward(self, x: Tensor):
+        return self.pool(x)
+
+
+class PafnucyIshVoxelModel(VoxelModel):
+
+    def __init__(
+        self,
+        in_channels,
+        hidden_channels=32,
+        dense_channels=32,
+        kernel_sizes: list | None = None,
+        lr=0.0001,
+        lr_decay=0.00001,
+        pooling_type: str = "max",
+    ):
+        if kernel_sizes is None:
+            kernel_sizes = [5, 3, 3]
+        super().__init__(in_channels, hidden_channels, lr, lr_decay)
+
+    def define_model(self):
+        self.blocks = nn.ModuleList()
+        self.blocks.append(
+            PafnucyBlock(
+                in_channels=self.hparams.in_channels,
+                hidden_channels=self.hparams.hidden_channels,
+                kernel_size=self.hparams.kernel_sizes[0],
+            )
+        )
+        h_0 = self.hparams.hidden_channels
+        for i, kernel_size in enumerate(self.hparams.kernel_sizes[1:]):
+            in_dim = h_0 * (2**i)
+            out_dim = h_0 * (2 ** (i + 1))
+            self.blocks.append(
+                PafnucyBlock(
+                    in_channels=in_dim, hidden_channels=out_dim, kernel_size=kernel_size
+                )
+            )
+        self.pools = nn.ModuleList(
+            [
+                PafnucyPool(
+                    self.hparams.hidden_channels, type=self.hparams.pooling_type
+                )
+                for _ in range(len(self.hparams.kernel_sizes) - 1)
+            ]
+        )
+        self.dense = Sequential(
+            Flatten(start_dim=1),
+            LazyLinear(self.hparams.dense_channels),
+            ReLU(),
+            BatchNorm1d(self.hparams.dense_channels),
+            LazyLinear(self.hparams.dense_channels // 2),
+            ReLU(),
+            BatchNorm1d(self.hparams.dense_channels // 2),
+            LazyLinear(1),
+        )
+
+    def forward(self, x):
+        for block, pool in zip(self.blocks, self.pools):
+            x = block(x)
+            x = pool(x)
+        return self.dense(x)
 
 
 def make_k_fold_split(
@@ -249,6 +383,9 @@ def train(
     fold: int = 0,
     wandb_mode: str = "online",
     hidden_channels: int = 32,
+    dense_channels: int = 256,
+    kernel_sizes: str = "4333",
+    pooling_type: str = "max",
     lr: float = 1e-4,
     lr_decay: float = 1e-3,
     random_rotation_augmentations: bool = True,
@@ -256,15 +393,33 @@ def train(
     data_sample: int = 0,
     compile_model: bool = False,
     num_workers: int = 0,
+    use_val_for_testing: bool = False,
+    accelerator: str = "cpu",
+    min_epochs: int = 100,
+    max_epochs: int = 500,
+    acc_grad_batches: int = 1,
 ):
+    kernel_sizes = [int(k) for k in kernel_sizes]
+
     wandb.init(
         project="kinodata-voxel",
         mode=wandb_mode,
         config=dict(
             batch_size=batch_size,
+            effective_batch_size=batch_size * acc_grad_batches,
             split_type=split_type,
             seed=seed,
             fold=fold,
+            hidden_channels=hidden_channels,
+            dense_channels=dense_channels,
+            kernel_sizes=kernel_sizes,
+            pooling_type=pooling_type,
+            lr=lr,
+            lr_decay=lr_decay,
+            random_rotation_augmentations=random_rotation_augmentations,
+            perturb_complex_positions=perturb_complex_positions,
+            min_epochs=min_epochs,
+            max_epochs=max_epochs,
         ),
     )
 
@@ -316,27 +471,39 @@ def train(
             return self._dataloader(val_data, shuffle=False)
 
         def test_dataloader(self):
+            if use_val_for_testing:
+                return self._dataloader(val_data, shuffle=False)
             return self._dataloader(test_data, shuffle=False)
 
-    model = VoxelModel(
+    model = PafnucyIshVoxelModel(
         in_channels=in_channels,
         hidden_channels=hidden_channels,
+        dense_channels=dense_channels,
+        kernel_sizes=kernel_sizes,
         lr=lr,
         lr_decay=lr_decay,
+        pooling_type=pooling_type,
     )
+    print(model)
     if compile_model:
         model = torch.compile(model)
     logger = WandbLogger(log_model=True)
     callbacks = [
         ModelCheckpoint(monitor="val/loss"),
-        EarlyStopping(monitor="val/mae", min_delta=1e-2, patience=15),
+        EarlyStopping(monitor="val/corr", min_delta=5e-3, patience=15, mode="max"),
     ]
     trainer = Trainer(
-        max_epochs=100, accelerator="auto", logger=logger, callbacks=callbacks
+        min_epochs=min_epochs,
+        max_epochs=max_epochs,
+        accelerator=accelerator,
+        logger=logger,
+        callbacks=callbacks,
+        accumulate_grad_batches=acc_grad_batches,
+        gradient_clip_val=10.0,
     )
     data_module = DataModule()
     trainer.fit(model, data_module)
-    trainer.test(model, data_module, ckpt_path="best")
+    trainer.test(model, data_module.val_dataloader(), ckpt_path="best")
 
     # log all predictions of best model
     df_train = predict_df(model, data_module.train_dataloader(), trainer, "best")
@@ -350,7 +517,7 @@ def train(
     wandb.log({"all_predictions": table})
 
 
-from inspect import Parameter, signature
+from inspect import Parameter, signature  # noqa: E402
 
 train_sig = signature(train)
 parser = ArgumentParser()
