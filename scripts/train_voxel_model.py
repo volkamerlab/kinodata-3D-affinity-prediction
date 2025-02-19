@@ -383,7 +383,7 @@ def train(
     fold: int = 0,
     wandb_mode: str = "online",
     hidden_channels: int = 32,
-    dense_channels: int = 256,
+    dense_channels: int = 512,
     kernel_sizes: str = "4333",
     pooling_type: str = "max",
     lr: float = 1e-4,
