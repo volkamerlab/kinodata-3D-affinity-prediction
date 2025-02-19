@@ -394,7 +394,7 @@ def train(
     compile_model: bool = False,
     num_workers: int = 0,
     use_val_for_testing: bool = False,
-    accelerator: str = "cpu",
+    accelerator: str = "auto",
     min_epochs: int = 100,
     max_epochs: int = 500,
     acc_grad_batches: int = 1,
