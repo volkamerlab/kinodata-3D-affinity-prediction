@@ -214,11 +214,9 @@ class PafnucyIshVoxelModel(VoxelModel):
         )
 
     def forward(self, x):
-        print(x.shape)
         for block, pool in zip(self.blocks, self.pools):
             x = block(x)
             x = pool(x)
-            print(x.shape)
         return self.dense(x)
 
 
