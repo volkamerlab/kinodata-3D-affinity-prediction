@@ -10,34 +10,18 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from docktgrid.molecule import MolecularComplex, MolecularData
-from lightning.pytorch import LightningDataModule, LightningModule, Trainer
+from lightning.pytorch import LightningDataModule, Trainer
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
 from sklearn.model_selection import GroupKFold
-from torch.nn import (
-    BatchNorm3d,
-    Conv3d,
-    LazyConv3d,
-    Identity,
-    MaxPool3d,
-    ReLU,
-    Sequential,
-    LazyLinear,
-    Flatten,
-    BatchNorm1d,
-    Dropout,
-)
-from torch.nn.functional import relu, silu
-from torch import Tensor, nn
-from torch.optim import AdamW
 from torch.utils.data import DataLoader
-from torchmetrics.regression import PearsonCorrCoef
 from tqdm import tqdm
 
 import wandb
 from kinodata.data.grouped_split import _generator_to_list
 from kinodata.data.voxel.dataset import make_voxel_dataset_split
 from kinodata.transform.voxel import PerturbPosition, RandomRotation
+from kinodata.model.voxel import PafnucyIshVoxelModel
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 
@@ -63,221 +47,6 @@ def _collect_vdw_key_errors(train_data, val_data, test_data):
     pd.DataFrame({"key_errors": key_errors, "activity_id": aids}).to_csv(
         "docktgrid_vdw_key_errors.csv"
     )
-
-
-class VoxelModel(LightningModule):
-
-    def __init__(
-        self,
-        in_channels: int,
-        hidden_channels: int = 32,
-        lr: float = 1e-4,
-        lr_decay: float = 1e-5,
-    ):
-        super().__init__()
-        self.corr_metrics = {key: PearsonCorrCoef() for key in ["train", "val", "test"]}
-        self.save_hyperparameters()
-        self.define_model()
-
-    def define_model(self):
-
-        def block(din, dout, kernel_size, stride, padding, act=True, norm=True):
-            return Sequential(
-                Conv3d(din, dout, kernel_size, stride, padding),
-                ReLU() if act else Identity(),
-                BatchNorm3d(dout) if norm else Identity(),
-            )
-
-        nhid = self.hparams.hidden_channels
-        self.cnn_model = Sequential(
-            block(self.hparams.in_channels, nhid, 1, 1, 0),
-            block(nhid, nhid, 3, 1, 1),
-            MaxPool3d(2),
-            block(nhid, nhid, 3, 1, 1),
-            block(nhid, nhid * 2, 3, 1, 1),
-            MaxPool3d(2),
-            block(nhid * 2, nhid * 2, 3, 1, 1),
-            block(nhid * 2, nhid * 4, 3, 1, 1),
-            MaxPool3d(2),
-            block(nhid * 4, nhid * 2, 3, 1, 1),
-            block(nhid * 2, 1, 1, 1, 0, act=False, norm=False),
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        z: torch.Tensor = self.cnn_model(x)
-        pred = z.view(z.size(0), -1).sum(1)
-        return pred
-
-    def configure_optimizers(self):
-        return AdamW(
-            self.parameters(), lr=self.hparams.lr, weight_decay=self.hparams.lr_decay
-        )
-
-    def _step(self, batch, key, *args, **kwargs):
-        x = batch[0]
-        y = batch[1]
-        pred = self(x)
-        loss = (pred.flatten() - y.flatten()).pow(2).mean()
-        mae = (pred.flatten() - y.flatten()).abs().mean()
-        self.log(f"{key}/loss", loss)
-        self.log(f"{key}/mae", mae, on_epoch=True)
-        self.corr_metrics[key](pred.flatten().detach().cpu(), y.flatten().cpu())
-        return x, y, pred, loss
-
-    def _shared_on_epoch_end(self, key):
-        self.log(f"{key}/corr", self.corr_metrics[key].compute())
-        self.corr_metrics[key].reset()
-
-    def on_train_epoch_end(self):
-        return self._shared_on_epoch_end("train")
-
-    def on_validation_epoch_end(self):
-        return self._shared_on_epoch_end("val")
-
-    def on_test_epoch_end(self):
-        return self._shared_on_epoch_end("test")
-
-    def training_step(self, batch, *args, **kwargs):
-        x, y, pred, loss = self._step(batch, "train", *args, **kwargs)
-        return loss
-
-    def validation_step(self, batch, *args, **kwargs):
-        x, y, pred, loss = self._step(batch, "val", *args, **kwargs)
-        return loss
-
-    def test_step(self, batch, *args, **kwargs):
-        x, y, pred, loss = self._step(batch, "test", *args, **kwargs)
-        return loss
-
-    def predict_step(self, batch, *args):
-        x = batch[0]
-        y = batch[1]
-        chembl_activity_id = batch[3]
-        if isinstance(chembl_activity_id, torch.Tensor):
-            chembl_activity_id = chembl_activity_id.cpu().flatten()
-        pred = self.forward(x).flatten()
-        return {
-            "pred": pred,
-            "target": y,
-            "chembl_activity_id": chembl_activity_id,
-        }
-
-
-class PafnucyBlock(nn.Module):
-
-    def __init__(
-        self,
-        kernel_size: int | None = None,
-        hidden_channels: int | None = None,
-        in_channels: int | None = None,
-    ):
-        super().__init__()
-        if in_channels is None:
-            in_channels = hidden_channels
-        if kernel_size is None:
-            kernel_size = 3
-        if in_channels != hidden_channels:
-            self.proj_lin = nn.Conv3d(
-                in_channels, hidden_channels, 1, padding=0, stride=1
-            )
-        else:
-            self.proj_lin = Identity()
-        self.cnn1 = nn.Conv3d(
-            in_channels, hidden_channels, kernel_size, padding="same", stride=1
-        )
-        self.bn1 = nn.BatchNorm3d(hidden_channels)
-        self.cnn2 = nn.Conv3d(hidden_channels, hidden_channels, 1, padding=0, stride=1)
-        self.bn2 = nn.BatchNorm3d(hidden_channels)
-
-    def forward(self, x: Tensor):
-        z = self.cnn1(x)
-        z = self.bn1(z)
-        z = relu(z)
-        z = self.cnn2(z)
-        z = self.bn2(z)
-        return relu(z + self.proj_lin(x))
-
-
-class PafnucyPool(nn.Module):
-
-    def __init__(
-        self,
-        hidden_channels: int,
-        type: str = "max",
-    ):
-        super().__init__()
-        match type:
-            case "max":
-                self.pool = nn.MaxPool3d(2)
-            case "avg":
-                self.pool = nn.AvgPool3d(2)
-            case "learned":
-                self.pool = nn.Conv3d(hidden_channels, hidden_channels, 2, stride=2)
-            case _:
-                raise ValueError(f"Unknown pooling type {type}")
-
-    def forward(self, x: Tensor):
-        return self.pool(x)
-
-
-class PafnucyIshVoxelModel(VoxelModel):
-
-    def __init__(
-        self,
-        in_channels,
-        hidden_channels=32,
-        dense_channels=32,
-        kernel_sizes: list | None = None,
-        lr=0.0001,
-        lr_decay=0.00001,
-        pooling_type: str = "max",
-    ):
-        if kernel_sizes is None:
-            kernel_sizes = [5, 3, 3]
-        super().__init__(in_channels, hidden_channels, lr, lr_decay)
-
-    def define_model(self):
-        self.blocks = nn.ModuleList()
-        self.blocks.append(
-            PafnucyBlock(
-                in_channels=self.hparams.in_channels,
-                hidden_channels=self.hparams.hidden_channels,
-                kernel_size=self.hparams.kernel_sizes[0],
-            )
-        )
-        h_0 = self.hparams.hidden_channels
-        for i, kernel_size in enumerate(self.hparams.kernel_sizes[1:]):
-            in_dim = h_0 * (2**i)
-            out_dim = h_0 * (2 ** (i + 1))
-            self.blocks.append(
-                PafnucyBlock(
-                    in_channels=in_dim, hidden_channels=out_dim, kernel_size=kernel_size
-                )
-            )
-        self.pools = nn.ModuleList(
-            [
-                PafnucyPool(
-                    self.hparams.hidden_channels, type=self.hparams.pooling_type
-                )
-                for _ in range(len(self.hparams.kernel_sizes) - 1)
-            ]
-        )
-        self.dense = Sequential(
-            Flatten(start_dim=1),
-            LazyLinear(self.hparams.dense_channels),
-            ReLU(),
-            BatchNorm1d(self.hparams.dense_channels),
-            LazyLinear(self.hparams.dense_channels // 2),
-            ReLU(),
-            BatchNorm1d(self.hparams.dense_channels // 2),
-            LazyLinear(1),
-        )
-
-    def forward(self, x):
-        for block, pool in zip(self.blocks, self.pools):
-            x = block(x)
-            x = pool(x)
-        return self.dense(x)
 
 
 def make_k_fold_split(
