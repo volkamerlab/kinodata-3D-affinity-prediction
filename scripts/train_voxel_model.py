@@ -167,6 +167,7 @@ def train(
     min_epochs: int = 100,
     max_epochs: int = 500,
     acc_grad_batches: int = 1,
+    pool_every: int = 1,
 ):
     kernel_sizes = [int(k) for k in kernel_sizes]
 
@@ -189,6 +190,7 @@ def train(
             perturb_complex_positions=perturb_complex_positions,
             min_epochs=min_epochs,
             max_epochs=max_epochs,
+            pool_every=pool_every,
         ),
     )
 
@@ -252,6 +254,7 @@ def train(
         lr=lr,
         lr_decay=lr_decay,
         pooling_type=pooling_type,
+        pool_every=pool_every,
     )
     print(model)
     if compile_model:
@@ -259,7 +262,7 @@ def train(
     logger = WandbLogger(log_model=True)
     callbacks = [
         ModelCheckpoint(monitor="val/loss"),
-        EarlyStopping(monitor="val/corr", min_delta=5e-3, patience=15, mode="max"),
+        EarlyStopping(monitor="val/corr", min_delta=5e-4, patience=15, mode="max"),
     ]
     trainer = Trainer(
         min_epochs=min_epochs,
