@@ -41,7 +41,6 @@ from kinodata.data.featurization.residue import (
     load_kissim,
 )
 from kinodata.data.utils.pocket_sequence_klifs import (
-    add_pocket_sequence,
     get_pocket_sequence,
     CachedSequences,
 )
@@ -50,6 +49,8 @@ from kinodata.data.utils.scaffolds import mol_to_scaffold
 from kinodata.transform.filter_activity import FilterActivityType, ActivityTypes
 
 _DATA = Path(__file__).parents[2] / "data"
+
+logger = logging.getLogger(__name__)
 
 
 def to_list(value: Any) -> Sequence:
@@ -78,7 +79,7 @@ def process_raw_data(
     if pocket_sequence_file is None:
         pocket_sequence_file = raw_dir / "pocket_sequences.csv"
     raw_fp = str(raw_dir / file_name)
-    print(f"Reading data frame from {raw_fp}...")
+    logger.info(f"Reading data frame from {raw_fp}...")
     df = PandasTools.LoadSDF(
         raw_fp,
         smilesName="compound_structures.canonical_smiles",
@@ -91,7 +92,7 @@ def process_raw_data(
     df["activities.standard_value"] = df["activities.standard_value"].astype(float)
     df["docking.predicted_rmsd"] = df["docking.predicted_rmsd"].astype(float)
 
-    print(f"Deduping data frame (current size: {df.shape[0]})...")
+    logger.info(f"Deduping data frame (current size: {df.shape[0]})...")
     group_key = [
         "compound_structures.canonical_smiles",
         "UniprotID",
@@ -123,9 +124,9 @@ def process_raw_data(
     ):
         del df[f"{col}.orig"]
     # df.set_index("ID", inplace=True)
-    print(f"{df.shape[0]} complexes remain after deduplication.")
+    logger.info(f"{df.shape[0]} complexes remain after deduplication.")
 
-    print("Checking for missing pocket mol2 files...")
+    logger.info("Checking for missing pocket mol2 files...")
     df["similar.klifs_structure_id"] = (
         df["similar.klifs_structure_id"].astype(float).astype(int)
     )
@@ -156,7 +157,7 @@ def process_raw_data(
     # backwards compatability
     df["ident"] = df.index
 
-    print("Adding pocket sequences...")
+    logger.info("Adding pocket sequences...")
     # KLIFS API now sometimes decides to timeout
     while True:
         try:
@@ -171,22 +172,9 @@ def process_raw_data(
                 df = pd.merge(df, df_sequences, on="similar.klifs_structure_id")
             break
         except Exception as e:
-            print(f"Querying KLIFS for sequence from structure id raised {e}")
-            print("Retrying..")
+            logger.warning(f"Querying KLIFS for sequence from structure id raised {e}")
+            logger.info("Retrying..")
             sleep(10)
-
-    # if pocket_sequence_file.exists():
-    #     print(f"from cached file {pocket_sequence_file}.")
-    #     pocket_sequences = pd.read_csv(pocket_sequence_file)
-    #     pocket_sequences["ident"] = pocket_sequences["ident"].astype(str)
-    #     df = pd.merge(df, pocket_sequences, left_on="ident", right_on="ident")
-    # else:
-    #     print("from KLIFS.")
-    #     df = add_pocket_sequence(df, pocket_sequence_key="structure.pocket_sequence")
-    #     df[["ident", "structure.pocket_sequence", "similar.klifs_structure_id"]].to_csv(
-    #         pocket_sequence_file, index=False
-    #     )
-
     return df
 
 
@@ -257,13 +245,13 @@ class KinodataDockedAgnostic:
     ):
         self.raw_dir = Path(raw_dir)
         self.remove_hydrogen = remove_hydrogen
-        print(f"Loading raw data from {self.raw_dir}...")
+        logger.info(f"Loading raw data from {self.raw_dir}...")
         self._df = process_raw_data(self.raw_dir, remove_hydrogen=remove_hydrogen)
-        print("Converting to data list...")
+        logger.info("Converting to data list...")
         self.data_list = ComplexInformation.from_raw(
             self._df, remove_hydrogen=self.remove_hydrogen
         )
-        print("Done!")
+        logger.info("Done!")
 
     @property
     def data_frame(self) -> pd.DataFrame:
@@ -393,13 +381,13 @@ class KinodataDocked(InMemoryDataset):
 
     def filter_transform(self, data_list: List[HeteroData]) -> List[HeteroData]:
         if self.pre_filter is not None:
-            print("Applying pre filter..")
+            logger.info("Applying pre filter..")
             data_list = [data for data in data_list if self.pre_filter(data)]
         if self.pre_transform is not None:
-            print("Applying pre transform..")
+            logger.info("Applying pre transform..")
             data_list = [self.pre_transform(data) for data in data_list]
         if self.post_filter is not None:
-            print("Applying post filter..")
+            logger.info("Applying post filter..")
             data_list = [data for data in data_list if self.post_filter(data)]
         return data_list
 
@@ -477,7 +465,7 @@ def Filtered(dataset: KinodataDocked, filter: Callable) -> Type[KinodataDocked]:
 def apply_transform_instance_permament(
     dataset: KinodataDocked, transform: Callable[[HeteroData], Optional[HeteroData]]
 ):
-    print(f"Applying permamnent transform {transform} to {dataset}...")
+    logger.info(f"Applying permamnent transform {transform} to {dataset}...")
     transformed_data_list = []
     for index in tqdm(dataset.indices()):
         data = dataset.get(index)
@@ -485,7 +473,7 @@ def apply_transform_instance_permament(
         if transformed_data is None:
             continue
         transformed_data_list.append(transformed_data)
-    print("Done! Collating transformed data list...")
+    logger.info("Done! Collating transformed data list...")
     data, slices = dataset.collate(transformed_data_list)
     dataset.data = data
     dataset.slices = slices
@@ -506,7 +494,7 @@ def process_pyg(
     require_kissim_residues: bool = False,
 ) -> Optional[HeteroData]:
     if complex is None:
-        logging.warning(f"process_pyg received None as complex input")
+        logger.warning(f"process_pyg received None as complex input")
         return None
     data = HeteroData()
     try:
@@ -527,7 +515,7 @@ def process_pyg(
             raise ValueError(residue_representation)
 
     except Exception as e:
-        logging.warning(f"Exception: {e} when processing {complex}")
+        logger.warning(f"Exception: {e} when processing {complex}")
         return None
 
     if require_kissim_residues:
