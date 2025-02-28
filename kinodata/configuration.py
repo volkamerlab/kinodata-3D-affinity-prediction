@@ -180,7 +180,7 @@ def get(*config_names: str) -> Config:
 
 register(
     "data",
-    interaction_radius=5.0,
+    interaction_radius=6.0,
     residue_interaction_radius=12.0,  # deprecated
     node_types=["ligand", "pocket"],
     edge_types=INTRAMOL_STRUCTURAL_EDGE_TYPES[:1] + INTERMOL_STRUCTURAL_EDGE_TYPES,
@@ -213,11 +213,11 @@ register(
     epochs=300,
     num_workers=32 if torch.cuda.is_available() else 0,
     accelerator="gpu" if torch.cuda.is_available() else "cpu",
-    loss_type="mse",
+    loss_type="smooth_l1",
     lr_factor=0.9,
     lr_patience=8,
     early_stopping_patience=24,
     min_lr=1e-6,
-    clip_grad_value=None,
+    clip_grad_value=5,
     dry_run=False,
 )
