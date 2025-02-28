@@ -14,6 +14,7 @@ class RelationType:
     Covalent = "bond"
     Interacts = "interacts"  # between different molecules
     Intraacts = "intraacts"  # within a molecule, superset of covalent interactions
+    IsPartOf = "is_part_of"  # between a residue and a molecule
 
 
 Kwargs = Dict[str, Any]
