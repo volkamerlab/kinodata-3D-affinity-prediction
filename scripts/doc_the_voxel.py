@@ -4,13 +4,13 @@ from pathlib import Path
 import pandas as pd
 import torch
 from tqdm import tqdm
-from train_voxel_model import get_data_split_activity_ids, DATA_DIR, VoxelModel
+from train_voxel_model import get_data_split_activity_ids, DATA_DIR
 from kinodata.data.voxel.dataset import get_kinodata3d_df, default_voxel
 from kinodata.data.voxel.lazy_iterable_dataset import IterableVoxelDataset
 from kinodata.data.voxel.klifs_parser import klifs_mol2_columns
+from kinodata.model.voxel import PafnucyIshVoxelModel as VoxelModel
 
 from torch.utils.data import DataLoader
-from resmo.generate_modified_data import generate_modified_data
 from resmo.protein_model import Mol2ProteinModel
 from resmo.modification import MaskResidue
 import wandb
