@@ -125,7 +125,7 @@ class KinodataKFoldSplit:
         if all(f.exists() for f in split_files):
             return [Split.from_csv(f) for f in split_files]
 
-        activity_ids = [data.activity_id for data in dataset]
+        activity_ids = np.array([data.chembl_activity_id for data in dataset])
         splits = self._split(dataset)
 
         for split, f in zip(splits, split_files):
