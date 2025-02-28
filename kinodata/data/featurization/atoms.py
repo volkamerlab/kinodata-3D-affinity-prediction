@@ -3,6 +3,7 @@ import numpy as np
 from rdkit.Chem import rdchem
 from rdkit import Chem
 from rdkit.Chem import ChemicalFeatures
+from rdkit.Chem.rdchem import HybridizationType
 from rdkit import RDConfig
 import os
 
@@ -107,7 +108,6 @@ class ComposeOneHot(AtomFeaturizer):
 
 
 class ConcatenatedFeaturizer(AtomFeaturizer):
-
     def __init__(self, featurizers):
         self.featurizers = featurizers
 
@@ -133,7 +133,6 @@ class ConcatenatedFeaturizer(AtomFeaturizer):
 
 
 class RDKitFeatures(AtomFeaturizer):
-
     def __init__(self):
         fdefName = os.path.join(RDConfig.RDDataDir, "BaseFeatures.fdef")
         self.factory = ChemicalFeatures.BuildFeatureFactory(fdefName)
@@ -188,6 +187,17 @@ NumHydrogens = OneHotFeaturizer(
 IsAromatic = OneHotFeaturizer(
     [False, True], rdchem.Atom.GetIsAromatic, name="IsAromatic"
 )
+IsInRing = OneHotFeaturizer([False, True], rdchem.Atom.IsInRing, name="IsInRing")
+Hybridization = OneHotFeaturizer(
+    [
+        HybridizationType.SP,
+        HybridizationType.SP2,
+        HybridizationType.SP3,
+    ],
+    rdchem.Atom.GetHybridization,
+    name="Hybridization",
+)
+
 
 AtomFeatures = ComposeOneHot([FormalCharge, NumHydrogens, IsAromatic])
-AtomFeatures = ConcatenatedFeaturizer([AtomFeatures, RDKitFeatures()])
+# AtomFeatures = ConcatenatedFeaturizer([AtomFeatures, RDKitFeatures()])
