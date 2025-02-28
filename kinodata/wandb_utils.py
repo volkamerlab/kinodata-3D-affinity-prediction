@@ -13,21 +13,21 @@ import pandas as pd
 from argparse import ArgumentParser
 from kinodata.configuration import Config
 
+import os
+
 api = wandb.Api()
 
 
-def run_by_name(name):
-    return list(
-        api.runs(f"nextaids/kinodata-docked-rescore", filters={"display_name": name})
-    )[0]
+def run_by_name(name, project="nextaids/kinodata-docked-rescore"):
+    return list(api.runs(project, filters={"display_name": name}))[0]
 
 
-def run_by_id(run_id):
-    return api.run(f"nextaids/kinodata-docked-rescore/{run_id}")
+def run_by_id(run_id, project="nextaids/kinodata-docked-rescore"):
+    return api.run(f"{project}/{run_id}")
 
 
-def latest_k_runs(k: int, state="finished"):
-    return api.runs(f"nextaids/kinodata-docked-rescore", filters={"state": state})[:k]
+def latest_k_runs(k: int, state="finished", project="nextaids/kinodata-docked-rescore"):
+    return api.runs(project, filters={"state": state})[:k]
 
 
 class RunInfo:
@@ -136,3 +136,6 @@ def load_model_lazy(
     if return_config:
         return model, config
     return model
+
+
+def load_wandb_table_as_pandas_data_frame(artifact_dir: Path): ...
