@@ -32,6 +32,7 @@ def train(config, fn_data=make_kinodata_module, fn_model=None):
         accumulate_grad_batches=config.accumulate_grad_batches,
         callbacks=[validation_checkpoint, lr_monitor, early_stopping],
         gradient_clip_val=config.clip_grad_value,
+        gradient_clip_algorithm="norm" if config.clip_grad_value else None,
     )
     if config.dry_run:
         print("Exiting: config.dry_run is set.")
