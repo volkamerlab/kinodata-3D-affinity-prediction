@@ -31,7 +31,7 @@ class FeatureSelection:
 if __name__ == "__main__":
     configuration.register(
         "sparse_transformer",
-        max_num_neighbors=16,
+        max_num_neighbors=32,
         hidden_channels=256,
         num_attention_blocks=3,
         num_heads=8,
@@ -39,8 +39,8 @@ if __name__ == "__main__":
         edge_attr_size=4,
         ln1=True,
         ln2=True,
-        ln3=True,
-        graph_norm=False,
+        ln3=False,
+        graph_norm=True,
         interaction_modes=["covalent", "structural"],
         ablate_binding_features=False,
     )
@@ -74,7 +74,11 @@ if __name__ == "__main__":
     if config.get("ligand_only_3d", None) is not None:
         ott = Compose([ott, ToLigandOnlyComplex()])
 
-    wandb.init(config=config, project="kinodata-docked-rescore", tags=["transformer"])
+    wandb.init(
+        config=config,
+        project="kinodata-docked-rescore",
+        tags=["transformer"] + config.get("tags", []),
+    )
     train(
         config,
         fn_model=make_model,
