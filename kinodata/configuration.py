@@ -213,7 +213,7 @@ register(
     epochs=300,
     num_workers=32 if torch.cuda.is_available() else 0,
     accelerator="gpu" if torch.cuda.is_available() else "cpu",
-    loss_type="smooth_l1",
+    loss_type="mse",
     lr_factor=0.9,
     lr_patience=10,
     early_stopping_patience=24,

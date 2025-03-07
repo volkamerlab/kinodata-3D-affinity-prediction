@@ -47,9 +47,7 @@ if __name__ == "__main__":
     config = configuration.get("data", "training", "sparse_transformer")
     config = config.update_from_file()
     config = config.update_from_args()
-    config["need_distances"] = False
     config["mask_pl_edges"] = False
-    config["ligand_only_3d"] = True
     config["perturb_ligand_positions"] = 0.0
     config["perturb_pocket_positions"] = 0.0
     config["perturb_complex_positions"] = 0.1
@@ -60,7 +58,7 @@ if __name__ == "__main__":
         print(f"{key}: {value}")
 
     ott = TransformToComplexGraph(remove_heterogeneous_representation=True)
-    if config.get("ablate_binding_features"):
+    if config.get("ablate_binding_features", False):
         mask = torch.ones(AtomFeatures.size, dtype=torch.bool)
         ablate = [
             AtomFeatures.get_position("RDKitFeatures", "Donor"),
@@ -71,7 +69,7 @@ if __name__ == "__main__":
         select_transform = FeatureSelection(mask)
         ott = Compose([ott, select_transform])
         config["atom_attr_size"] = mask.sum().item()
-    if config.get("ligand_only_3d", None) is not None:
+    if config.get("ligand_only_3d", False):
         ott = Compose([ott, ToLigandOnlyComplex()])
 
     wandb.init(
