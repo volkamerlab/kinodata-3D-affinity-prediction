@@ -4,7 +4,6 @@ from torch import Tensor, jit
 from torch.nn import Parameter, Module
 
 
-@jit.script
 def gaussian(x, mean, std):
     return torch.exp(-0.5 * (((x - mean) / std) ** 2)) / ((2 * np.pi**0.5) * std)
 
