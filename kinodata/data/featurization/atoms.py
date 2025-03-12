@@ -2,7 +2,7 @@ from typing import Callable, Dict, Generic, List, Optional, Sequence, TypeVar, A
 import numpy as np
 from rdkit.Chem import rdchem
 from rdkit import Chem
-from rdkit.Chem import ChemicalFeatures
+from rdkit.Chem import ChemicalFeatures, rdPartialCharges
 from rdkit.Chem.rdchem import HybridizationType
 from rdkit import RDConfig
 import os
@@ -18,13 +18,32 @@ class AtomFeaturizer:
     def compute(self, mol) -> np.ndarray: ...
 
     def position_meaning(self, k: int) -> tuple[str, Any]:
-        return None
+        return None, None
 
     def get_position(self, key: str, value: Any):
         for j in range(self.size):
             if self.position_meaning(j) == (key, value):
                 return j
         return None
+
+
+class GasteigerCharge(AtomFeaturizer):
+    @property
+    def size(self) -> int:
+        return 1
+
+    def compute(self, mol) -> np.ndarray:
+        try:
+            _ = mol.GetAtomWithIdx(0).GetProp("_GasteigerCharge")
+        except KeyError:
+            rdPartialCharges.ComputeGasteigerCharges(mol)
+        charges = np.zeros((mol.GetNumAtoms(), 1))
+        for i, atom in enumerate(mol.GetAtoms()):
+            charges[i, 0] = float(atom.GetProp("_GasteigerCharge"))
+        return charges
+
+    def position_meaning(self, k: int) -> tuple[str, Any]:
+        return "GasteigerCharge", "GasteigerCharge"
 
 
 class OneHotFeaturizer(AtomFeaturizer, Generic[CT]):
@@ -178,9 +197,6 @@ class RDKitFeatures(AtomFeaturizer):
             return "RDKitFeatures", "Hydrophobe"
 
 
-FormalCharge = OneHotFeaturizer(
-    [-2, -1, 0, 1, 2], rdchem.Atom.GetFormalCharge, name="FormalCharge"
-)
 NumHydrogens = OneHotFeaturizer(
     [0, 1, 2, 3, 4], rdchem.Atom.GetTotalNumHs, name="NumHydrogens"
 )
@@ -199,5 +215,9 @@ Hybridization = OneHotFeaturizer(
 )
 
 
-AtomFeatures = ComposeOneHot([FormalCharge, NumHydrogens, IsAromatic])
-# AtomFeatures = ConcatenatedFeaturizer([AtomFeatures, RDKitFeatures()])
+AtomFeatures = ConcatenatedFeaturizer(
+    [
+        ComposeOneHot([NumHydrogens, IsAromatic, IsInRing, Hybridization]),
+        GasteigerCharge(),
+    ]
+)
