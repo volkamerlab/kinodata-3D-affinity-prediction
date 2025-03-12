@@ -225,7 +225,7 @@ if __name__ == "__main__":
         ].edge_index
         assert data[NodeType.Complex].x.shape[0] > edge_index.max()
 
-    idents = set([int(data["ident"].item()) for data in data_list])
+    idents = set([int(data["chembl_activity_id"].item()) for data in data_list])
     if (not MaskResidues.RESIDUE_INDEX_DIR.exists()) or (
         not any(MaskResidues.RESIDUE_INDEX_DIR.iterdir())
     ):

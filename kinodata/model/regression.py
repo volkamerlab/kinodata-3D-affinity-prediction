@@ -26,6 +26,8 @@ def cat_many(
             return sub_data[key]
         if isinstance(sub_data[key], list):
             return torch.tensor([int(x) for x in sub_data[key]])
+        if isinstance(sub_data[key], str):
+            return torch.tensor([int(sub_data[key])])
         raise ValueError(sub_data, key, "cannot convert to tensor")
 
     return {

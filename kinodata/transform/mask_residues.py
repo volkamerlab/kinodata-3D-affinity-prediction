@@ -100,12 +100,12 @@ def mask_residue(
     data[NodeType.Complex].x = x
     data[NodeType.Complex].z = z
     data[NodeType.Complex].pos = pos
-    data[NodeType.Complex, RelationType.Covalent, NodeType.Complex].edge_index = (
-        edge_index
-    )
-    data[NodeType.Complex, RelationType.Covalent, NodeType.Complex].edge_attr = (
-        edge_attr
-    )
+    data[
+        NodeType.Complex, RelationType.Covalent, NodeType.Complex
+    ].edge_index = edge_index
+    data[
+        NodeType.Complex, RelationType.Covalent, NodeType.Complex
+    ].edge_attr = edge_attr
     return data
 
 
@@ -160,7 +160,7 @@ class MaskResidues(BaseTransform):
 
         pbar = tqdm(df.iterrows(), total=len(df))
         for _, row in pbar:
-            ident = int(row["ident"])
+            ident = int(row["activities.activity_id"])
             target_fname = cls.RESIDUE_INDEX_DIR / f"ident_{ident}.json"
             if target_fname.exists():
                 continue
@@ -210,13 +210,13 @@ class MaskResidues(BaseTransform):
         return sum(len(val) for val in self.open_list.values())
 
     def filter(self, data: HeteroData) -> bool:
-        ident = int(data["ident"].item())
+        ident = int(data["chembl_activity_id"])
         if ident not in self.open_list:
             return False
         return len(self.open_list[ident]) > 0
 
     def __call__(self, data: HeteroData) -> HeteroData:
-        ident = int(data["ident"].item())
+        ident = int(data["chembl_activity_id"])
         open_residues = self.open_list[ident]
         if len(open_residues) == 0:
             data["masked_residue"] = torch.tensor([-1])

@@ -11,13 +11,15 @@ from kinodata.data.utils.remap_residue_index import remap_residue_index
 
 
 print("Reading base data...")
-df = pd.read_csv('data/processed/kinodata3d.csv')
+df = pd.read_csv("data/processed/kinodata3d_v2.csv")
 
 
 pbar = tqdm(df.iterrows(), total=len(df))
 for _, row in pbar:
-    ident = int(row["ident"])
-    target_fname = Path("data") / "processed" / "residue_atom_index" / f"ident_{ident}.json"
+    ident = int(row["activities.activity_id"])
+    target_fname = (
+        Path("data") / "processed" / "residue_atom_index" / f"ident_{ident}.json"
+    )
     if target_fname.exists():
         continue
     pocket_file = Path(row["pocket_mol2_file"])

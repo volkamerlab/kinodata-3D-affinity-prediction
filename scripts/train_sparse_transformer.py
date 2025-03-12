@@ -31,7 +31,7 @@ class FeatureSelection:
 if __name__ == "__main__":
     configuration.register(
         "sparse_transformer",
-        max_num_neighbors=32,
+        max_num_neighbors=16,
         hidden_channels=256,
         num_attention_blocks=3,
         num_heads=8,
@@ -53,6 +53,10 @@ if __name__ == "__main__":
     config["perturb_complex_positions"] = 0.1
     config["node_types"] = [NodeType.Complex]
     config["atom_attr_size"] = AtomFeatures.size
+
+    config["run_crocodoc"] = True
+    config["crocodoc_model"] = "best"
+    config["mask_type"] = "atom_objects"
 
     for key, value in sorted(config.items(), key=lambda i: i[0]):
         print(f"{key}: {value}")
@@ -76,6 +80,7 @@ if __name__ == "__main__":
         config=config,
         project="kinodata-docked-rescore",
         tags=["transformer"] + config.get("tags", []),
+        mode=config.get("wandb_mode", "online"),
     )
     train(
         config,

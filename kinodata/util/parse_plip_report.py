@@ -11,6 +11,15 @@ logger = logging.getLogger(__name__)
 
 from tqdm import tqdm
 
+PLIP_INTERACTION_TYPES = [
+    "Hydrogen Bonds",
+    "Hydrophobic Interactions",
+    "Salt Bridges",
+    "Halogen Bonds",
+    "pi-Stacking",
+    "pi-Cation Interactions",
+]
+
 
 def _is_separator(line: str) -> bool:
     return all([c in ["+", "-", "="] for c in line.strip()])
@@ -59,6 +68,7 @@ def parse_rst_table_file(
 
     num_ligands = table.count("SMALLMOLECULE")
     if max_num_ligands is not None and num_ligands > max_num_ligands:
+        logger.warning(f"Skipping {path} because it has {num_ligands} ligands")
         return None
 
     lines = table.split("\n")
@@ -75,7 +85,13 @@ def parse_rst_table_file(
             except StopIteration:
                 break
         if any([name in line for name in table_names]):
-            table_name = line.strip().replace("*", "").lower().replace(" ", "_")
+            table_name = (
+                line.strip()
+                .replace("*", "")
+                .lower()
+                .replace(" ", "_")
+                .replace("-", "_")
+            )
             lines = []
             while True:
                 try:
@@ -132,7 +148,7 @@ def test_random_plip_report():
     random.seed(time.time())
     plip_report_file = random.choice(list(plip_report_path.glob("*.txt")))
     dfs = parse_rst_table_file(
-        plip_report_file, table_names=["Hydrogen Bonds", "Hydrophobic Interactions"]
+        plip_report_file, table_names=PLIP_INTERACTION_TYPES, max_num_ligands=1
     )
     for key, df in dfs.items():
         print(key, df.shape)
@@ -146,7 +162,7 @@ def main():
     for report_file in tqdm(plip_report_path.glob("*.txt")):
         dfs = parse_rst_table_file(
             report_file,
-            table_names=["Hydrogen Bonds", "Hydrophobic Interactions"],
+            table_names=PLIP_INTERACTION_TYPES,
             max_num_ligands=1,
         )
         if dfs is None:
@@ -155,12 +171,16 @@ def main():
         for key, df in dfs.items():
             df["activity_id"] = activity_id
             interactions[key].append(df)
-    pd.concat(interactions["hydrogen_bonds"], axis=0).to_csv(
-        plip_path / "processed" / "hydrogen_bonds.csv", index=False
-    )
-    pd.concat(interactions["hydrophobic_interactions"], axis=0).to_csv(
-        plip_path / "processed" / "hydrophobic_interactions.csv", index=False
-    )
+    print(interactions.keys())
+    for intr_type in PLIP_INTERACTION_TYPES:
+        key = intr_type.lower().replace(" ", "_").replace("-", "_")
+        if key not in interactions:
+            logger.warning(f"Skipping {key}")
+            continue
+        logger.info(f"Processing {key}")
+        pd.concat(interactions[key], axis=0).to_csv(
+            plip_path / "processed" / f"{key}.csv", index=False
+        )
 
 
 if __name__ == "__main__":
