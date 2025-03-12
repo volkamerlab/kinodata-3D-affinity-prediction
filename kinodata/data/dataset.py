@@ -364,7 +364,6 @@ class KinodataDocked(InMemoryDataset):
             tasks = [
                 (_complex, self.residue_representation, self.require_kissim_residues)
                 for _complex in complex_info
-                if _complex.predicted_rmsd < 2.1
             ]
             with mp.Pool(os.cpu_count()) as pool:
                 data_list = pool.map(_process_pyg, tqdm(tasks))
