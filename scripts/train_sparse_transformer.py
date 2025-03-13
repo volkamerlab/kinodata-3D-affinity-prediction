@@ -57,8 +57,7 @@ if __name__ == "__main__":
 
     parser = config.argparser(overwrite_default_values=False)
     args = parser.parse_args()
-    print(vars(args))
-    assert False
+    config = config.update(vars(args))
 
     for key, value in sorted(config.items(), key=lambda i: i[0]):
         print(f"{key}: {value}")
