@@ -32,19 +32,6 @@ T = TypeVar("T")
 _ROOT = Path(__file__).parents[1]
 
 
-def _find_default_config_file():
-    try:
-        idx = sys.argv.index("--config")
-        fp = Path(sys.argv[idx + 1])
-        return fp
-    except ValueError:
-        fp = _ROOT
-        yaml_files = list(fp.glob("*.yaml"))
-        if len(yaml_files) == 1:
-            return yaml_files[0]
-    return None
-
-
 class Config(dict):
     def __getattribute__(self, __name: str) -> Any:
         if __name in self:
@@ -105,8 +92,6 @@ class Config(dict):
         fp: Union[str, Path, None] = None,
         verbose: bool = True,
     ) -> "Config":
-        if fp is None:
-            fp = _find_default_config_file()
         if fp is None:
             warn("Unable to find a config file")
             return self
@@ -218,6 +203,6 @@ register(
     lr_patience=10,
     early_stopping_patience=24,
     min_lr=1e-6,
-    clip_grad_value=10,
+    clip_grad_value=None,
     dry_run=False,
 )
