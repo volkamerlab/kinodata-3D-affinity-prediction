@@ -113,7 +113,7 @@ def crocodoc_cgnn(
                 "chembl_activity_id": data["chembl_activity_id"],
                 "klifs_structure_id": data["klifs_structure_id"],
             }
-            for data in transformed_data_list
+            for data in data_list
         ]
     )
     reference_df = pd.DataFrame(
