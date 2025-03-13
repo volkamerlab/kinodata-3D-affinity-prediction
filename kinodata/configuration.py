@@ -80,6 +80,9 @@ class Config(dict):
         for arg in extra_kwd_args:
             parser.add_argument(f"--{arg}", default=None, type=str)
         args, unknown = parser.parse_known_args()
+        if len(unknown) > 0:
+            for arg in vars(args).keys():
+                print(f"Unknown argument: {arg}")
         shared_args = {key: getattr(args, key) for key in self if hasattr(args, key)}
         updated_args = {
             key: value for key, value in shared_args.items() if value is not None

@@ -45,18 +45,20 @@ if __name__ == "__main__":
         ablate_binding_features=False,
     )
     config = configuration.get("data", "training", "sparse_transformer")
-    config = config.update_from_file()
-    config = config.update_from_args()
     config["mask_pl_edges"] = False
     config["perturb_ligand_positions"] = 0.0
     config["perturb_pocket_positions"] = 0.0
     config["perturb_complex_positions"] = 0.1
     config["node_types"] = [NodeType.Complex]
     config["atom_attr_size"] = AtomFeatures.size
-
     config["run_crocodoc"] = True
     config["crocodoc_model"] = "best"
     config["mask_type"] = "atom_objects"
+
+    parser = config.argparser(overwrite_default_values=False)
+    args = parser.parse_args()
+    print(vars(args))
+    assert False
 
     for key, value in sorted(config.items(), key=lambda i: i[0]):
         print(f"{key}: {value}")
