@@ -76,7 +76,7 @@ def train(config, fn_data=make_kinodata_module, fn_model=None):
     # log crocodoc results if enabled
     if config.get("run_crocodoc", False):
         mask_type = config.get("mask_type", None)
-        crocodoc_train = crocodoc_cgnn(
+        crocodoc_train, ref_train = crocodoc_cgnn(
             model,
             data_module.test_dataset,
             trainer,
@@ -84,7 +84,8 @@ def train(config, fn_data=make_kinodata_module, fn_model=None):
             ckpt_path=config.get("crocodoc_model", None),
         )
         crocodoc_train["split"] = "train"
-        crocodoc_test = crocodoc_cgnn(
+        ref_train["split"] = "train"
+        crocodoc_test, ref_test = crocodoc_cgnn(
             model,
             data_module.test_dataset,
             trainer,
@@ -92,10 +93,13 @@ def train(config, fn_data=make_kinodata_module, fn_model=None):
             ckpt_path=config.get("crocodoc_model", None),
         )
         crocodoc_test["split"] = "test"
+        ref_test["split"] = "test"
         crocodoc_table = wandb.Table(
             dataframe=pd.concat([crocodoc_train, crocodoc_test])
         )
-        wandb.log({"crocodoc_results": crocodoc_table})
+        ref_table = wandb.Table(dataframe=pd.concat([ref_train, ref_test]))
+        wandb.log({"crocodoc_masked_predictions": crocodoc_table})
+        wandb.log({"crocodoc_reference_predictions": ref_table})
 
     # log all predictions of the best model
     df_train = predict_df(model, data_module.train_dataloader(), trainer, "best")

@@ -97,8 +97,8 @@ def crocodoc_cgnn(
         dfs.append(df)
         if len(masking) == 0:
             break
+
     masked_pred_df = pd.concat(dfs)
-    masked_pred_df["is_reference"] = False
     reference_predictions = cat_many(
         trainer.predict(
             model,
@@ -124,9 +124,5 @@ def crocodoc_cgnn(
             "reference_pred": reference_predictions["pred"].cpu().numpy(),
         }
     )
-    reference_df["is_reference"] = True
-    for col in masked_pred_df.columns:
-        if col not in reference_df.columns:
-            reference_df[col] = None
 
-    return pd.concat([masked_pred_df, reference_df])
+    return masked_pred_df, reference_df
