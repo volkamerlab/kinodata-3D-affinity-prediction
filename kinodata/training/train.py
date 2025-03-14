@@ -89,7 +89,7 @@ def train(config, fn_data=make_kinodata_module, fn_model=None):
         mask_type = config.get("mask_type", None)
         crocodoc_train, ref_train = crocodoc_cgnn(
             model,
-            data_module.test_dataset,
+            data_module.train_dataset,
             trainer,
             mask_type=mask_type,
             ckpt_path=config.get("crocodoc_model", None),
