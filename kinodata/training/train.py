@@ -11,6 +11,8 @@ from kinodata.data.data_module import make_kinodata_module
 import kinodata.transform as T
 from .predict import predict_df
 from .crocodoc import crocodoc_cgnn
+import os.path as osp
+import gzip
 
 
 def _remove_augementation_transforms_from_dataset(dataset):
@@ -38,6 +40,15 @@ def _remove_augmentation_transforms_from_data_module(data_module):
         data_module.test_dataset
     )
     return data_module
+
+
+def log_large_table(df, name):
+    artifact = wandb.Artifact(name, type="large_table")
+    file_name = osp.join(wandb.run.dir / f"{name}.csv.gz")
+    print(f"Saving large table to {file_name}")
+    df.to_csv(file_name, index=False, compression="infer")
+    artifact.add_file(file_name)
+    wandb.log_artifact(artifact)
 
 
 def train(config, fn_data=make_kinodata_module, fn_model=None):
@@ -94,12 +105,12 @@ def train(config, fn_data=make_kinodata_module, fn_model=None):
         )
         crocodoc_test["split"] = "test"
         ref_test["split"] = "test"
-        crocodoc_table = wandb.Table(
-            dataframe=pd.concat([crocodoc_train, crocodoc_test])
+        log_large_table(
+            pd.concat([crocodoc_train, crocodoc_test]), "crocodoc_masked_predictions"
         )
-        ref_table = wandb.Table(dataframe=pd.concat([ref_train, ref_test]))
-        wandb.log({"crocodoc_masked_predictions": crocodoc_table})
-        wandb.log({"crocodoc_reference_predictions": ref_table})
+        log_large_table(
+            pd.concat([ref_train, ref_test]), "crocodoc_reference_predictions"
+        )
 
     # log all predictions of the best model
     df_train = predict_df(model, data_module.train_dataloader(), trainer, "best")
