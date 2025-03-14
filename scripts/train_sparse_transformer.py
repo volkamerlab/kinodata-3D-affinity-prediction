@@ -28,6 +28,7 @@ class FeatureSelection:
         return data
 
 
+DEBUG = False
 if __name__ == "__main__":
     configuration.register(
         "sparse_transformer",
@@ -54,6 +55,14 @@ if __name__ == "__main__":
     config["run_crocodoc"] = True
     config["crocodoc_model"] = "best"
     config["mask_type"] = "atom_objects"
+
+    if DEBUG:
+        config["hidden_channels"] = 16
+        config["num_attention_blocks"] = 1
+        config["num_heads"] = 1
+        config["max_num_neighbors"] = 8
+        config["overfit_batches"] = 0.1
+        config["epochs"] = 1
 
     parser = config.argparser(overwrite_default_values=False)
     args = parser.parse_args()

@@ -44,7 +44,7 @@ def _remove_augmentation_transforms_from_data_module(data_module):
 
 def log_large_table(df, name):
     artifact = wandb.Artifact(name, type="large_table")
-    file_name = osp.join(wandb.run.dir / f"{name}.csv.gz")
+    file_name = osp.join(wandb.run.dir, f"{name}.csv.gz")
     print(f"Saving large table to {file_name}")
     df.to_csv(file_name, index=False, compression="infer")
     artifact.add_file(file_name)
