@@ -56,6 +56,7 @@ if __name__ == "__main__":
     config["run_crocodoc"] = True
     config["crocodoc_model"] = "best"
     config["mask_type"] = "atom_objects"
+    config["num_workers"] = 0
 
     if config.get("covalent_only", False):
         config["interaction_modes"] = ["covalent"]
