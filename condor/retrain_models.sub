@@ -1,7 +1,7 @@
 universe = docker
 docker_image = gjoschka/kinodata3d-pt2.5.1-cu121-cudnn9
 executable = sweep_cgnn.sh
-arguments = --split_index $(index) --filter_rmsd_max_value $(rmsd) --split_type $(split) --hidden_channels $(hidden_channels) --num_heads $(num_heads) --num_attention_blocks $(num_attention_blocks) --lr $(lr) --weight_decay $(weight_decay) --batch_size $(batch_size) --accumulate_grad_batches $(accumulate_grad_batches) --loss_type $(loss_type)
+arguments = --split_index $(index) --filter_rmsd_max_value $(rmsd) --split_type $(split) --hidden_channels $(hidden_channels) --num_heads $(num_heads) --num_attention_blocks $(num_attention_blocks) --lr $(lr) --weight_decay $(weight_decay) --batch_size $(batch_size) --accumulate_grad_batches $(accumulate_grad_batches) --loss_type $(loss_type) --covalent_only $(covalent_only)
 output = retrain_models.$(ClusterId).$(ProcId).out
 error = retrain_models.$(ClusterId).$(ProcId).err
 log = retrain_models.$(ClusterId).log
@@ -12,15 +12,15 @@ request_CPUs = 32
 request_memory = 128G
 requirements = (UidDomain == "cs.uni-saarland.de") && (GPUs_GlobalMemoryMb >= 32000)
 +WantGPUHomeMounted = true
-queue index, rmsd, split, hidden_channels, num_heads, num_attention_blocks, lr, weight_decay, batch_size, accumulate_grad_batches, loss_type  from (
-    0, 100, scaffold-k-fold, 256, 4, 3, 0.0001, 0.00003, 32, 4, mse
-    0, 100, pocket-k-fold, 256, 4, 3, 0.0001, 0.00003, 32, 4, mse
-    1, 100, scaffold-k-fold, 256, 4, 3, 0.0001, 0.00003, 32, 4, mse
-    1, 100, pocket-k-fold, 256, 4, 3, 0.0001, 0.00003, 32, 4, mse
-    2, 100, scaffold-k-fold, 256, 4, 3, 0.0001, 0.00003, 32, 4, mse
-    2, 100, pocket-k-fold, 256, 4, 3, 0.0001, 0.00003, 32, 4, mse
-    3, 100, scaffold-k-fold, 256, 4, 3, 0.0001, 0.00003, 32, 4, mse
-    3, 100, pocket-k-fold, 256, 4, 3, 0.0001, 0.00003, 32, 4, mse
-    4, 100, scaffold-k-fold, 256, 4, 3, 0.0001, 0.00003, 32, 4, mse
-    4, 100, pocket-k-fold, 256, 4, 3, 0.0001, 0.00003, 32, 4, mse
+queue index, rmsd, split, hidden_channels, num_heads, num_attention_blocks, lr, weight_decay, batch_size, accumulate_grad_batches, loss_type, covalent_only from (
+    0, 100, scaffold-k-fold, 256, 4, 3, 0.0001, 0.00003, 32, 4, mse, True
+    0, 100, pocket-k-fold, 256, 4, 3, 0.0001, 0.00003, 32, 4, mse, True
+    1, 100, scaffold-k-fold, 256, 4, 3, 0.0001, 0.00003, 32, 4, mse, True
+    1, 100, pocket-k-fold, 256, 4, 3, 0.0001, 0.00003, 32, 4, mse, True
+    2, 100, scaffold-k-fold, 256, 4, 3, 0.0001, 0.00003, 32, 4, mse, True
+    2, 100, pocket-k-fold, 256, 4, 3, 0.0001, 0.00003, 32, 4, mse, True
+    3, 100, scaffold-k-fold, 256, 4, 3, 0.0001, 0.00003, 32, 4, mse, True
+    3, 100, pocket-k-fold, 256, 4, 3, 0.0001, 0.00003, 32, 4, mse, True
+    4, 100, scaffold-k-fold, 256, 4, 3, 0.0001, 0.00003, 32, 4, mse, True
+    4, 100, pocket-k-fold, 256, 4, 3, 0.0001, 0.00003, 32, 4, mse, True
 )

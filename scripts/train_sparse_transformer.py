@@ -43,6 +43,7 @@ if __name__ == "__main__":
         ln3=False,
         graph_norm=True,
         interaction_modes=["covalent", "structural"],
+        covalent_only=False,
         ablate_binding_features=False,
     )
     config = configuration.get("data", "training", "sparse_transformer")
@@ -55,6 +56,9 @@ if __name__ == "__main__":
     config["run_crocodoc"] = True
     config["crocodoc_model"] = "best"
     config["mask_type"] = "atom_objects"
+
+    if config.get("covalent_only", False):
+        config["interaction_modes"] = ["covalent"]
 
     if DEBUG:
         config["hidden_channels"] = 16
