@@ -31,6 +31,18 @@ T = TypeVar("T")
 
 _ROOT = Path(__file__).parents[1]
 
+_true_constants = ["true", "t", "yes", "y"]
+_false_constants = ["false", "f", "no", "n"]
+_str_bool_constants = _true_constants + _false_constants
+
+
+def str_bool(s: str) -> bool:
+    if s.lower() in _true_constants:
+        return True
+    if s.lower() in _false_constants:
+        return False
+    raise ValueError(f"Invalid boolean string: {s}")
+
 
 class Config(dict):
     def __getattribute__(self, __name: str) -> Any:
@@ -64,15 +76,23 @@ class Config(dict):
 
     def argparser(
         self,
-        admissible_types: list = [int, float, str, Path],
+        admissible_types: list = [bool, int, float, str, Path],
         overwrite_default_values: bool = True,
     ) -> ArgumentParser:
+        print("Creating argparse parser for config..")
         parser = ArgumentParser()
         for key, value in self.items():
             if not any(isinstance(value, t) for t in admissible_types):
+                print("Skipping in argparse creation", key, value)
                 continue
             default = None if overwrite_default_values else value
-            parser.add_argument(f"--{key}", default=default, type=type(value))
+            arg_type = type(value)
+            if (arg_type is bool) or str(default).lower() in _str_bool_constants:
+                print(f"bool type encountered ({key})")
+                if arg_type is not bool:
+                    print(f"Warn: {key} is {arg_type} but will be treated as bool")
+                arg_type = str_bool
+            parser.add_argument(f"--{key}", default=default, type=arg_type)
         return parser
 
     def update_from_args(self, *extra_kwd_args: str) -> "Config":
