@@ -29,7 +29,7 @@ from tqdm import tqdm
 from rdkit import RDLogger
 
 from kinodata.data.featurization.biopandas import add_pocket_information
-from kinodata.data.featurization.rdkit import (
+from kinodata.data.featurization.rd_features import (
     set_atoms,
     set_bonds,
 )

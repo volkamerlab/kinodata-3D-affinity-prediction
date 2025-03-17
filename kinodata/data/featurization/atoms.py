@@ -1,7 +1,6 @@
 from typing import Callable, Dict, Generic, List, Optional, Sequence, TypeVar, Any
 import numpy as np
 from rdkit.Chem import rdchem
-from rdkit import Chem
 from rdkit.Chem import ChemicalFeatures, rdPartialCharges
 from rdkit.Chem.rdchem import HybridizationType
 from rdkit import RDConfig
@@ -221,3 +220,7 @@ AtomFeatures = ConcatenatedFeaturizer(
         GasteigerCharge(),
     ]
 )
+
+if __name__ == "__main__":
+    for k in range(AtomFeatures.size):
+        print(k, AtomFeatures.position_meaning(k))
