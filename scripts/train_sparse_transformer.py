@@ -58,9 +58,6 @@ if __name__ == "__main__":
     config["mask_type"] = "atom_objects"
     config["num_workers"] = 0
 
-    if config.get("covalent_only", False):
-        config["interaction_modes"] = ["covalent"]
-
     if DEBUG:
         config["hidden_channels"] = 16
         config["num_attention_blocks"] = 1
@@ -72,6 +69,9 @@ if __name__ == "__main__":
     parser = config.argparser(overwrite_default_values=False)
     args = parser.parse_args()
     config = config.update(vars(args))
+
+    if config.get("covalent_only", False):
+        config["interaction_modes"] = ["covalent"]
 
     for key, value in sorted(config.items(), key=lambda i: i[0]):
         print(f"{key}: {value}")
