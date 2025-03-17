@@ -36,7 +36,7 @@ class FeatureSelection:
         return data
 
 
-DEBUG = True
+DEBUG = False
 if __name__ == "__main__":
     configuration.register(
         "sparse_transformer",
@@ -48,8 +48,8 @@ if __name__ == "__main__":
         edge_attr_size=4,
         ln1=True,
         ln2=True,
-        ln3=False,
-        graph_norm=True,
+        ln3=True,
+        graph_norm=False,
         interaction_modes=["covalent", "structural"],
         covalent_only=False,
         ablate_binding_features=False,
@@ -78,10 +78,15 @@ if __name__ == "__main__":
     tags = []
     parser = config.argparser(overwrite_default_values=False)
     args = parser.parse_args()
+    print(args)
     config = config.update(vars(args))
 
     if config.get("covalent_only", False):
         config["interaction_modes"] = ["covalent"]
+        config["covalent_only"] = True
+    else:
+        config["interaction_modes"] = ["covalent", "structural"]
+        config["covalent_only"] = False
 
     for key, value in sorted(config.items(), key=lambda i: i[0]):
         print(f"{key}: {value}")
