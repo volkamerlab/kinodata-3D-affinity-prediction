@@ -11,7 +11,7 @@ from kinodata.data.data_module import make_kinodata_module
 import kinodata.transform as T
 from .predict import predict_df
 from .crocodoc import (
-    crocodoc_cgnn,
+    load_pli_reference,
     CrocodocCallback,
     remove_augmentation_transforms_from_data_module,
 )
@@ -51,7 +51,9 @@ def train(config, fn_data=make_kinodata_module, fn_model=None):
             mask_type=config.get("mask_type", None),
             start_epoch=config.get("crocodoc_start_epoch", 0),
             frequency=config.get("crocodoc_frequency", 25),
-            accelarator=config.accelerator,
+            pli_reference=load_pli_reference(
+                config.get("pli_reference_path", None),
+            ),
         )
         callbacks.append(crocodoc_callback)
 
