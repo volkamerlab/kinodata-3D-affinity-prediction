@@ -30,6 +30,12 @@ def latest_k_runs(k: int, state="finished", project="nextaids/kinodata-docked-re
     return api.runs(project, filters={"state": state})[:k]
 
 
+def load_wandb_config(json_config):
+    config = json.loads(json_config)
+    config = {k: v["value"] for k, v in config.items()}
+    return Config(config)
+
+
 class RunInfo:
     def __init__(self, run) -> None:
         self.run = run
@@ -43,9 +49,7 @@ class RunInfo:
 
     @cached_property
     def config(self) -> Dict[str, Any]:
-        config = json.loads(self.run.json_config)
-        config = {k: v["value"] for k, v in config.items()}
-        return Config(config)
+        return load_wandb_config(self.run.json_config)
 
     def rename_run(self, name: str = None):
         if name is None:

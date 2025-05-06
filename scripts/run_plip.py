@@ -20,6 +20,8 @@ def create_plip_text_report(
     input_complex = (
         f"data/raw/pdb/{klifs_structure_id}_{chembl_activity_id}_complex.pdb"
     )
+    if os.path.exists(plip_raw):
+        shutil.rmtree(plip_raw)
     os.mkdir(plip_raw)
     sp.run(
         [

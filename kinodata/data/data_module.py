@@ -1,4 +1,5 @@
 from copy import deepcopy
+import copy
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Type, Union
@@ -38,47 +39,41 @@ def assert_unique_value(key: str, *kwarg_dicts: Optional[Kwargs], msg: str = "")
 
 
 def create_dataset(
-    cls: Type[InMemoryDataset],
-    kwargs: Kwargs,
-    split: Union[int, np.integer, IndexType, None],
-    one_time_transform: Callable[[InMemoryDataset], InMemoryDataset],
+    dataset: InMemoryDataset,
+    transform: Optional[Callable] = None,
+    split: Union[int, np.integer, IndexType, None] = None,
+    subset_data: int = 0,
 ) -> Optional[InMemoryDataset]:
     if split is None:
         return None
-    dataset = cls(**kwargs)
-    if one_time_transform is not None:
-        dataset = one_time_transform(dataset)
-    return dataset[split]
+    dataset = copy.copy(dataset)
+    dataset.transform = transform
+    dataset = dataset[split]
+    if subset_data > 0:
+        dataset = dataset[:subset_data]
+    return dataset
 
 
 def make_data_module(
     split: Split,
     batch_size: int,
     num_workers: int,
-    dataset_cls: type[InMemoryDataset],
-    train_kwargs: Kwargs,
-    val_kwargs: Optional[Kwargs] = None,
-    test_kwargs: Optional[Kwargs] = None,
+    dataset: InMemoryDataset,
+    train_transform: Callable = None,
+    val_transform: Callable = None,
+    test_transform: Callable = None,
     one_time_transform: Optional[Callable[[InMemoryDataset], InMemoryDataset]] = None,
+    subset_data: int = 0,
     **kwargs,
 ) -> LightningDataset:
-    assert_unique_value("pre_transform", train_kwargs, val_kwargs, test_kwargs)
-
-    if split.val_split is not None and val_kwargs is None:
-        val_kwargs = deepcopy(train_kwargs)
-
-    if split.test_split is not None and test_kwargs is None:
-        test_kwargs = deepcopy(val_kwargs)
-
+    dataset = one_time_transform(dataset) if one_time_transform else dataset
     train_dataset = create_dataset(
-        dataset_cls, train_kwargs, split.train_split, one_time_transform
+        dataset, train_transform, split.train_split, subset_data
     )
     assert train_dataset is not None
-    val_dataset = create_dataset(
-        dataset_cls, val_kwargs, split.val_split, one_time_transform
-    )
+    val_dataset = create_dataset(dataset, val_transform, split.val_split, subset_data)
     test_dataset = create_dataset(
-        dataset_cls, test_kwargs, split.test_split, one_time_transform
+        dataset, test_transform, split.test_split, subset_data
     )
 
     return LightningDataset(
@@ -121,7 +116,7 @@ def fix_split_for_batch_norm(split: Split, batch_size: int) -> Split:
 
 
 def make_kinodata_module(
-    config: Config, transforms=None, one_time_transform=None
+    config: Config, transforms=None, one_time_transform=None, subset_data=0
 ) -> LightningDataset:
     dataset_cls = partial(KinodataDocked, remove_hydrogen=config.remove_hydrogen)
 
@@ -171,7 +166,6 @@ def make_kinodata_module(
         splitter = KinodataKFoldSplit(config.split_type, config.k_fold)
         splits = splitter.split(dataset)
         split = splits[config.split_index]
-    del dataset
 
     # dirty batchnorm fix
     split = fix_split_for_batch_norm(split, config.batch_size)
@@ -184,11 +178,12 @@ def make_kinodata_module(
         split,
         config.batch_size,
         config.num_workers,
-        dataset_cls=dataset_cls,  # type: ignore
-        train_kwargs={"transform": train_transform},
-        val_kwargs={"transform": val_transform},
-        test_kwargs={"transform": val_transform},
+        dataset=dataset,  # type: ignore
+        train_transform=train_transform,
+        val_transform=val_transform,
+        test_transform=val_transform,
         one_time_transform=one_time_transform,
+        subset_data=subset_data,
     )
     if (group_key := config.get("target_normalization_group", None)) is not None:
         # TODO maybe we want to return the transform for further use?

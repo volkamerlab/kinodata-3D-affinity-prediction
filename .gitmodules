@@ -1,0 +1,3 @@
+[submodule "Kincore-standalone2"]
+	path = Kincore-standalone2
+	url = git@github.com:DunbrackLab/Kincore-standalone2.git

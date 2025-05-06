@@ -10,36 +10,13 @@ import wandb
 from kinodata.data.data_module import make_kinodata_module
 import kinodata.transform as T
 from .predict import predict_df
-from .crocodoc import crocodoc_cgnn
+from .crocodoc import (
+    crocodoc_cgnn,
+    CrocodocCallback,
+    remove_augmentation_transforms_from_data_module,
+)
 import os.path as osp
 import gzip
-
-
-def _remove_augementation_transforms_from_dataset(dataset):
-    if isinstance(dataset.transform, T.Compose):
-        dataset.transform = T.Compose(
-            [
-                t
-                for t in dataset.transform.transforms
-                if not isinstance(t, T.PerturbAtomPositions)
-            ]
-        )
-    elif isinstance(dataset.transform, T.PerturbAtomPositions):
-        dataset.transform = None
-    return dataset
-
-
-def _remove_augmentation_transforms_from_data_module(data_module):
-    data_module.train_dataset = _remove_augementation_transforms_from_dataset(
-        data_module.train_dataset
-    )
-    data_module.val_dataset = _remove_augementation_transforms_from_dataset(
-        data_module.val_dataset
-    )
-    data_module.test_dataset = _remove_augementation_transforms_from_dataset(
-        data_module.test_dataset
-    )
-    return data_module
 
 
 def log_large_table(df, name):
@@ -63,6 +40,20 @@ def train(config, fn_data=make_kinodata_module, fn_model=None):
     early_stopping = EarlyStopping(
         monitor="val/mae", patience=config.early_stopping_patience, mode="min"
     )
+    callbacks = [validation_checkpoint, lr_monitor, early_stopping]
+    if config.get("run_crocodoc", False):
+        crocodoc_callback = CrocodocCallback(
+            datasets={
+                "train": data_module.train_dataset,
+                "val": data_module.val_dataset,
+                "test": data_module.test_dataset,
+            },
+            mask_type=config.get("mask_type", None),
+            start_epoch=config.get("crocodoc_start_epoch", 0),
+            frequency=config.get("crocodoc_frequency", 25),
+            accelarator=config.accelerator,
+        )
+        callbacks.append(crocodoc_callback)
 
     trainer = pl.Trainer(
         logger=logger,
@@ -70,10 +61,9 @@ def train(config, fn_data=make_kinodata_module, fn_model=None):
         max_epochs=config.epochs,
         accelerator=config.accelerator,
         accumulate_grad_batches=config.accumulate_grad_batches,
-        callbacks=[validation_checkpoint, lr_monitor, early_stopping],
+        callbacks=callbacks,
         gradient_clip_val=config.clip_grad_value,
         gradient_clip_algorithm="norm" if config.clip_grad_value else None,
-        overfit_batches=config.get("overfit_batches", 0),
     )
     if config.dry_run:
         print("Exiting: config.dry_run is set.")
@@ -82,36 +72,7 @@ def train(config, fn_data=make_kinodata_module, fn_model=None):
     trainer.fit(model, datamodule=data_module)
     trainer.test(ckpt_path="best", datamodule=data_module)
 
-    data_module = _remove_augmentation_transforms_from_data_module(data_module)
-
-    # log crocodoc results if enabled
-    if config.get("run_crocodoc", False):
-        mask_type = config.get("mask_type", None)
-        crocodoc_train, ref_train = crocodoc_cgnn(
-            model,
-            data_module.train_dataset,
-            trainer,
-            mask_type=mask_type,
-            ckpt_path=config.get("crocodoc_model", None),
-        )
-        crocodoc_train["split"] = "train"
-        ref_train["split"] = "train"
-        crocodoc_test, ref_test = crocodoc_cgnn(
-            model,
-            data_module.test_dataset,
-            trainer,
-            mask_type=mask_type,
-            ckpt_path=config.get("crocodoc_model", None),
-        )
-        crocodoc_test["split"] = "test"
-        ref_test["split"] = "test"
-        log_large_table(
-            pd.concat([crocodoc_train, crocodoc_test]), "crocodoc_masked_predictions"
-        )
-        log_large_table(
-            pd.concat([ref_train, ref_test]), "crocodoc_reference_predictions"
-        )
-
+    data_module = remove_augmentation_transforms_from_data_module(data_module)
     # log all predictions of the best model
     df_train = predict_df(model, data_module.train_dataloader(), trainer, "best")
     df_val = predict_df(model, data_module.val_dataloader(), trainer, "best")

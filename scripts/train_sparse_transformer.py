@@ -37,6 +37,19 @@ class FeatureSelection:
 
 
 DEBUG = False
+
+
+def _debug_config(config):
+    config["hidden_channels"] = 16
+    config["num_attention_blocks"] = 1
+    config["num_heads"] = 1
+    config["max_num_neighbors"] = 8
+    config["epochs"] = 9
+    config["crocodoc_frequency"] = 3
+    config["run_crocodoc"] = True
+    return config
+
+
 if __name__ == "__main__":
     configuration.register(
         "sparse_transformer",
@@ -64,22 +77,18 @@ if __name__ == "__main__":
     config["run_crocodoc"] = True
     config["crocodoc_model"] = "best"
     config["mask_type"] = "atom_objects"
+    config["crocodoc_start_epoch"] = 0
+    config["crocodoc_frequency"] = 25
     config["num_workers"] = 0
     config["simplified_features"] = True
-
-    if DEBUG:
-        config["hidden_channels"] = 16
-        config["num_attention_blocks"] = 1
-        config["num_heads"] = 1
-        config["max_num_neighbors"] = 8
-        config["overfit_batches"] = 0.1
-        config["epochs"] = 1
 
     tags = []
     parser = config.argparser(overwrite_default_values=False)
     args = parser.parse_args()
-    print(args)
     config = config.update(vars(args))
+    if DEBUG:
+        config = _debug_config(config)
+        tags.append("debugging")
 
     if config.get("covalent_only", False):
         config["interaction_modes"] = ["covalent"]
@@ -124,5 +133,6 @@ if __name__ == "__main__":
                 apply_transform_instance_permament,
                 transform=ott,
             ),
+            subset_data=100 if DEBUG else 0,
         ),
     )
