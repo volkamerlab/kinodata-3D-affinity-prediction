@@ -1,3 +1,4 @@
+from enum import StrEnum
 from typing import Any, Dict, List, Tuple
 from torch import Tensor
 from torch.utils.data import Subset
@@ -39,3 +40,19 @@ COVALENT_EDGE_TYPES: List[EdgeType] = [
 
 
 MASK_RESIDUE_KEY = "mask_residue_interactions"
+
+
+class COLS(StrEnum):
+    ACTIVITY_ID = "activities.activity_id"
+    KLIFS_ID = "similar.klifs_structure_id"
+    SEQUENCE = "structure.pocket_sequence"
+    DUNBRACK = "abreviated_dunbrack_state"
+    DFG = "dfg_state"
+    DUNBRACK_CONF = "dunbrack_conf"
+    DUNBRACK_ACTIVE = "dunbrack_active"
+    DUNBRACK_SIMPLIFIED = "dunbrack_simplified"
+    REFERENCE_PREDICTION = "reference_pred"
+    MASKED_PREDICTION = "masked_pred"
+    DELTA = "delta"
+    RESIDUE_IMPORTANCE = "residue_importance"
+    UNIPROT_ID = "UniprotID"

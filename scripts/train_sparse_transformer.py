@@ -13,7 +13,7 @@ from kinodata.training import train
 from kinodata.data.data_module import make_kinodata_module
 from kinodata.model.complex_transformer import ComplexTransformer, make_model
 from kinodata.types import NodeType, RelationType
-from kinodata.data.dataset import apply_transform_instance_permament
+from kinodata.data.dataset import apply_transform_instance_permament, _DATA
 from kinodata.transform.to_complex_graph import TransformToComplexGraph
 from kinodata.transform.ligand_only import ToLigandOnlyComplex
 from kinodata.data.featurization.atoms import AtomFeatures
@@ -81,6 +81,9 @@ if __name__ == "__main__":
     config["crocodoc_frequency"] = 25
     config["num_workers"] = 0
     config["simplified_features"] = True
+    config["pli_reference_path"] = (
+        _DATA / "processed" / "stability_seleciton_pli_reference.csv"
+    )
 
     tags = []
     parser = config.argparser(overwrite_default_values=False)
