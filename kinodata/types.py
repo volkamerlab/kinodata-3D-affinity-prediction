@@ -56,3 +56,4 @@ class COLS(StrEnum):
     DELTA = "delta"
     RESIDUE_IMPORTANCE = "residue_importance"
     UNIPROT_ID = "UniprotID"
+    ALIGNMENT = "cosine_similarity"
