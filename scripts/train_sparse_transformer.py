@@ -79,6 +79,8 @@ if __name__ == "__main__":
     config["mask_type"] = "atom_objects"
     config["crocodoc_start_epoch"] = 0
     config["crocodoc_frequency"] = 25
+    config["early_stopping"] = False
+    config["epochs"] = 500
     config["num_workers"] = 0
     config["simplified_features"] = True
     config["pli_reference_path"] = (
