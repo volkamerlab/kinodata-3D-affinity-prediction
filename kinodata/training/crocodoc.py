@@ -76,6 +76,7 @@ def compute_pli_alignment(
     col_index: str = COLS.ACTIVITY_ID,
     col_delta: str = "delta",
     col_reference_attribution: str = "residue_importance",
+    col_similarity: str = "cosine_similarity",
 ) -> pd.DataFrame:
     """
     Compute the cosine similarity between the model delta and the PLI reference.
@@ -97,7 +98,7 @@ def compute_pli_alignment(
     return (
         merged_delta.groupby(col_index)
         .apply(partial(cosine_similarity, x=col_delta, y=col_reference_attribution))
-        .reset_index()
+        .reset_index(name=col_similarity, drop=False)
     )
 
 
@@ -405,6 +406,7 @@ class CrocodocCallback(Callback):
         reference_prediction: pd.DataFrame,
         dataset_key: str,
         epoch: int,
+        log: bool = True,
     ):
         assert COLS.REFERENCE_PREDICTION in reference_prediction.columns
         assert COLS.MASKED_PREDICTION in masked_prediction.columns
@@ -429,6 +431,7 @@ class CrocodocCallback(Callback):
             col_index=COLS.ACTIVITY_ID,
             col_delta=COLS.DELTA,
             col_reference_attribution=COLS.RESIDUE_IMPORTANCE,
+            col_similarity=COLS.ALIGNMENT,
         )
         pli_alignment["dataset"] = dataset_key
         pli_alignment["epoch"] = epoch
@@ -436,6 +439,22 @@ class CrocodocCallback(Callback):
             pli_alignment,
             self.pli_alignment_file,
         )
+        if log:
+            self.log(
+                f"{dataset_key}/pli_alignment_median",
+                pli_alignment[COLS.ALIGNMENT].median(),
+                on_epoch=True,
+            )
+            self.log(
+                f"{dataset_key}/pli_alignment_q25",
+                pli_alignment[COLS.ALIGNMENT].quantile(0.25),
+                on_epoch=True,
+            )
+            self.log(
+                f"{dataset_key}/pli_alignment_q75",
+                pli_alignment[COLS.ALIGNMENT].quantile(0.75),
+                on_epoch=True,
+            )
 
     def _write_config(self):
         config = {
@@ -446,7 +465,7 @@ class CrocodocCallback(Callback):
         with open(self.outdir / "crocodoc_config.json", "w") as f:
             json.dump(config, f, indent=4)
 
-    def _crocodoc(self, epoch, pl_module):
+    def _crocodoc(self, epoch, pl_module, **kwargs):
         for dataset_key, dataset in self.datasets.items():
             logger.info(f"Running Crocodoc on {dataset_key} dataset")
             dataset, orig_transform = remove_augementation_transforms_from_dataset(
@@ -461,7 +480,7 @@ class CrocodocCallback(Callback):
             )
             dataset.transform = orig_transform
             self._handle_crocodoc_result(
-                masked_prediction, reference_prediction, dataset_key, epoch
+                masked_prediction, reference_prediction, dataset_key, epoch, **kwargs
             )
 
     def _compress_results(self):
@@ -486,6 +505,6 @@ class CrocodocCallback(Callback):
         return
 
     def on_fit_end(self, trainer, pl_module):
-        self._crocodoc(trainer.current_epoch, pl_module)
+        self._crocodoc(trainer.current_epoch, pl_module, log=False)
         self._compress_results()
         return
