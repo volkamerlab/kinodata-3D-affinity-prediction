@@ -37,10 +37,14 @@ def train(config, fn_data=make_kinodata_module, fn_model=None):
         mode="min",
     )
     lr_monitor = LearningRateMonitor("epoch")
-    early_stopping = EarlyStopping(
-        monitor="val/mae", patience=config.early_stopping_patience, mode="min"
-    )
-    callbacks = [validation_checkpoint, lr_monitor, early_stopping]
+    callbacks = [validation_checkpoint, lr_monitor]
+    if config.get("early_stopping", False):
+        early_stopping = EarlyStopping(
+            monitor=config.get("early_stopping_metric", "val/mae"),
+            patience=config.early_stopping_patience,
+            mode=config.get("early_stopping_mode", "min"),
+        )
+        callbacks.append(early_stopping)
     if config.get("run_crocodoc", False):
         crocodoc_callback = CrocodocCallback(
             datasets={
