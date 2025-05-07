@@ -2,27 +2,28 @@ import copy
 import gzip
 import json
 import logging
+import shutil
+import tarfile
 from functools import cached_property, partial
 from pathlib import Path
-import shutil
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 import numpy as np
 import pandas as pd
-import torch
 import pytorch_lightning as pl
+import torch
 from tqdm import tqdm
 
 Callback = pl.Callback
 Trainer = pl.Trainer
+from scipy.spatial.distance import cosine
 from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import Compose
 
-from kinodata.data import KinodataDocked
-from kinodata.types import COLS
-from kinodata.transform.mask_residues import MaskResidues
 import kinodata.transform as T
-from scipy.spatial.distance import cosine
+from kinodata.data import KinodataDocked
+from kinodata.transform.mask_residues import MaskResidues
+from kinodata.types import COLS
 
 from ..model.regression import RegressionModel, cat_many
 
@@ -206,6 +207,36 @@ def get_required_data(dataset):
     return data_list, residue_to_atom_index
 
 
+def compress_directory_to_tar_gz(
+    directory: Union[str, Path], output_filename: Union[str, Path] = None
+):
+    """
+    Compresses the given directory into a .tar.gz file.
+
+    Parameters:
+        directory (str or Path): The path to the directory to compress.
+        output_filename (str or Path, optional): The path of the output .tar.gz file.
+            If not provided, uses the directory name with a .tar.gz extension.
+
+    Returns:
+        Path: The path to the created .tar.gz file.
+    """
+    directory = Path(directory).resolve()
+
+    if not directory.is_dir():
+        raise ValueError(f"{directory} is not a valid directory.")
+
+    if output_filename is None:
+        output_filename = directory.with_suffix(".tar.gz")
+    else:
+        output_filename = Path(output_filename).resolve()
+
+    with tarfile.open(output_filename, "w:gz") as tar:
+        tar.add(directory, arcname=directory.name)
+
+    return output_filename
+
+
 def crocodoc_cgnn(
     model: RegressionModel,
     dataset: KinodataDocked,
@@ -297,6 +328,13 @@ def crocodoc_cgnn(
     return masked_pred_df, reference_df
 
 
+def _get_run_id(trainer: Trainer) -> str:
+    try:
+        return str(trainer.logger.experiment.id)
+    except AttributeError:
+        return str(trainer.logger.run_id)
+
+
 class CrocodocCallback(Callback):
     def __init__(
         self,
@@ -315,11 +353,14 @@ class CrocodocCallback(Callback):
         self._outdir = outdir
         self._pli_reference = pli_reference
 
+    def log(self, *args, **kwargs):
+        self._pl_module.log(*args, **kwargs)
+
     @cached_property
     def outdir(self) -> Path:
         assert hasattr(self, "_trainer"), "CrocodocCallback must be setup before use"
         if self._outdir is None:
-            return Path(self._trainer.log_dir) / "crocodoc"
+            return Path(self._trainer.log_dir) / "crocodoc" / _get_run_id(self._trainer)
         return Path(self._outdir)
 
     @property
@@ -341,7 +382,7 @@ class CrocodocCallback(Callback):
             logger.info("Creating new dataframe csv file")
             data_frame.to_csv(file_path, index=False, mode="w", header=True)
             return
-        logger.info("Appending to exisiting prediction files")
+        logger.info("Appending to exisiting csv file")
         data_frame.to_csv(file_path, index=False, mode="a", header=False)
 
     def _compress_file(self, file_path: str | Path, remove_uncompressed: bool = True):
@@ -425,13 +466,11 @@ class CrocodocCallback(Callback):
 
     def _compress_results(self):
         logger.info("Compressing crocodoc results")
-        self._compress_file(self.masked_pred_file)
-        self._compress_file(self.reference_pred_file)
-        if self.pli_alignment_file.exists():
-            self._compress_file(self.pli_alignment_file)
+        compress_directory_to_tar_gz(self.outdir)
 
     def on_train_start(self, trainer, pl_module):
         self._trainer = trainer
+        self._pl_module = pl_module
         if not self.outdir.exists():
             self.outdir.mkdir(parents=True)
         logger.info("CrocodocCallback outdir: %s", self.outdir)
@@ -444,4 +483,9 @@ class CrocodocCallback(Callback):
         if trainer.current_epoch % self.frequency != 0:
             return
         self._crocodoc(trainer.current_epoch, pl_module)
+        return
+
+    def on_fit_end(self, trainer, pl_module):
+        self._crocodoc(trainer.current_epoch, pl_module)
+        self._compress_results()
         return
