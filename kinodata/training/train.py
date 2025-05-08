@@ -48,7 +48,7 @@ def train(config, fn_data=make_kinodata_module, fn_model=None):
     if config.get("run_crocodoc", False):
         crocodoc_callback = CrocodocCallback(
             datasets={
-                "train": data_module.train_dataset,
+                # "train": data_module.train_dataset,
                 "val": data_module.val_dataset,
                 "test": data_module.test_dataset,
             },
