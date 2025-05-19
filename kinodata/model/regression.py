@@ -100,6 +100,7 @@ class RegressionModel(pl.LightningModule):
         self.correlation_metrics["train"](
             pred.detach().cpu().flatten(), batch.y.cpu().flatten()
         )
+        self.___batch_size = pred.size(0)
         return loss
 
     def on_after_backward(self):
@@ -109,7 +110,13 @@ class RegressionModel(pl.LightningModule):
                 param_norm = p.grad.data.norm(2)
                 total_norm += param_norm.item() ** 2
         total_norm = total_norm**0.5
-        self.log("train/grad_norm", total_norm, on_step=True, on_epoch=True)
+        self.log(
+            "train/grad_norm",
+            total_norm,
+            on_step=True,
+            on_epoch=True,
+            batch_size=self.___batch_size,
+        )
 
     def validation_step(self, batch, *args, key: str = "val"):
         pred = self.forward(batch).flatten()
