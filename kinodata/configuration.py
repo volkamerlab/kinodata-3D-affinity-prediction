@@ -248,7 +248,7 @@ register(
     num_radial=6,
     cutoff=5.0,
     max_num_neighbors=32,
-    batch_size=32,
+    batch_size=16,
     accumulate_grad_batches=4,
     num_workers=0,
 )
