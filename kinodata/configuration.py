@@ -1,5 +1,6 @@
 import inspect
 
+import logging
 from typing import (
     Any,
     Dict,
@@ -26,6 +27,8 @@ from kinodata.types import (
     INTRAMOL_STRUCTURAL_EDGE_TYPES,
     INTERMOL_STRUCTURAL_EDGE_TYPES,
 )
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
@@ -178,7 +181,7 @@ def get(*config_names: str) -> Config:
 
     duplicate_keys = [key for key in key_counts if key_counts[key] > 1]
     if len(duplicate_keys) > 0:
-        raise ValueError(f"Duplicate config keys: {duplicate_keys}")
+        logger.warning(f"Duplicate config keys: {duplicate_keys}")
 
     config = Config()
     for name in config_names:
@@ -228,6 +231,7 @@ register(
     min_lr=1e-6,
     clip_grad_value=None,
     dry_run=False,
+    early_stopping=True,
 )
 
 
@@ -244,4 +248,7 @@ register(
     num_radial=6,
     cutoff=5.0,
     max_num_neighbors=32,
+    batch_size=32,
+    accumulate_grad_batches=4,
+    num_workers=0,
 )
