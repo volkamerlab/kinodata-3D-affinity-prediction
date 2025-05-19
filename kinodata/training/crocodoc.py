@@ -353,6 +353,10 @@ class CrocodocCallback(Callback):
         self.start_epoch = start_epoch
         self._outdir = outdir
         self._pli_reference = pli_reference
+        if self.frequency == 0:
+            logger.warning(
+                "CrocodocCallback frequency is set to 0, Crocodoc will only run once at the end of training."
+            )
 
     def log(self, *args, **kwargs):
         self._pl_module.log(*args, **kwargs)
@@ -497,6 +501,8 @@ class CrocodocCallback(Callback):
         return
 
     def on_train_epoch_end(self, trainer, pl_module):
+        if self.frequency == 0:
+            return
         if trainer.current_epoch < self.start_epoch:
             return
         if trainer.current_epoch % self.frequency != 0:

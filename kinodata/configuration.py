@@ -229,3 +229,19 @@ register(
     clip_grad_value=None,
     dry_run=False,
 )
+
+
+register(
+    "dimenet",
+    hidden_channels=128,
+    out_channels=128,
+    num_blocks=3,
+    int_emb_size=64,
+    out_emb_channels=128,
+    basis_emb_size=8,
+    agg=None,
+    num_spherical=7,
+    num_radial=6,
+    cutoff=5.0,
+    max_num_neighbors=32,
+)

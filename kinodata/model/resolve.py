@@ -46,7 +46,22 @@ def resolve_loss(loss_type: str) -> nn.Module:
     raise ValueError(loss_type)
 
 
-def resolve_aggregation(aggr_type: str) -> aggr.Aggregation:
+class _NoAggregation(aggr.Aggregation):
+    def forward(self, x, *args, **kwargs):
+        return x
+
+
+def resolve_aggregation(aggr_type: str | None) -> aggr.Aggregation:
     if aggr_type == "sum":
         return aggr.SumAggregation()
+    if aggr_type == "mean":
+        return aggr.MeanAggregation()
+    if aggr_type == "max":
+        return aggr.MaxAggregation()
+    if aggr_type == "attention":
+        return aggr.SoftmaxAggregation(learn=True)
+    if aggr_type == "none":
+        return _NoAggregation()
+    if aggr_type is None:
+        return _NoAggregation()
     raise ValueError(aggr_type)
