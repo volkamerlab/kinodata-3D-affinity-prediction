@@ -102,6 +102,15 @@ class RegressionModel(pl.LightningModule):
         )
         return loss
 
+    def on_after_backward(self):
+        total_norm = 0
+        for p in self.parameters():
+            if p.grad is not None:
+                param_norm = p.grad.data.norm(2)
+                total_norm += param_norm.item() ** 2
+        total_norm = total_norm**0.5
+        self.log("train/grad_norm", total_norm, on_step=True, on_epoch=True)
+
     def validation_step(self, batch, *args, key: str = "val"):
         pred = self.forward(batch).flatten()
         val_mae = (pred - batch.y).abs().mean()
