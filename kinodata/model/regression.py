@@ -1,10 +1,16 @@
 from typing import Dict, List, Optional
+import math
 
 import torch
 from torch import nn
 from torch import Tensor
 import wandb
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import (
+    ReduceLROnPlateau,
+    LambdaLR,
+    SequentialLR,
+    CosineAnnealingWarmRestarts,
+)
 import pytorch_lightning as pl
 from torchmetrics.regression import PearsonCorrCoef
 from torchmetrics import MetricCollection
@@ -64,14 +70,33 @@ class RegressionModel(pl.LightningModule):
             weight_decay=self.hparams.weight_decay,
         )
 
-        scheduler = ReduceLROnPlateau(
-            optim,
-            mode="min",
-            factor=self.hparams.lr_factor,
-            patience=self.hparams.lr_patience,
-            min_lr=self.hparams.min_lr,
-        )
-
+        if self.hparams.lr_scheduler == "plateau":
+            scheduler = ReduceLROnPlateau(
+                optim,
+                mode="min",
+                factor=self.hparams.lr_factor,
+                patience=self.hparams.lr_patience,
+                min_lr=self.hparams.min_lr,
+            )
+        elif self.hparams.lr_scheduler == "warmup_then_cosine":
+            warmup_steps = self.hparams.warmup_steps
+            lambda_scheduler = LambdaLR(
+                optim,
+                lr_lambda=lambda step: min(1.0, step / warmup_steps),
+            )
+            cosine = CosineAnnealingWarmRestarts(
+                optim,
+                T_0=10,
+                T_mult=2,
+                eta_min=self.hparams.min_lr,
+            )
+            scheduler = SequentialLR(
+                optim,
+                schedulers=[lambda_scheduler, cosine],
+                milestones=[warmup_steps],
+            )
+        else:
+            scheduler = None
         return [optim], [
             {
                 "scheduler": scheduler,
