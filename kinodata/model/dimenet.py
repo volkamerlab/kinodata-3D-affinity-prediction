@@ -1,4 +1,5 @@
 from torch import nn
+from torch.nn.functional import silu
 from torch_geometric.nn import DimeNetPlusPlus
 
 from kinodata.model.regression import RegressionModel
@@ -6,15 +7,18 @@ from kinodata.model.resolve import resolve_aggregation
 from kinodata.types import NodeType
 
 
-class LinActSkipNorm(nn.Module):
-    def __init__(self, in_channels, out_channels):
+class ReadoutMLP(nn.Module):
+    def __init__(self, in_channels, hidden_channels):
         super().__init__()
-        self.lin = nn.Linear(in_channels, out_channels)
-        self.bn = nn.BatchNorm1d(out_channels)
-        self.act = nn.SiLU()
+        self.norm = nn.LayerNorm(in_channels)
+        self.lin1 = nn.Linear(in_channels, hidden_channels)
+        self.lin2 = nn.Linear(hidden_channels, 1)
 
     def forward(self, x):
-        return self.act(self.bn(self.lin(x)) + x)
+        x = self.norm(x)
+        x = silu(self.lin1(x))
+        x = self.lin2(x)
+        return x
 
 
 class DimeNetWrapper(RegressionModel):
@@ -24,16 +28,7 @@ class DimeNetWrapper(RegressionModel):
         self.agg = resolve_aggregation(config.get("agg", "sum"))
         dimenet_out_features = self.dime_net.output_blocks[0].lin.out_features
         hidden_channels = config.get("hidden_channels")
-        self.readout = nn.Sequential(
-            nn.Linear(dimenet_out_features, hidden_channels),
-            nn.SiLU(),
-            nn.BatchNorm1d(hidden_channels),
-            nn.Linear(hidden_channels, hidden_channels // 2),
-            nn.SiLU(),
-            nn.BatchNorm1d(hidden_channels // 2),
-            nn.Linear(hidden_channels // 2, 1),
-            nn.Softplus(),
-        )
+        self.readout = ReadoutMLP(dimenet_out_features, hidden_channels)
 
     def forward(self, batch):
         repr = self.dime_net(
