@@ -70,11 +70,12 @@ def compute_ig_attributions(
     handle_device: bool = False,
     device=None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    model_was_training = model.training
-    model.eval()
+    unwrapped_model = model.model
+    model_was_training = unwrapped_model.training
+    unwrapped_model.eval()
     if handle_device:
         if device is None:
-            device = next(model.parameters()).device
+            device = next(unwrapped_model.parameters()).device
     ig = captum.attr.IntegratedGradients(
         model.forward_initial_embeds, multiply_by_inputs=True
     )
@@ -151,7 +152,7 @@ def compute_ig_attributions(
         edge_data_dict["target_index"].extend(target_indices.tolist())
 
     if model_was_training:
-        model.train()
+        unwrapped_model.train()
     node_df = pd.DataFrame(node_data_dict)
     edge_df = pd.DataFrame(edge_data_dict)
     return node_df, edge_df
