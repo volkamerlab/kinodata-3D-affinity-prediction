@@ -11,10 +11,11 @@ from torch.nn import (
     Parameter,
     Dropout,
     BatchNorm1d,
+    LayerNorm,
 )
 from torch_geometric.data import HeteroData
 from torch_geometric.nn.norm import GraphNorm
-from torch_geometric.nn.aggr import SoftmaxAggregation
+from torch_geometric.nn.aggr import SoftmaxAggregation, SumAggregation
 from torch_geometric.utils import coalesce
 from torch_cluster import knn_graph
 
@@ -151,9 +152,9 @@ class CombinedInteractions(Module):
         super().__init__()
         self.interactions = ModuleList(interactions)
         self.act = resolve_act(act)
-        assert (
-            len(set([intr.hidden_channels for intr in interactions])) == 1
-        ), "Interactions should not map edge representation to different number of hidden channels."
+        assert len(set([intr.hidden_channels for intr in interactions])) == 1, (
+            "Interactions should not map edge representation to different number of hidden channels."
+        )
         self.bias = Parameter(torch.zeros(interactions[0].hidden_channels))
 
     def forward(self, data: HeteroData) -> Tuple[Tensor, Tensor]:
@@ -185,6 +186,8 @@ class ComplexTransformer(RegressionModel):
         dropout: float = 0.1,
         mask_pl_edges: bool = False,
         edge_size: int = NUM_BOND_TYPES,
+        readout_norm: str = "layer",
+        aggr_function: str = "sum",
     ) -> None:
         super().__init__(config)
         self.act = resolve_act(act)
@@ -233,10 +236,25 @@ class ComplexTransformer(RegressionModel):
             )
         else:
             self.norm_layers = [lambda x, b: x] * num_attention_blocks
-        self.aggr = SoftmaxAggregation(learn=True, channels=hidden_channels)
+        match aggr_function:
+            case "softmax":
+                self.aggr = SoftmaxAggregation(learn=True)
+            case "sum":
+                self.aggr = SumAggregation()
+            case _:
+                raise ValueError(f"Unknown aggregation function: {aggr_function}")
+
+        match readout_norm:
+            case "layer":
+                norm = LayerNorm(hidden_channels)
+            case "batch":
+                norm = BatchNorm1d(hidden_channels)
+            case _:
+                raise ValueError(f"Unknown readout normalization: {readout_norm}")
+
         self.out = Sequential(
             *(
-                [Dropout(dropout), BatchNorm1d(hidden_channels)]
+                [Dropout(dropout), norm]
                 + [
                     FF(hidden_channels, hidden_channels, self.act)
                     for _ in range(decoder_hidden_layers)

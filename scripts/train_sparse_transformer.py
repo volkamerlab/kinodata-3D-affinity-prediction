@@ -45,8 +45,10 @@ def _debug_config(config):
     config["num_heads"] = 1
     config["max_num_neighbors"] = 8
     config["epochs"] = 9
-    config["crocodoc_frequency"] = 3
-    config["run_crocodoc"] = True
+    config["run_crocodoc"] = False
+    config["run_integrated_gradients"] = True
+    config["ig_start_epoch"] = 0
+    config["ig_frequency"] = 3
     return config
 
 
@@ -74,13 +76,19 @@ if __name__ == "__main__":
     config["perturb_complex_positions"] = 0.1
     config["node_types"] = [NodeType.Complex]
     config["atom_attr_size"] = AtomFeatures.size
-    config["run_crocodoc"] = True
+
+    config["run_crocodoc"] = False
     config["crocodoc_model"] = "best"
     config["mask_type"] = "atom_objects"
     config["crocodoc_start_epoch"] = 0
     config["crocodoc_frequency"] = 25
+
+    config["run_integrated_gradients"] = True
+    config["ig_start_epoch"] = 0
+    config["ig_frequency"] = 50
+
     config["early_stopping"] = False
-    config["epochs"] = 500
+    config["epochs"] = 300
     config["num_workers"] = 0
     config["simplified_features"] = True
     config["pli_reference_path"] = (
