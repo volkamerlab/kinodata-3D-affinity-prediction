@@ -15,6 +15,7 @@ from .crocodoc import (
     CrocodocCallback,
     remove_augmentation_transforms_from_data_module,
 )
+from .integrated_gradients import IntegratedGradientsCallback
 import os.path as osp
 import gzip
 
@@ -45,6 +46,13 @@ def train(config, fn_data=make_kinodata_module, fn_model=None):
             mode=config.get("early_stopping_mode", "min"),
         )
         callbacks.append(early_stopping)
+    if config.get("run_crocodoc", False) and config.get(
+        "run_integrated_gradients", False
+    ):
+        raise ValueError(
+            "Cannot run Crocodoc and Integrated Gradients at the same time. "
+            "Please set one of them to False."
+        )
     if config.get("run_crocodoc", False):
         crocodoc_callback = CrocodocCallback(
             datasets={
@@ -60,6 +68,17 @@ def train(config, fn_data=make_kinodata_module, fn_model=None):
             ),
         )
         callbacks.append(crocodoc_callback)
+    if config.get("run_integrated_gradients", False):
+        ig_callback = IntegratedGradientsCallback(
+            datasets={
+                # "train": data_module.train_dataset,
+                "val": data_module.val_dataset,
+                "test": data_module.test_dataset,
+            },
+            start_epoch=config.get("ig_start_epoch", 0),
+            frequency=config.get("ig_frequency", 25),
+        )
+        callbacks.append(ig_callback)
 
     trainer = pl.Trainer(
         logger=logger,
