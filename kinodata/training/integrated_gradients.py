@@ -68,13 +68,13 @@ def compute_ig_attributions(
     loader: DataLoader,
     resolution: int = 30,
     handle_device: bool = False,
+    device=None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    model_was_training = model.training
+    model.eval()
     if handle_device:
-        device = torch.device("cpu")
-        if torch.cuda.is_available():
-            print("CUDA is available, using GPU")
-            device = torch.device("cuda")
-        model = model.to(device)
+        if device is None:
+            device = next(model.parameters()).device
     ig = captum.attr.IntegratedGradients(
         model.forward_initial_embeds, multiply_by_inputs=True
     )
@@ -150,6 +150,8 @@ def compute_ig_attributions(
         edge_data_dict["source_index"].extend(source_indices.tolist())
         edge_data_dict["target_index"].extend(target_indices.tolist())
 
+    if model_was_training:
+        model.train()
     node_df = pd.DataFrame(node_data_dict)
     edge_df = pd.DataFrame(edge_data_dict)
     return node_df, edge_df
