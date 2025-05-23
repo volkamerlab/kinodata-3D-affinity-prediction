@@ -239,6 +239,7 @@ class IntegratedGradientsCallback(Callback):
             node_attr, edge_attr = compute_ig_attributions(
                 WrappedComplexTransformer(pl_module),
                 DataLoader(dataset, batch_size=1, shuffle=False),
+                handle_device=True,
             )
             dataset.transform = orig_transform
             self._handle_ig_result(node_attr, edge_attr, dataset_key, epoch, **kwargs)
