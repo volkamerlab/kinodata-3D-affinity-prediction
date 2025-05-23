@@ -148,8 +148,8 @@ def compute_ig_attributions(
         edge_data_dict["prediction"].extend([pred.item()] * len(edge_attr))
         edge_data_dict["delta"].extend([delta.item()] * len(edge_attr))
         edge_data_dict["edge_index"].extend(range(len(edge_attr)))
-        edge_data_dict["source_index"].extend(source_indices.tolist())
-        edge_data_dict["target_index"].extend(target_indices.tolist())
+        edge_data_dict["source_index"].extend(source_indices)
+        edge_data_dict["target_index"].extend(target_indices)
 
     if model_was_training:
         unwrapped_model.train()
