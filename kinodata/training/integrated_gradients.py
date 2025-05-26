@@ -108,6 +108,8 @@ def compute_ig_attributions(
             pred = model.forward_initial_embeds(
                 node_embed, edge_embed, edge_index, batch
             )
+            if hasattr(model, "training_std"):
+                pred = pred * model.training_std
         pred = pred.detach().cpu()
         delta = None
 

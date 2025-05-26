@@ -1,3 +1,4 @@
+from typing import Callable
 import pandas as pd
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import (
@@ -7,7 +8,10 @@ from pytorch_lightning.callbacks import (
 )
 from pytorch_lightning.loggers.wandb import WandbLogger
 import wandb
+from kinodata.configuration import Config
 from kinodata.data.data_module import make_kinodata_module
+from torch_geometric.data.lightning import LightningDataset
+from kinodata.model.regression import RegressionModel, enable_target_normalization
 import kinodata.transform as T
 from .predict import predict_df
 from .crocodoc import (
@@ -29,10 +33,19 @@ def log_large_table(df, name):
     wandb.log_artifact(artifact)
 
 
-def train(config, fn_data=make_kinodata_module, fn_model=None):
+def train(
+    config: Config,
+    fn_data: Callable[[Config], LightningDataset] = make_kinodata_module,
+    fn_model: Callable[[Config], RegressionModel] = None,
+):
     logger = WandbLogger(log_model="all")
     model = fn_model(config)
     data_module = fn_data(config)
+    if config.get("normalize_target", False):
+        model = enable_target_normalization(model)
+        train_dataset = model.fit_normalize_target(data_module.train_dataset)
+        data_module.train_dataset = train_dataset
+
     validation_checkpoint = ModelCheckpoint(
         monitor="val/mae",
         mode="min",

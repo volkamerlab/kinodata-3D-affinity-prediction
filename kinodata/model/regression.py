@@ -1,6 +1,5 @@
 from typing import Dict, List, Optional
-import math
-
+from types import MethodType
 import torch
 from torch import nn
 from torch import Tensor
@@ -13,10 +12,11 @@ from torch.optim.lr_scheduler import (
 )
 import pytorch_lightning as pl
 from torchmetrics.regression import PearsonCorrCoef
-from torchmetrics import MetricCollection
 
 from kinodata.configuration import Config
 from kinodata.model.resolve import resolve_loss
+from kinodata.transform.affine import LinearScalarTransform
+from torch_geometric.transforms import Compose
 from kinodata.model.resolve import resolve_optim
 
 
@@ -40,6 +40,19 @@ def cat_many(
         key: torch.cat([ensure_tensor(sub_data, key) for sub_data in data], dim=dim)
         for key in subset
     }
+
+
+def _add_normalization_transform(
+    dataset,
+    y_mean,
+    y_std,
+):
+    existing_transform = dataset.transform
+    new_transform = LinearScalarTransform("y", y_mean, y_std)
+    if existing_transform is not None:
+        new_transform = Compose([existing_transform, new_transform])
+    dataset.transform = new_transform
+    return dataset
 
 
 class RegressionModel(pl.LightningModule):
@@ -190,3 +203,40 @@ class RegressionModel(pl.LightningModule):
     def test_step(self, batch, *args, **kwargs):
         info = self.validation_step(batch, key="test")
         return info
+
+
+def enable_target_normalization(model: RegressionModel):
+    orig_forward = model.forward
+
+    def denormalize(self, y: Tensor) -> Tensor:
+        return y * self.training_std + self.training_mean
+
+    def fit_normalize_target(self, train_dataset):
+        target = torch.cat([data.y for data in train_dataset], dim=0)
+        self.training_mean.data.fill_(target.mean())
+        self.training_std.data.fill_(target.std())
+        return _add_normalization_transform(
+            train_dataset, target.mean().item(), target.std().item()
+        )
+
+    def forward(self, batch) -> Tensor:
+        y = orig_forward(batch)
+        if not self.training:
+            y = self.denormalize(y)
+        return y
+
+    model.training_mean = nn.Parameter(torch.zeros(1), requires_grad=False)
+    model.training_std = nn.Parameter(torch.ones(1), requires_grad=False)
+    model.denormalize = MethodType(denormalize, model)
+    model.fit_normalize_target = MethodType(fit_normalize_target, model)
+    model.forward = MethodType(forward, model)
+
+    return model
+
+
+class NormalizationWrapper(nn.Module):
+    def __init__(self, regression_model: RegressionModel, *args, **kwargs):
+        super().__init__()
+        self.regression_model = regression_model
+        self.training_mean = nn.Parameter(torch.zeros(1), requires_grad=False)
+        self.training_std = nn.Parameter(torch.ones(1), requires_grad=False)

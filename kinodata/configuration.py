@@ -215,9 +215,10 @@ register(
 
 register(
     "training",
+    normalize_target=True,
     optim="adamw",
     lr=3e-4,
-    weight_decay=2e-3,
+    weight_decay=1e-3,
     dropout=0.0,
     batch_size=128,
     accumulate_grad_batches=1,
