@@ -180,13 +180,13 @@ class ComplexTransformer(RegressionModel):
         ln1: bool = True,
         ln2: bool = False,
         ln3: bool = True,
-        graph_norm: bool = True,
+        graph_norm: bool = False,
         decoder_hidden_layers: int = 1,
         interaction_modes: List[str] = [],
         dropout: float = 0.1,
         mask_pl_edges: bool = False,
         edge_size: int = NUM_BOND_TYPES,
-        readout_norm: str = "layer",
+        readout_norm: str = "batch",
         aggr_function: str = "sum",
     ) -> None:
         super().__init__(config)
