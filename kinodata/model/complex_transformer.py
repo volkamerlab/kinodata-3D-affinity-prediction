@@ -105,8 +105,12 @@ class StructuralInteractions(InteractionModule):
         self.max_num_neighbors = max_num_neighbors
         self.rbf_size = rbf_size if rbf_size else hidden_channels
         self.mask_pl_edges = mask_pl_edges
-        self.distance_embedding = GaussianDistEmbedding(rbf_size, interaction_radius)
-        self.lin = Linear(rbf_size, hidden_channels, bias=False)
+        self.distance_embedding = GaussianDistEmbedding(
+            size=self.rbf_size,
+            max_dist=interaction_radius,
+            intial_blur=2.0,
+            dense_proj=True,
+        )
 
         self.hacky_mask = None
 
@@ -187,7 +191,7 @@ class ComplexTransformer(RegressionModel):
         mask_pl_edges: bool = False,
         edge_size: int = NUM_BOND_TYPES,
         readout_norm: str = "batch",
-        aggr_function: str = "sum",
+        aggr_function: str = "softmax",
     ) -> None:
         super().__init__(config)
         self.act = resolve_act(act)
@@ -199,7 +203,7 @@ class ComplexTransformer(RegressionModel):
             if mode == "covalent":
                 module = CovalentInteractions(
                     hidden_channels,
-                    act,
+                    act if intr_bias else "none",
                     intr_bias,
                     NodeType.Complex,
                     edge_size=edge_size,
@@ -207,7 +211,7 @@ class ComplexTransformer(RegressionModel):
             elif mode == "structural":
                 module = StructuralInteractions(
                     hidden_channels,
-                    act,
+                    act if intr_bias else "none",
                     intr_bias,
                     interaction_radius,
                     max_num_neighbors,
