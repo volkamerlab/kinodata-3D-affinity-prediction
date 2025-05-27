@@ -215,7 +215,7 @@ register(
 
 register(
     "training",
-    normalize_target=True,
+    normalize_target=False,
     optim="adamw",
     lr=3e-4,
     weight_decay=1e-3,
@@ -232,7 +232,7 @@ register(
     lr_patience=10,
     early_stopping_patience=24,
     min_lr=3e-6,
-    clip_grad_value=10,
+    clip_grad_value=10.0,
     dry_run=False,
     early_stopping=True,
 )

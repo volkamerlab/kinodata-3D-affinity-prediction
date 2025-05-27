@@ -238,7 +238,7 @@ class ComplexTransformer(RegressionModel):
             self.norm_layers = [lambda x, b: x] * num_attention_blocks
         match aggr_function:
             case "softmax":
-                self.aggr = SoftmaxAggregation(learn=True)
+                self.aggr = SoftmaxAggregation(learn=True, channels=hidden_channels)
             case "sum":
                 self.aggr = SumAggregation()
             case _:
