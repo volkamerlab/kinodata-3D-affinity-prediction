@@ -85,7 +85,7 @@ if __name__ == "__main__":
 
     config["run_integrated_gradients"] = True
     config["ig_start_epoch"] = 0
-    config["ig_frequency"] = 50
+    config["ig_frequency"] = 0
 
     config["early_stopping"] = False
     config["epochs"] = 300
