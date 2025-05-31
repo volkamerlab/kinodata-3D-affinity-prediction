@@ -119,6 +119,9 @@ class RegressionModel(pl.LightningModule):
             }
         ]
 
+    def compute_representation(self, batch) -> dict[str, Tensor]:
+        raise NotImplementedError
+
     def define_metrics(self):
         wandb.init()
         wandb.define_metric("val/mae", summary="min")

@@ -294,6 +294,25 @@ class ComplexTransformer(RegressionModel):
         graph_repr = self.aggr(node_repr, node_store.batch)
         return self.out(graph_repr)
 
+    def compute_representation(self, data: HeteroData) -> dict[str, Tensor]:
+        node_store = data[NodeType.Complex]
+        node_repr = self.initial_embed_nodes(data)
+        edge_index, edge_repr = self.initial_embed_edges(data)
+        for sparse_attention_block, norm in zip(
+            self.attention_blocks, self.norm_layers
+        ):
+            node_repr, edge_repr = sparse_attention_block(
+                node_repr, edge_repr, edge_index
+            )
+            node_repr = norm(node_repr, node_store.batch)
+        graph_repr = self.aggr(node_repr, node_store.batch)
+        _, readout_norm, ff1 = self.out[0:3]
+        readout_repr = ff1(readout_norm(graph_repr))
+        return {
+            "after_aggr": graph_repr,
+            "during_readout": readout_repr,
+        }
+
 
 def make_model(config: Config):
     cls = partial(ComplexTransformer, config)

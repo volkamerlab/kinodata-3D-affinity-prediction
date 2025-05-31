@@ -1,4 +1,5 @@
 from torch import nn
+import torch
 from torch.nn.functional import silu
 from torch_geometric.nn import DimeNetPlusPlus
 
@@ -39,3 +40,17 @@ class DimeNetWrapper(RegressionModel):
         repr = self.agg(repr, batch[NodeType.Complex].batch)
         out = self.readout(repr)
         return out
+
+    @torch.no_grad()
+    def compute_representation(self, batch):
+        repr = self.dime_net(
+            batch[NodeType.Complex].z,
+            batch[NodeType.Complex].pos,
+            batch[NodeType.Complex].batch,
+        )
+        repr = self.agg(repr, batch[NodeType.Complex].batch)
+        readout_repr = silu(self.readout.lin1(self.readout.norm(repr)))
+        return {
+            "after_aggr": repr,
+            "during_readout": readout_repr,
+        }

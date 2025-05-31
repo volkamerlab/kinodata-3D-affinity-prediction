@@ -44,9 +44,11 @@ def _debug_config(config):
     config["num_attention_blocks"] = 1
     config["num_heads"] = 1
     config["max_num_neighbors"] = 8
-    config["epochs"] = 9
+    config["epochs"] = 3
     config["crocodoc_frequency"] = 0
     config["run_crocodoc"] = True
+    config["store_model_representation"] = True
+    config["representation_alias"] = "last"
     return config
 
 
@@ -58,13 +60,18 @@ if __name__ == "__main__":
     config["perturb_complex_positions"] = 0.1
     config["node_types"] = [NodeType.Complex]
     config["atom_attr_size"] = AtomFeatures.size
-    config["run_crocodoc"] = False
+
+    config["run_crocodoc"] = True
     config["crocodoc_model"] = "best"
     config["mask_type"] = "atom_objects"
     config["crocodoc_start_epoch"] = 0
-    config["crocodoc_frequency"] = 25
+    config["crocodoc_frequency"] = 0
+
+    config["store_model_representation"] = True
+    config["representation_alias"] = "last"
+
     config["early_stopping"] = False
-    config["epochs"] = 500
+    config["epochs"] = 200
     config["num_workers"] = 0
     config["simplified_features"] = True
     config["pli_reference_path"] = (

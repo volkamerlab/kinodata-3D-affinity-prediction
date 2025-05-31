@@ -36,7 +36,7 @@ class FeatureSelection:
         return data
 
 
-DEBUG = False
+DEBUG = True
 
 
 def _debug_config(config):
@@ -47,8 +47,7 @@ def _debug_config(config):
     config["epochs"] = 9
     config["run_crocodoc"] = False
     config["run_integrated_gradients"] = True
-    config["ig_start_epoch"] = 0
-    config["ig_frequency"] = 3
+    config["store_model_representation"] = True
     return config
 
 
@@ -62,7 +61,7 @@ if __name__ == "__main__":
         act="silu",
         edge_attr_size=4,
         ln1=True,
-        ln2=True,
+        ln2=False,
         ln3=True,
         graph_norm=False,
         interaction_modes=["covalent", "structural"],
@@ -86,6 +85,9 @@ if __name__ == "__main__":
     config["run_integrated_gradients"] = True
     config["ig_start_epoch"] = 0
     config["ig_frequency"] = 0
+
+    config["store_model_representation"] = True
+    config["representation_alias"] = "last"
 
     config["early_stopping"] = False
     config["epochs"] = 300
