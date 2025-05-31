@@ -78,7 +78,7 @@ if __name__ == "__main__":
         _DATA / "processed" / "stability_seleciton_pli_reference.csv"
     )
 
-    tags = []
+    tags = ["dimenet"]
     parser = config.argparser(overwrite_default_values=False)
     args = parser.parse_args()
     config = config.update(vars(args))
