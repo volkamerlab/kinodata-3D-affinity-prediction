@@ -60,6 +60,18 @@ def train(
             mode=config.get("early_stopping_mode", "min"),
         )
         callbacks.append(early_stopping)
+    if config.get("store_model_representation", False):
+        repr_callback = StoreModelRepresentation(
+            datasets={
+                "train": data_module.train_dataset,
+                "val": data_module.val_dataset,
+                "test": data_module.test_dataset,
+            },
+            batch_size=config.get("batch_size", 16)
+            * 2,  # x 2 should be fine since no backpropagation is required,
+            alias=config.get("representation_alias", None),
+        )
+        callbacks.append(repr_callback)
     if config.get("run_crocodoc", False) and config.get(
         "run_integrated_gradients", False
     ):
@@ -93,18 +105,6 @@ def train(
             frequency=config.get("ig_frequency", 0),
         )
         callbacks.append(ig_callback)
-    if config.get("store_model_representation", False):
-        repr_callback = StoreModelRepresentation(
-            datasets={
-                "train": data_module.train_dataset,
-                "val": data_module.val_dataset,
-                "test": data_module.test_dataset,
-            },
-            batch_size=config.get("batch_size", 16)
-            * 2,  # x 2 should be fine since no backpropagation is required,
-            alias=config.get("representation_alias", None),
-        )
-        callbacks.append(repr_callback)
 
     trainer = pl.Trainer(
         logger=logger,

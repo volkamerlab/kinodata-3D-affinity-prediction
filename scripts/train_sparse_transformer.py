@@ -36,7 +36,7 @@ class FeatureSelection:
         return data
 
 
-DEBUG = True
+DEBUG = False
 
 
 def _debug_config(config):
@@ -87,7 +87,7 @@ if __name__ == "__main__":
     config["ig_frequency"] = 0
 
     config["store_model_representation"] = True
-    config["representation_alias"] = "last"
+    config["representation_alias"] = None
 
     config["early_stopping"] = False
     config["epochs"] = 300

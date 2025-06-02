@@ -76,6 +76,8 @@ class StoreModelRepresentation(Callback):
         return self.outdir / f"{representation_type.lower().replace(' ', '_')}.csv"
 
     def setup(self, trainer, pl_module, stage):
+        if stage in ("validate", "test"):
+            return
         self._trainer = trainer
         if self._alias is not None:
             assert self._trainer.checkpoint_callback is not None, (
@@ -106,7 +108,8 @@ class StoreModelRepresentation(Callback):
             assert ckpt_path is not None, (
                 "Best model path not found in checkpoint callback"
             )
-            model = model_cls.load_from_checkpoint(ckpt_path, strict=False)
+            logger.info("Loading model from best checkpoint: %s", ckpt_path)
+            raise NotImplementedError
         if self._alias == "last":
             ckpt_path = getattr(
                 self._trainer.checkpoint_callback, "last_model_path", None
@@ -114,7 +117,8 @@ class StoreModelRepresentation(Callback):
             assert ckpt_path is not None, (
                 "Last model path not found in checkpoint callback"
             )
-            model = model_cls.load_from_checkpoint(ckpt_path, strict=False)
+            logger.info("Loading model from last checkpoint: %s", ckpt_path)
+            raise NotImplementedError
 
         assert isinstance(model, RegressionModel), (
             f"Expected model to be a RegressionModel, got {model_cls.__name__}"
