@@ -14,26 +14,11 @@ from kinodata.data.data_module import make_kinodata_module
 from kinodata.model.complex_transformer import ComplexTransformer, make_model
 from kinodata.types import NodeType, RelationType
 from kinodata.data.dataset import apply_transform_instance_permament, _DATA
+from kinodata.transform.feature_mask import FeatureMask
 from kinodata.transform.to_complex_graph import TransformToComplexGraph
 from kinodata.transform.ligand_only import ToLigandOnlyComplex
 from kinodata.data.featurization.atoms import AtomFeatures
 from kinodata.data.featurization.bonds import NUM_BOND_TYPES
-
-
-class FeatureSelection:
-    def __init__(self, mask, bond_mask=None):
-        self.mask = mask
-        self.bond_mask = bond_mask
-
-    def __call__(self, data):
-        data[NodeType.Complex].x = data[NodeType.Complex].x[:, self.mask]
-        if self.bond_mask is not None:
-            data[
-                NodeType.Complex, RelationType.Covalent, NodeType.Complex
-            ].edge_attr = data[
-                NodeType.Complex, RelationType.Covalent, NodeType.Complex
-            ].edge_attr[:, self.bond_mask]
-        return data
 
 
 DEBUG = False
@@ -124,7 +109,7 @@ if __name__ == "__main__":
         mask[-1] = True  # gasteiger charge
         bond_mask = torch.zeros(NUM_BOND_TYPES, dtype=torch.bool)
         bond_mask[[0, 1, 2, -1]] = True  # single, double, triple, other
-        select_transform = FeatureSelection(mask, bond_mask)
+        select_transform = FeatureMask(mask, bond_mask)
         ott = Compose([ott, select_transform])
         config["atom_attr_size"] = mask.sum().item()
         config["edge_size"] = bond_mask.sum().item()
