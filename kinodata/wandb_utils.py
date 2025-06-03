@@ -95,7 +95,7 @@ def retrieve_model_artifact(run, alias: str):
     return None
 
 
-retrieve_best_model_artifact = partial(retrieve_model_artifact, alias="best_k")
+retrieve_best_model_artifact = partial(retrieve_model_artifact, alias="best")
 
 
 def load_state_dict(

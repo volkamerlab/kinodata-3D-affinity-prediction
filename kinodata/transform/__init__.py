@@ -6,4 +6,5 @@ from .add_distances import (
 from .perturb_position import PerturbAtomPositions
 from .filter_metadata import FilterDockingRMSD, MetadataFilter
 from .to_complex_graph import TransformToComplexGraph
+from .feature_mask import FeatureMask
 from torch_geometric.transforms import Compose
