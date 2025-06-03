@@ -1,7 +1,7 @@
 universe = docker
 docker_image = gjoschka/kinodata3d-b0:2.3.0-cuda12.1
 executable = train_voxel.sh
-arguments = $(split_type) $(fold) $(hidden_channels) $(batch_size) $(acc_grad_batches) $(kernel_sizes) $(lr) $(lr_decay) $(random_rotation_augmentations)
+arguments = $(split_type) $(fold) $(hidden_channels) $(batch_size) $(acc_grad_batches) $(kernel_sizes) $(lr) $(lr_decay)
 output = train_kinodata_voxel.$(ClusterId).$(ProcId).out
 error = train_kinodata_voxel.$(ClusterId).$(ProcId).err
 log = train_kinodata_voxel.$(ClusterId).log
@@ -12,6 +12,7 @@ request_CPUs = 32
 request_memory = 128G
 requirements = UidDomain == "cs.uni-saarland.de"
 +WantGPUHomeMounted = true
-queue split_type, fold, hidden_channels, batch_size, acc_grad_batches, kernel_sizes, lr, lr_decay, random_rotation_augmentations from (
-   scaffold-k-fold, 0, 32, 32, 1, 433, 0.001, 0.01, True
+queue split_type, fold, hidden_channels, batch_size, acc_grad_batches, kernel_sizes, lr, lr_decay from (
+   scaffold-k-fold, 0, 64, 64, 2, 433, 0.0001, 0.005
+   scaffold-k-fold, 0, 128, 32, 4, 433, 0.0001, 0.005
 )

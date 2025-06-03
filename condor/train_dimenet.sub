@@ -1,7 +1,7 @@
 universe = docker
 docker_image = gjoschka/kinodata3d-pt2.5.1-cu121-cudnn9
 executable = train_dimenet.sh
-arguments =  $(split) $(rmsd) $(index) 
+arguments =  $(split) $(rmsd) $(index) $(lr) $(scheduler)
 error = train_dimenet.$(ClusterId).$(ProcId).err
 log = train_dimenet.$(ClusterId).log
 should_transfer_files   = YES
@@ -11,6 +11,15 @@ request_CPUs = 32
 request_memory = 128G
 requirements = UidDomain == "cs.uni-saarland.de"
 +WantGPUHomeMounted = true
-queue index, rmsd, split from (
-   0, 2, scaffold-k-fold
+queue index, rmsd, split, lr, scheduler from (
+   0, 6, scaffold-k-fold, 0.0001, plateau
+   1, 6, scaffold-k-fold, 0.0001, plateau
+   2, 6, scaffold-k-fold, 0.0001, plateau
+   3, 6, scaffold-k-fold, 0.0001, plateau
+   4, 6, scaffold-k-fold, 0.0001, plateau
+   0, 6, pocket-k-fold, 0.0001, plateau
+   1, 6, pocket-k-fold, 0.0001, plateau
+   2, 6, pocket-k-fold, 0.0001, plateau
+   3, 6, pocket-k-fold, 0.0001, plateau
+   4, 6, pocket-k-fold, 0.0001, plateau
 )

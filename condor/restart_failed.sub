@@ -1,0 +1,17 @@
+universe = docker
+docker_image = gjoschka/kinodata3d-pt2.5.1-cu121-cudnn9
+executable = sweep_cgnn.sh
+arguments = --split_index $(index) --filter_rmsd_max_value $(rmsd) --split_type $(split)  --covalent_only $(covalent_only) --hidden_channels $(hidden_channels) --num_attention_blocks $(num_attention_blocks) --batch_size $(batch_size) --accumulate_grad_batches $(accumulate_grad_batches) --epochs $(epochs)
+output = retrain_models.$(ClusterId).$(ProcId).out
+error = retrain_models.$(ClusterId).$(ProcId).err
+log = retrain_models.$(ClusterId).log
+should_transfer_files   = YES
+when_to_transfer_output = ON_EXIT
+request_GPUs = 1
+request_CPUs = 32
+request_memory = 128G
+requirements = (UidDomain == "cs.uni-saarland.de") && (GPUs_GlobalMemoryMb >= 32000)
++WantGPUHomeMounted = true
+queue index, rmsd, split, covalent_only, hidden_channels, num_attention_blocks, batch_size, accumulate_grad_batches, epochs from (
+    0, 6, scaffold-k-fold, True, 128, 2, 128, 1, 5
+)

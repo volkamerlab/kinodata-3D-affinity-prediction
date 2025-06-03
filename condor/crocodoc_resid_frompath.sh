@@ -1,4 +1,3 @@
 cd ${HOME}/kinodata-3D-affinity-prediction
-pip install resmo==0.0.8
 export WANDB_API_KEY=$(cat wandb_api_key)
-python3 scripts/doc_the_voxel.py --fold $1 --model-name $2
+python3 scripts/crocodoc_residues.py --model_path data/cgnn_new/$1 --outfile $2

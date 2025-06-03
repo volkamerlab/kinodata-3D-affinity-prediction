@@ -1,7 +1,7 @@
 universe = docker
 docker_image = gjoschka/kinodata3d-b0:2.3.0-cuda12.1
 executable = train_voxel.sh
-arguments = $(split_type) $(fold) $(hidden_channels) $(batch_size) $(acc_grad_batches) $(kernel_sizes) $(lr) $(lr_decay) $(random_rotation_augmentations)
+arguments = $(split_type) $(fold) $(hidden_channels) $(batch_size) $(acc_grad_batches) $(kernel_sizes) $(lr) $(lr_decay) $(pool_every)
 output = train_kinodata_voxel.$(ClusterId).$(ProcId).out
 error = train_kinodata_voxel.$(ClusterId).$(ProcId).err
 log = train_kinodata_voxel.$(ClusterId).log
@@ -12,50 +12,15 @@ request_CPUs = 32
 request_memory = 128G
 requirements = UidDomain == "cs.uni-saarland.de"
 +WantGPUHomeMounted = true
-queue split_type, fold, hidden_channels, batch_size, acc_grad_batches, kernel_sizes, lr, lr_decay, random_rotation_augmentations from (
-   scaffold-k-fold, 0, 32, 32, 1, 433, 0.001, 0.01, False
-   scaffold-k-fold, 0, 32, 32, 1, 433, 0.001, 0.01, True
-   scaffold-k-fold, 1, 32, 32, 1, 433, 0.001, 0.01, False
-   scaffold-k-fold, 1, 32, 32, 1, 433, 0.001, 0.01, True
-   scaffold-k-fold, 0, 64, 16, 2, 433, 0.001, 0.01, False
-   scaffold-k-fold, 0, 64, 16, 2, 433, 0.001, 0.01, True
-   scaffold-k-fold, 1, 64, 16, 2, 433, 0.001, 0.01, False
-   scaffold-k-fold, 1, 64, 16, 2, 433, 0.001, 0.01, True
-   scaffold-k-fold, 0, 32, 32, 1, 433, 0.0001, 0.005, False
-   scaffold-k-fold, 0, 32, 32, 1, 433, 0.0001, 0.005, True
-   scaffold-k-fold, 1, 32, 32, 1, 433, 0.0001, 0.005, False
-   scaffold-k-fold, 1, 32, 32, 1, 433, 0.0001, 0.005, True
-   scaffold-k-fold, 0, 64, 16, 2, 433, 0.0001, 0.005, False
-   scaffold-k-fold, 0, 64, 16, 2, 433, 0.0001, 0.005, True
-   scaffold-k-fold, 1, 64, 16, 2, 433, 0.0001, 0.005, False
-   scaffold-k-fold, 1, 64, 16, 2, 433, 0.0001, 0.005, True
-   scaffold-k-fold, 0, 32, 32, 1, 433, 0.00005, 0.002, False
-   scaffold-k-fold, 0, 32, 32, 1, 433, 0.00005, 0.002, True
-   scaffold-k-fold, 1, 32, 32, 1, 433, 0.00005, 0.002, False
-   scaffold-k-fold, 1, 32, 32, 1, 433, 0.00005, 0.002, True
-   scaffold-k-fold, 0, 64, 16, 2, 433, 0.00005, 0.002, False
-   scaffold-k-fold, 0, 64, 16, 2, 433, 0.00005, 0.002, True
-   scaffold-k-fold, 0, 32, 32, 1, 433, 0.001, 0.01, False
-   scaffold-k-fold, 0, 32, 32, 1, 433, 0.001, 0.01, True
-   scaffold-k-fold, 1, 32, 32, 1, 433, 0.001, 0.01, False
-   scaffold-k-fold, 1, 32, 32, 1, 433, 0.001, 0.01, True
-   scaffold-k-fold, 0, 64, 16, 2, 433, 0.001, 0.01, False
-   scaffold-k-fold, 0, 64, 16, 2, 433, 0.001, 0.01, True
-   scaffold-k-fold, 1, 64, 16, 2, 433, 0.001, 0.01, False
-   scaffold-k-fold, 1, 64, 16, 2, 433, 0.001, 0.01, True
-   scaffold-k-fold, 0, 32, 32, 1, 433, 0.0001, 0.005, False
-   scaffold-k-fold, 0, 32, 32, 1, 433, 0.0001, 0.005, True
-   scaffold-k-fold, 1, 32, 32, 1, 433, 0.0001, 0.005, False
-   scaffold-k-fold, 1, 32, 32, 1, 433, 0.0001, 0.005, True
-   scaffold-k-fold, 0, 64, 16, 2, 433, 0.0001, 0.005, False
-   scaffold-k-fold, 0, 64, 16, 2, 433, 0.0001, 0.005, True
-   scaffold-k-fold, 1, 64, 16, 2, 433, 0.0001, 0.005, False
-   scaffold-k-fold, 1, 64, 16, 2, 433, 0.0001, 0.005, True
-   scaffold-k-fold, 0, 32, 32, 1, 433, 0.00005, 0.002, False
-   scaffold-k-fold, 0, 32, 32, 1, 433, 0.00005, 0.002, True
-   scaffold-k-fold, 1, 32, 32, 1, 433, 0.00005, 0.002, False
-   scaffold-k-fold, 0, 64, 16, 2, 433, 0.00005, 0.002, False
-   scaffold-k-fold, 0, 64, 16, 2, 433, 0.00005, 0.002, True
-   scaffold-k-fold, 1, 64, 16, 2, 433, 0.00005, 0.002, False
-   scaffold-k-fold, 1, 64, 16, 2, 433, 0.00005, 0.002, True
+queue split_type, fold, hidden_channels, batch_size, acc_grad_batches, kernel_sizes, lr, lr_decay, pool_every from (
+   scaffold-k-fold, 0, 32, 32, 2, 643333, 0.00007, 0.005, 2
+   scaffold-k-fold, 1, 32, 32, 2, 643333, 0.00007, 0.005, 2
+   scaffold-k-fold, 0, 64, 32, 2, 433, 0.00007, 0.005, 1
+   scaffold-k-fold, 1, 64, 32, 2, 433, 0.00007, 0.005, 1
+   scaffold-k-fold, 0, 64, 32, 2, 43333, 0.00007, 0.005, 2
+   scaffold-k-fold, 1, 64, 32, 2, 43333, 0.00007, 0.005, 2
+   scaffold-k-fold, 0, 128, 16, 4, 433, 0.00007, 0.002, 1
+   scaffold-k-fold, 1, 128, 16, 4, 433, 0.00007, 0.002, 1
+   scaffold-k-fold, 0, 128, 16, 4, 43333, 0.00007, 0.002, 2
+   scaffold-k-fold, 1, 128, 16, 4, 43333, 0.00007, 0.002, 2
 )
