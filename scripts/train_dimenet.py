@@ -36,7 +36,7 @@ class FeatureSelection:
         return data
 
 
-DEBUG = True
+DEBUG = False
 
 
 def _debug_config(config):
