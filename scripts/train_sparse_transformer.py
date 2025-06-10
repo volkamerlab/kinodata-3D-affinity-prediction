@@ -16,7 +16,7 @@ from kinodata.types import NodeType, RelationType
 from kinodata.data.dataset import apply_transform_instance_permament, _DATA
 from kinodata.transform.feature_mask import FeatureMask
 from kinodata.transform.to_complex_graph import TransformToComplexGraph
-from kinodata.transform.ligand_only import ToLigandOnlyComplex
+from kinodata.transform.mask_protein import MaskProtein
 from kinodata.data.featurization.atoms import AtomFeatures
 from kinodata.data.featurization.bonds import NUM_BOND_TYPES
 
@@ -116,7 +116,7 @@ if __name__ == "__main__":
         tags.append("simplified_features")
 
     if config.get("ligand_only_3d", False):
-        ott = Compose([ott, ToLigandOnlyComplex()])
+        ott = Compose([ott, MaskProtein()])
 
     wandb.init(
         config=config,

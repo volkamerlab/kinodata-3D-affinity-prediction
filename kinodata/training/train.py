@@ -13,14 +13,14 @@ from kinodata.data.data_module import make_kinodata_module
 from torch_geometric.data.lightning import LightningDataset
 from kinodata.model.regression import RegressionModel, enable_target_normalization
 import kinodata.transform as T
-from .predict import predict_df
-from .crocodoc import (
+from ..evaluation.predict import predict_df
+from .callbacks.crocodoc import (
     load_pli_reference,
     CrocodocCallback,
     remove_augmentation_transforms_from_data_module,
 )
-from .integrated_gradients import IntegratedGradientsCallback
-from .representation import StoreModelRepresentation
+from .callbacks.integrated_gradients import IntegratedGradientsCallback
+from .callbacks.representation import StoreModelRepresentation
 import os.path as osp
 import gzip
 
@@ -39,7 +39,7 @@ def train(
     fn_data: Callable[[Config], LightningDataset] = make_kinodata_module,
     fn_model: Callable[[Config], RegressionModel] = None,
 ):
-    logger = WandbLogger(log_model="all")
+    logger = WandbLogger(log_model=True)
     model = fn_model(config)
     data_module = fn_data(config)
     if config.get("normalize_target", False):
@@ -50,6 +50,8 @@ def train(
     validation_checkpoint = ModelCheckpoint(
         monitor="val/mae",
         mode="min",
+        save_top_k=1,
+        save_last=True,
     )
     lr_monitor = LearningRateMonitor("epoch")
     callbacks = [validation_checkpoint, lr_monitor]
@@ -124,13 +126,23 @@ def train(
     trainer.test(ckpt_path="best", datamodule=data_module)
 
     data_module = remove_augmentation_transforms_from_data_module(data_module)
-    # log all predictions of the best model
-    df_train = predict_df(model, data_module.train_dataloader(), trainer, "best")
-    df_val = predict_df(model, data_module.val_dataloader(), trainer, "best")
-    df_test = predict_df(model, data_module.test_dataloader(), trainer, "best")
-    df_train["split"] = "train"
-    df_val["split"] = "val"
-    df_test["split"] = "test"
-    df = pd.concat([df_train, df_val, df_test])
-    table = wandb.Table(dataframe=df)
+    transforms_during_prediction = [None]
+    if config.get("also_predict_with_protein_masked", True):
+        transforms_during_prediction.append(T.MaskProtein())
+    predict_dfs = []
+    for transform in transforms_during_prediction:
+        for split_key, loader_method in {
+            "train": data_module.train_dataloader,
+            "val": data_module.val_dataloader,
+            "test": data_module.test_dataloader,
+        }.items():
+            loader = loader_method()
+            df_ = predict_df(
+                model, loader, trainer, "best", additional_transform=transform
+            )
+            df_["split"] = split_key
+            df_["transform"] = str(transform) if transform else "none"
+            predict_dfs.append(df_)
+    prediction_df = pd.concat(predict_dfs)
+    table = wandb.Table(dataframe=prediction_df)
     wandb.log({"all_predictions": table})

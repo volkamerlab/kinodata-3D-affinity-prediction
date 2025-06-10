@@ -6,17 +6,24 @@ from torch_geometric.utils import subgraph
 from ..types import NodeType, RelationType
 
 
-class ToLigandOnlyComplex(BaseTransform):
+class MaskProtein(BaseTransform):
     node_attrs = ("x", "z", "pos", "is_pocket_atom")
-    
+    optional_node_attrs = ("batch",)
+
     def __call__(self, data: HeteroData) -> HeteroData:
         node_store = data[NodeType.Complex]
         is_ligand_mask = ~node_store.is_pocket_atom.squeeze()
         for attr in self.node_attrs:
             node_store[attr] = node_store[attr][is_ligand_mask]
+        for attr in self.optional_node_attrs:
+            if attr in node_store:
+                node_store[attr] = node_store[attr][is_ligand_mask]
         edge_store = data[NodeType.Complex, RelationType.Covalent, NodeType.Complex]
         edge_index, edge_attr = subgraph(
-            is_ligand_mask, edge_store.edge_index, edge_store.edge_attr, relabel_nodes=True
+            is_ligand_mask,
+            edge_store.edge_index,
+            edge_store.edge_attr,
+            relabel_nodes=True,
         )
         edge_store["edge_index"] = edge_index
         edge_store["edge_attr"] = edge_attr

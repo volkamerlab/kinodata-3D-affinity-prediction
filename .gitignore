@@ -9,6 +9,10 @@ timecapsule
 /data
 /surface_data
 residue_attr/
+integrated_gradients/
+crocodoc/
+model_representations/
+kinodata_xai_notebooks/
 __data/
 
 # wandb / pl logs and artifacts

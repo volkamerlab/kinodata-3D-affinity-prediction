@@ -25,7 +25,7 @@ from kinodata.data import KinodataDocked
 from kinodata.transform.mask_residues import MaskResidues
 from kinodata.types import COLS
 
-from ..model.regression import RegressionModel, cat_many
+from ...model.regression import RegressionModel, cat_many
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)

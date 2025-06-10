@@ -15,7 +15,7 @@ from kinodata.data.data_module import make_kinodata_module
 from kinodata.types import NodeType, RelationType
 from kinodata.data.dataset import apply_transform_instance_permament, _DATA
 from kinodata.transform.to_complex_graph import TransformToComplexGraph
-from kinodata.transform.ligand_only import ToLigandOnlyComplex
+from kinodata.transform.mask_protein import MaskProtein
 from kinodata.data.featurization.atoms import AtomFeatures
 from kinodata.data.featurization.bonds import NUM_BOND_TYPES
 
@@ -36,19 +36,21 @@ class FeatureSelection:
         return data
 
 
-DEBUG = False
+DEBUG = True
 
 
 def _debug_config(config):
     config["hidden_channels"] = 16
-    config["num_attention_blocks"] = 1
-    config["num_heads"] = 1
+    config["num_blocks"] = 1
+    config["out_channels"] = 16
+    config["out_emb_channels"] = 16
+    config["int_emb_size"] = 8
     config["max_num_neighbors"] = 8
     config["epochs"] = 3
     config["crocodoc_frequency"] = 0
     config["run_crocodoc"] = True
     config["store_model_representation"] = True
-    config["representation_alias"] = "last"
+    config["representation_alias"] = None
     return config
 
 
@@ -68,7 +70,7 @@ if __name__ == "__main__":
     config["crocodoc_frequency"] = 0
 
     config["store_model_representation"] = True
-    config["representation_alias"] = "last"
+    config["representation_alias"] = None
 
     config["early_stopping"] = False
     config["epochs"] = 200
@@ -112,7 +114,7 @@ if __name__ == "__main__":
         tags.append("simplified_features")
 
     if config.get("ligand_only_3d", False):
-        ott = Compose([ott, ToLigandOnlyComplex()])
+        ott = Compose([ott, MaskProtein()])
 
     wandb.init(
         config=config,
