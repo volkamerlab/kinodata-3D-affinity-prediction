@@ -314,6 +314,7 @@ class ComplexTransformer(RegressionModel):
         }
 
 
-def make_model(config: Config):
+def make_model(config: Config, **kwargs):
+    config.update(kwargs)
     cls = partial(ComplexTransformer, config)
     return config.init(cls)
