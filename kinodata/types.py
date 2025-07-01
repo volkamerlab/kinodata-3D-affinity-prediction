@@ -57,3 +57,4 @@ class COLS(StrEnum):
     RESIDUE_IMPORTANCE = "residue_importance"
     UNIPROT_ID = "UniprotID"
     ALIGNMENT = "cosine_similarity"
+    SMILES = "compound_structures.canonical_smiles"
