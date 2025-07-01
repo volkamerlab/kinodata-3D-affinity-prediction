@@ -251,8 +251,6 @@ def main(
         test=on_test,
     )
 
-    datasets = {key: dataset[:1000] for key, dataset in datasets.items()}
-
     if predict_outfile is not None:
         predict_outfile = Path(predict_outfile)
         if not predict_outfile.parent.exists():
