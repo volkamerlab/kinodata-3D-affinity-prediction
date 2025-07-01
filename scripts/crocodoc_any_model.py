@@ -252,6 +252,11 @@ def main(
     )
     if predict_outfile is not None:
         predict_outfile = Path(predict_outfile)
+        if not predict_outfile.parent.exists():
+            logger.info(
+                f"Creating directory for predictions: {predict_outfile.parent.absolute()}"
+            )
+            predict_outfile.parent.mkdir(parents=True, exist_ok=True)
         for key, dataset in datasets.items():
             logger.info(f"Running predictions on {key} split")
             loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
