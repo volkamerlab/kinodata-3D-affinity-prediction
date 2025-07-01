@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Literal, Optional
 import json
 from torch_geometric.loader import DataLoader
+from pytorch_lightning import Trainer
 import wandb
 
 from kinodata.training.callbacks.crocodoc import run_crocodoc
@@ -17,6 +18,7 @@ from kinodata.data.data_module import create_dataset
 from kinodata.data.grouped_split import KinodataKFoldSplit
 from kinodata.transform.filter_metadata import FilterDockingRMSD
 from kinodata.transform import TransformToComplexGraph
+from kinodata.evaluation.predict import predict_df
 
 from enum import Enum
 
@@ -61,7 +63,7 @@ def get_dataset_information(
     return split_type, split_fold, rmsd_threshold
 
 
-def get_inference_dataset(
+def get_inference_datasets(
     split_type: SplitType,
     split_fold: int,
     rmsd_threshold: float,
@@ -199,6 +201,10 @@ def main(
         None,
         help="Output file to save the results",
     ),
+    predict_outfile: Optional[Path] = Option(
+        None,
+        help="Output file to save the predictions",
+    ),
 ):
     if device.startswith("cuda") and not torch.cuda.is_available():
         logging.warning("CUDA is not available, switching to CPU.")
@@ -221,8 +227,11 @@ def main(
         wandb_run_id=wandb_run_id,
         device=device,
     )
+    if "state_dict" in state_dict:
+        # If the state_dict is wrapped in a 'state_dict' key, extract it
+        state_dict = state_dict["state_dict"]
     model: torch.nn.Module = model_cls(model_train_config)
-    model.load_state_dict(state_dict, strict=False)
+    model.load_state_dict(state_dict, strict=True)
     model = model.to(device)
     model.eval()
 
@@ -233,7 +242,7 @@ def main(
         model_train_config=model_train_config,
     )
 
-    datasets = get_inference_dataset(
+    datasets = get_inference_datasets(
         split_type=split_type,
         split_fold=split_fold,
         rmsd_threshold=rmsd_threshold,
@@ -241,6 +250,22 @@ def main(
         val=on_val,
         test=on_test,
     )
+    if predict_outfile is not None:
+        predict_outfile = Path(predict_outfile)
+        for key, dataset in datasets.items():
+            logger.info(f"Running predictions on {key} split")
+            loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+            predictions = predict_df(
+                model=model,
+                loader=loader,
+                trainer=Trainer(accelerator="cpu"),
+                ckpt_path=None,
+            )
+            predictions["dataset"] = key
+            _append_dataframe_to(
+                data_frame=predictions,
+                file_path=predict_outfile,
+            )
 
     for dataset_key, dataset in datasets.items():
         logger.info(
