@@ -1,0 +1,18 @@
+universe = docker
+docker_image = gjoschka/kinodata3d-pt2.5.1-cu121-cudnn9
+executable = run_python_script_with_setup.sh
+arguments = crocodoc_any_model --wandb-run-id $(wandb_run_id) --model-type $(model_type) --split-type $(split_type) --split-fold $(split_fold) --rmsd-threshold $(rmsd_threshold) --batch-size $(batch_size) --device cuda:0 --outfile crocodoc_results_$(wandb_run_id)_$(split_fold).csv --predict-outfile predictions_$(wandb_run_id)_$(split_fold).csv $(extra_args)
+error = crocodoc_any_model.$(ClusterId).$(ProcId).err
+log = crocodoc_any_model.$(ClusterId).log
+should_transfer_files   = YES
+when_to_transfer_output = ON_EXIT
+request_GPUs = 1
+request_CPUs = 16
+request_memory = 64G
+requirements = UidDomain == "cs.uni-saarland.de"
++WantGPUHomeMounted = true
+
+# Example queue with different model types and split configurations
+queue wandb_run_id, model_type, batch_size, extra_args from (
+   9q3rpk6f, dimenet, 64, "--on-test"
+)
