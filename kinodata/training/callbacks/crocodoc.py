@@ -141,8 +141,17 @@ def safe_predict(
         )
     model_was_training = _model.training
     _model.eval()
+    model_device = next(_model.parameters()).device
     if device is None:
-        device = next(_model.parameters()).device
+        device = model_device
+    if device != model_device:
+        logger.warning(
+            "Model device (%s) does not match specified device (%s). "
+            "Moving model to specified device.",
+            model_device,
+            device,
+        )
+        _model.to(device)
     predictions = []
     with torch.no_grad():
         for batch_idx, batch in enumerate(dataloader):
@@ -238,12 +247,13 @@ def compress_directory_to_tar_gz(
     return output_filename
 
 
-def crocodoc_cgnn(
+def run_crocodoc(
     model: RegressionModel,
     dataset: KinodataDocked,
-    trainer: Trainer | None = None,
-    ckpt_path: str | None = "best",
+    ckpt_path: str | None = None,
     mask_type: str | None = None,
+    batch_size: int = 32,
+    device: torch.device | str = "cuda:0",
 ) -> pd.DataFrame:
     data_list, residue_to_atom_index = get_required_data(dataset)
 
@@ -251,8 +261,6 @@ def crocodoc_cgnn(
     masking = MaskResidues(residue_to_atom_index, mask_type=mask_type)
 
     dfs = []
-    if trainer is None:
-        trainer = model.trainer
     progress_bar = tqdm(total=len(masking), desc="Masked prediction")
     while True:
         increment = len(masking)
@@ -263,10 +271,11 @@ def crocodoc_cgnn(
             model,
             DataLoader(
                 transformed_data_list,
-                batch_size=32,
+                batch_size=batch_size,
                 shuffle=False,
             ),
             ckpt_path=ckpt_path,
+            device=device,
         )
         predictions = cat_many(predictions)
         meta = cat_many(
@@ -305,6 +314,7 @@ def crocodoc_cgnn(
             model,
             DataLoader(data_list, batch_size=32, shuffle=False),
             ckpt_path=ckpt_path,
+            device=device,
         )
     )
     meta = cat_many(
@@ -475,7 +485,7 @@ class CrocodocCallback(Callback):
             dataset, orig_transform = remove_augementation_transforms_from_dataset(
                 dataset, return_orig_transform=True
             )
-            masked_prediction, reference_prediction = crocodoc_cgnn(
+            masked_prediction, reference_prediction = run_crocodoc(
                 pl_module,
                 dataset,
                 trainer=None,
