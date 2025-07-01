@@ -284,7 +284,7 @@ def main(
             f"  cv_fold = {split_fold}\n"
             f"  split = {dataset_key}"
         )
-        results = run_crocodoc(
+        masked_pred, ref_pred = run_crocodoc(
             model=model,
             dataset=dataset,
             ckpt_path=None,
@@ -292,10 +292,15 @@ def main(
             batch_size=batch_size,
             device=device,
         )
-        results["dataset"] = dataset_key
+        masked_pred["dataset"] = dataset_key
+        ref_pred["dataset"] = dataset_key
         _append_dataframe_to(
-            data_frame=results,
-            file_path=outfile,
+            data_frame=masked_pred,
+            file_path=outfile.with_stem(f"{outfile.stem}_masked"),
+        )
+        _append_dataframe_to(
+            data_frame=ref_pred,
+            file_path=outfile.with_stem(f"{outfile.stem}_ref"),
         )
 
 
