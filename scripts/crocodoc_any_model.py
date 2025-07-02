@@ -189,16 +189,16 @@ def main(
         "best",
         help="Alias of the model in Weights & Biases",
     ),
-    split_type: SplitType | None = typer.Option(
-        SplitType.SCAFFOLD_K_FOLD,
+    split_type: Optional[SplitType] = typer.Option(
+        None,
         help="Type of split to use for splitting the dataset",
     ),
-    split_fold: int = typer.Option(
-        0,
+    split_fold: Optional[int] = typer.Option(
+        None,
         help="Fold number to use for the split",
     ),
-    rmsd_threshold: float = typer.Option(
-        2.0,
+    rmsd_threshold: Optional[float] = typer.Option(
+        None,
         help="RMSD threshold for filtering the dataset",
     ),
     on_train: bool = typer.Option(
