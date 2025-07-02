@@ -268,6 +268,11 @@ def main(
                 ckpt_path=None,
             )
             predictions["dataset"] = key
+            for _key, value in zip(
+                ["split_type", "split_fold", "rmsd_threshold"],
+                [split_type, split_fold, rmsd_threshold],
+            ):
+                predictions[_key] = value
             _append_dataframe_to(
                 data_frame=predictions,
                 file_path=predict_outfile,
@@ -299,6 +304,23 @@ def main(
         _append_dataframe_to(
             data_frame=ref_pred,
             file_path=outfile.with_stem(f"{outfile.stem}_ref"),
+        )
+
+    with (
+        outfile.with_stem(f"{outfile.stem}_summary").with_suffix(".json").open("w") as f
+    ):
+        json.dump(
+            {
+                "wandb_run_id": wandb_run_id,
+                "model_type": model_type,
+                "split_type": split_type,
+                "split_fold": split_fold,
+                "rmsd_threshold": rmsd_threshold,
+                "batch_size": batch_size,
+                "device": device,
+            },
+            f,
+            indent=4,
         )
 
 
