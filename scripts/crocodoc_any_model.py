@@ -78,7 +78,7 @@ def _append_dataframe_to(data_frame: pd.DataFrame, file_path: Path) -> None:
 def get_dataset_information(
     split_type: SplitType | None = None,
     split_fold: int | None = None,
-    rmsd_threshold: float | None = 2.0,
+    rmsd_threshold: float | None = None,
     model_train_config: Optional[Config] = None,
 ) -> tuple[SplitType, int, float]:
     split_type = split_type or model_train_config["split_type"]
