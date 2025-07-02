@@ -7,10 +7,14 @@ from pathlib import Path
 from typing import Literal, Optional
 import json
 from torch_geometric.loader import DataLoader
+from torch_geometric.transforms import Compose
 from pytorch_lightning import Trainer
 import wandb
 
+from kinodata.data.featurization.atoms import AtomFeatures
+from kinodata.data.featurization.bonds import NUM_BOND_TYPES
 from kinodata.training.callbacks.crocodoc import run_crocodoc
+from kinodata.transform.feature_mask import FeatureMask
 import kinodata.wandb_utils as wb
 from kinodata.data import KinodataDocked, Filtered
 from kinodata.configuration import Config
@@ -23,6 +27,26 @@ from kinodata.evaluation.predict import predict_df
 from enum import Enum
 
 logger = logging.getLogger(__name__)
+
+
+# shameless code duplication from train_sparse_transformer.py
+def _add_feature_selection_transform(
+    model_train_config: Config, dataset: KinodataDocked
+):
+    if not model_train_config.get("simplified_features", False):
+        return dataset
+    mask = torch.zeros(AtomFeatures.size, dtype=torch.bool)
+    is_hydrogen = list(range(5))
+    mask[is_hydrogen] = True  # num hydrogens 0-4
+    mask[-1] = True  # gasteiger charge
+    bond_mask = torch.zeros(NUM_BOND_TYPES, dtype=torch.bool)
+    bond_mask[[0, 1, 2, -1]] = True  # single, double, triple, other
+    select_transform = FeatureMask(mask, bond_mask)
+    if dataset.transform is None:
+        dataset.transform = select_transform
+    else:
+        dataset.transform = Compose([dataset.transform, select_transform])
+    return dataset
 
 
 class SplitType(str, Enum):
@@ -250,6 +274,11 @@ def main(
         val=on_val,
         test=on_test,
     )
+
+    datasets = {
+        key: _add_feature_selection_transform(model_train_config, dataset)
+        for key, dataset in datasets.items()
+    }
 
     if predict_outfile is not None:
         predict_outfile = Path(predict_outfile)
