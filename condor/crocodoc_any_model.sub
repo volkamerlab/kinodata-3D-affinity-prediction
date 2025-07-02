@@ -13,6 +13,15 @@ requirements = UidDomain == "cs.uni-saarland.de"
 +WantGPUHomeMounted = true
 
 queue wandb_run_id, checkpoint_path, model_type, batch_size, extra_arg from (
+   nxdo3k3w, lightning_logs/nxdo3k3w/checkpoints/best.ckpt, dimenet, 48, --on-test 
+   aqfuzy7q, lightning_logs/aqfuzy7q/checkpoints/best.ckpt, dimenet, 48, --on-test 
+   cvebpdqd, lightning_logs/cvebpdqd/checkpoints/best.ckpt, dimenet, 48, --on-test 
+   ubiebt9o, lightning_logs/ubiebt9o/checkpoints/best.ckpt, dimenet, 48, --on-test 
+   jvbuso5q, lightning_logs/jvbuso5q/checkpoints/best.ckpt, dimenet, 48, --on-test 
+   04jjtxlk, lightning_logs/04jjtxlk/checkpoints/best.ckpt, dimenet, 48, --on-test 
+   x5pyekmo, lightning_logs/x5pyekmo/checkpoints/best.ckpt, dimenet, 48, --on-test 
+   w30x46z9, lightning_logs/w30x46z9/checkpoints/best.ckpt, dimenet, 48, --on-test 
+   9q3rpk6f, lightning_logs/9q3rpk6f/checkpoints/best.ckpt, dimenet, 48, --on-test
    r78ndufb, lightning_logs/r78ndufb/checkpoints/best.ckpt, cgnn3d, 64, --on-test
    e5qrnuwy, lightning_logs/e5qrnuwy/checkpoints/best.ckpt, cgnn3d, 64, --on-test
    9u4zikfi, lightning_logs/9u4zikfi/checkpoints/best.ckpt, cgnn3d, 64, --on-test

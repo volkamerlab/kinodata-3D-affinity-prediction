@@ -280,6 +280,23 @@ def main(
         for key, dataset in datasets.items()
     }
 
+    with (
+        outfile.with_stem(f"{outfile.stem}_summary").with_suffix(".json").open("w") as f
+    ):
+        json.dump(
+            {
+                "wandb_run_id": wandb_run_id,
+                "model_type": model_type,
+                "split_type": split_type,
+                "split_fold": split_fold,
+                "rmsd_threshold": rmsd_threshold,
+                "batch_size": batch_size,
+                "device": device,
+            },
+            f,
+            indent=4,
+        )
+
     if predict_outfile is not None:
         predict_outfile = Path(predict_outfile)
         if not predict_outfile.parent.exists():
@@ -333,23 +350,6 @@ def main(
         _append_dataframe_to(
             data_frame=ref_pred,
             file_path=outfile.with_stem(f"{outfile.stem}_ref"),
-        )
-
-    with (
-        outfile.with_stem(f"{outfile.stem}_summary").with_suffix(".json").open("w") as f
-    ):
-        json.dump(
-            {
-                "wandb_run_id": wandb_run_id,
-                "model_type": model_type,
-                "split_type": split_type,
-                "split_fold": split_fold,
-                "rmsd_threshold": rmsd_threshold,
-                "batch_size": batch_size,
-                "device": device,
-            },
-            f,
-            indent=4,
         )
 
 
