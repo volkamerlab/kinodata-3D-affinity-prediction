@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Script to rename epoch*.ckpt files to best.ckpt
+# Script to copy epoch*.ckpt files to best.ckpt
 # Usage: ./rename_best_checkpoint.sh [-R] [directory]
 
 show_usage() {
@@ -8,7 +8,7 @@ show_usage() {
     echo "  -R        Apply recursively to all subdirectories"
     echo "  directory Directory to process (default: current directory)"
     echo ""
-    echo "This script renames epoch*.ckpt files to best.ckpt only if exactly one such file exists."
+    echo "This script copies epoch*.ckpt files to best.ckpt only if exactly one such file exists."
 }
 
 process_directory() {
@@ -31,12 +31,12 @@ process_directory() {
             return 1
         fi
         
-        # Rename the file
-        if mv "$source_file" "$target_file"; then
-            echo "Renamed: $(basename "$source_file") -> best.ckpt in $dir"
+        # Copy the file
+        if cp "$source_file" "$target_file"; then
+            echo "Copied: $(basename "$source_file") -> best.ckpt in $dir"
             return 0
         else
-            echo "Error: Failed to rename $source_file to $target_file"
+            echo "Error: Failed to copy $source_file to $target_file"
             return 1
         fi
     elif [ ${#found_files[@]} -eq 0 ]; then
@@ -108,7 +108,7 @@ if [ "$recursive" = true ]; then
     done < <(find "$target_dir" -type d -print0)
     
     echo ""
-    echo "Summary: Processed $processed directories, successfully renamed files in $successful directories"
+    echo "Summary: Processed $processed directories, successfully copied files in $successful directories"
 else
     # Process only the target directory
     process_directory "$target_dir"
