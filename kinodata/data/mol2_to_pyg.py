@@ -212,6 +212,14 @@ class Mol2SDFComplexDataset(InMemoryDataset):
         SDF files for ligands. The dataset will process the mol2 files and rdkit ligands into
         torch_geometric HeteroData objects representing protein-ligand complexes.
 
+        Note that the mol2 files must be in a homogenized file structure, meaning
+        that all mol2 and sdf file must be in the directory root/raw.
+
+        For instance if root="my_super_cool_dataset", then mol2_files should be something like:
+        my_super_cool_dataset/raw/pocket1.mol2, my_super_cool_dataset/raw/pocket2.mol2, etc.
+        and sdf_files should be something like:
+        my_super_cool_dataset/raw/ligand1.sdf, my_super_cool_dataset/raw/ligand2.sdf, etc.
+
         Args:
             root (str | Path): a directory where the dataset will be stored.
             mol2_files (Iterable[str  |  Path]): mol2 files containing protein pocket data.
@@ -223,7 +231,7 @@ class Mol2SDFComplexDataset(InMemoryDataset):
             verbose (bool, optional): Whether to print verbose output. Defaults to True.
 
         Raises:
-            ValueError: _description_
+            ValueError: If neither `sdf_files` nor `multi_sdf_file` is provided.
         """
         if multi_sdf_file is not None:
             self._sdf_files = [multi_sdf_file]
