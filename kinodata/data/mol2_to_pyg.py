@@ -1,18 +1,24 @@
 import itertools
+import logging
 from pathlib import Path
-from typing import Callable, Iterable, TypeVar
-from biopandas.mol2 import PandasMol2
+from typing import Iterable, TypeVar
+
 import rdkit.Chem as Chem
 import torch
+from biopandas.mol2 import PandasMol2
+from torch.utils.data import IterableDataset
+from torch_geometric.data import HeteroData, InMemoryDataset
+from tqdm import tqdm
+
 from kinodata.data.featurization.rd_features import (
     set_atoms,
     set_bonds,
 )
-from torch_geometric.data import HeteroData
-from torch.utils.data import IterableDataset
-
-from kinodata.types import NodeType, RelationType
+from kinodata.data.io.read_sdf import read_sdf_molecules
 from kinodata.data.utils.scaffolds import mol_to_scaffold
+from kinodata.types import NodeType, RelationType
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 Q = TypeVar("Q")
@@ -76,7 +82,7 @@ def mol2_pocket_to_pyg(
     columns: list[str] | None = KLIFS_MOL2_COLUMNS,
     remove_hydrogens: bool = False,
     sanity_check_alignment: bool = True,
-):
+) -> HeteroData:
     rdkit_mol = Chem.MolFromMol2File(str(path), sanitize=True, removeHs=False)
     mol2_reader = PandasMol2()
     mol2_reader.read_mol2(path, columns)
@@ -103,33 +109,153 @@ def mol2_pocket_to_pyg(
     return data
 
 
+def _add_value(data, key, value, overwrite: bool = False) -> HeteroData:
+    if not overwrite and key in data:
+        raise KeyError(
+            f"Key '{key}' already exists in data. Use `overwrite=True` to enable replacement."
+        )
+    if isinstance(value, float):
+        value = torch.tensor([value], dtype=torch.float32)
+    if isinstance(value, int):
+        value = torch.tensor([value], dtype=torch.long)
+    if isinstance(value, bool):
+        value = torch.tensor([value], dtype=torch.bool)
+    data[key] = value
+    return data
+
+
 class LazyComplexDataset(IterableDataset):
     def __init__(
         self,
-        pocket_file_itr: Iterable[str | Path],
-        ligand_mols_itr: Iterable[Chem.Mol],
-        metadata_itr: Iterable[dict] | None = None,
-        **kwargs,
+        mol2_files: Iterable[str | Path],
+        ligand_rdkit_molecules: Iterable[Chem.Mol],
+        metadata: Iterable[dict] | None = None,
+        required_ligand_properties: dict[str, str | float | int | bool] | None = None,
+        mol2_pocket_to_pyg_options: dict | None = None,
     ):
+        """
+        A dataset that lazily loads protein pocket data from mol2 files and merges them
+        with corresponding ligand molecules into torch_geometric HeteroData objects representing
+        protein-ligand complexes.
+
+        Args:
+            mol2_files (Iterable[str  |  Path]): Paths to the mol2 files.
+            ligand_rdkit_molecules (Iterable[Chem.Mol]): RDKit molecule objects for the ligands.
+            metadata (Iterable[dict] | None, optional): Metadata for each complex. Defaults to None.
+        """
         super().__init__()
-        self.kwargs = kwargs
+        self._required_ligand_properties = required_ligand_properties or {}
+        self._mol2_pocket_to_pyg_options = mol2_pocket_to_pyg_options or {}
         # make iterable that always return an empty dict
-        if metadata_itr is None:
-            metadata_itr = itertools.repeat(dict())
-        self.pocket_file_itr = pocket_file_itr
-        self.ligand_mols_itr = ligand_mols_itr
-        self.metadata_itr = metadata_itr
+        if metadata is None:
+            metadata = itertools.repeat(dict())
+        self._mol2_files = mol2_files
+        self._ligand_mols = ligand_rdkit_molecules
+        self._metadata = metadata
 
     def __iter__(self):
         for pocket_file, ligand_mol, metadata in zip(
-            self.pocket_file_itr, self.ligand_mols_itr, self.metadata_itr
+            self._mol2_files, self._ligand_mols, self._metadata
         ):
-            complex_data = mol2_pocket_to_pyg(pocket_file, self.kwargs)
+            complex_data = mol2_pocket_to_pyg(
+                pocket_file, **self._mol2_pocket_to_pyg_options
+            )
             set_atoms(ligand_mol, complex_data, NodeType.Ligand)
             set_bonds(ligand_mol, complex_data, NodeType.Ligand)
             complex_data.scaffolds = mol_to_scaffold(ligand_mol)
+            for key, default in self._required_ligand_properties.items():
+                try:
+                    value = ligand_mol.GetProp(key)
+                except KeyError:
+                    logger.warning(
+                        f"Key '{key}' not found in ligand molecule properties."
+                        f"Using default value: {default}"
+                    )
+                    value = default
+                complex_data = _add_value(complex_data, key, value)
             for key, value in metadata.items():
-                if isinstance(value, float):
-                    value = torch.tensor([value], dtype=torch.float32)
-                complex_data[key] = value
+                complex_data = _add_value(complex_data, key, value)
             yield complex_data
+
+
+def _check_homogenized_file_structure(
+    root: str | Path,
+    files: list[str | Path],
+):
+    root = Path(root)
+    if not root.is_dir():
+        raise ValueError(
+            f"Root directory '{root}' does not exist or is not a directory."
+        )
+    for file in map(Path, files):
+        if file.parent != root:
+            raise ValueError(
+                f"File '{file}' is not in the root directory '{root}'. "
+                "All files must be in the same directory."
+            )
+
+
+class Mol2SDFComplexDataset(InMemoryDataset):
+    def __init__(
+        self,
+        root: str | Path,
+        mol2_files: Iterable[str | Path],
+        sdf_files: Iterable[str | Path] | None = None,
+        multi_sdf_file: str | Path | None = None,
+        processed_file_name: str | None = None,
+        required_ligand_properties: dict[str, str | float | int | bool] | None = None,
+        verbose: bool = True,
+        **kwargs,
+    ):
+        """
+        Create a dataset that combines mol2 files for protein pockets with
+        SDF files for ligands. The dataset will process the mol2 files and rdkit ligands into
+        torch_geometric HeteroData objects representing protein-ligand complexes.
+
+        Args:
+            root (str | Path): a directory where the dataset will be stored.
+            mol2_files (Iterable[str  |  Path]): mol2 files containing protein pocket data.
+            sdf_files (Iterable[str  |  Path] | None, optional): SDF files containing ligand data. Defaults to None.
+            multi_sdf_file (str | Path | None, optional): A single multi-SDF file containing ligand data. Defaults to None.
+            processed_file_name (str | None, optional): The name of the processed file. Defaults to None.
+            required_ligand_properties (dict[str, str  |  float  |  int  |  bool] | None, optional): Properties required for the ligands.
+            dictionary keys are property names to Get from rdkit molecules, keys are default values. Defaults to None.
+            verbose (bool, optional): Whether to print verbose output. Defaults to True.
+
+        Raises:
+            ValueError: _description_
+        """
+        if multi_sdf_file is not None:
+            self._sdf_files = [multi_sdf_file]
+        elif sdf_files is not None:
+            self._sdf_files = list(sdf_files)
+        if sdf_files is None and multi_sdf_file is None:
+            raise ValueError("Either `sdf_files` or `multi_sdf_file` must be provided.")
+        self._mol2_files = list(mol2_files)
+        _check_homogenized_file_structure(root / "raw", self._mol2_files)
+        _check_homogenized_file_structure(root / "raw", self._sdf_files)
+        self._processed_file_name = processed_file_name or "data.pt"
+        self._required_ligand_properties = required_ligand_properties or {}
+        self._verbose = verbose
+        super().__init__(root, **kwargs)
+        self.load(self.processed_paths[0])
+
+    def raw_file_names(self) -> list[str]:
+        return self._mol2_files + self._sdf_files
+
+    def processed_file_names(self) -> list[str]:
+        return [self._processed_file_name]
+
+    def process(self):
+        mol2_files = tqdm(self._mol2_files) if self._verbose else self._mol2_files
+        lazy_dataset = LazyComplexDataset(
+            mol2_files=mol2_files,
+            ligand_rdkit_molecules=read_sdf_molecules(self._sdf_files),
+            mol2_pocket_to_pyg_options=self._mol2_pocket_to_pyg_options,
+            required_ligand_properties=self._required_ligand_properties,
+        )
+        data_list = list(lazy_dataset)
+        self.save(
+            data_list,
+            self.processed_paths[0],
+        )
