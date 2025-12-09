@@ -130,7 +130,6 @@ parser.add_argument("sdf_path", type=Path)
 parser.add_argument("output_path", type=Path)
 parser.add_argument("--device", type=str, default="cpu")
 parser.add_argument("--batch_size", type=int, default=32)
-parser.add_argument("--append", action="store_true")
 
 # usage example
 # predict.py models/scaffold-k-fold/0/CGNN-3D data/raw/greg/combined_with_klifs.sdf data/processed/output.csv
@@ -161,5 +160,7 @@ if __name__ == "__main__":
     df_predictions["split_fold"] = config.get("split_index", -1)
     df_predictions["rmsd_cutoff"] = config.get("filter_rmsd_max_value", float("nan"))
     df_predictions.to_csv(
-        args.output_path, index=False, mode="a" if args.append else "w"
+        args.output_path,
+        index=False,
+        mode="a" if Path(args.output_path.exists()) else "w",
     )
