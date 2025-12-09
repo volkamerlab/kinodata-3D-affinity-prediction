@@ -49,14 +49,11 @@ class InteractionModule(Module):
     def out(self, edge_repr: Tensor) -> Tensor:
         return self.act(edge_repr + self.bias)
 
-    def interactions(self, data: HeteroData) -> Tuple[Tensor, OptTensor, OptTensor]:
-        ...
+    def interactions(self, data: HeteroData) -> Tuple[Tensor, OptTensor, OptTensor]: ...
 
-    def process_attr(self, edge_attr: Tensor) -> Tensor:
-        ...
+    def process_attr(self, edge_attr: Tensor) -> Tensor: ...
 
-    def process_weight(self, edge_weight: Tensor) -> Tensor:
-        ...
+    def process_weight(self, edge_weight: Tensor) -> Tensor: ...
 
     def forward(self, data: HeteroData) -> Tuple[Tensor, Tensor]:
         edge_index, edge_attr, edge_weight = self.interactions(data)
@@ -126,9 +123,9 @@ class CombinedInteractions(Module):
         super().__init__()
         self.interactions = ModuleList(interactions)
         self.act = resolve_act(act)
-        assert (
-            len(set([intr.hidden_channels for intr in interactions])) == 1
-        ), "Interactions should not map edge representation to different number of hidden channels."
+        assert len(set([intr.hidden_channels for intr in interactions])) == 1, (
+            "Interactions should not map edge representation to different number of hidden channels."
+        )
         self.bias = Parameter(torch.zeros(interactions[0].hidden_channels))
 
     def forward(self, data: HeteroData) -> Tuple[Tensor, Tensor]:

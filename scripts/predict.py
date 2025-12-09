@@ -1,4 +1,4 @@
-from functools import partial
+from collections import defaultdict
 import json
 from pathlib import Path
 from typing import Any, Optional
@@ -9,11 +9,10 @@ import hashlib
 
 
 import torch
-from torch_geometric.data import HeteroData, InMemoryDataset
+from torch_geometric.data import HeteroData
 from torch_geometric.loader import DataLoader
 from rdkit.Chem import PandasTools  # type: ignore
 from tqdm import tqdm
-import pytorch_lightning as pl
 import pandas as pd
 
 sys.path.append(".")
@@ -22,10 +21,8 @@ sys.path.append("..")
 from kinodata.data.featurization.biopandas import add_pocket_information
 from kinodata.data.featurization.rdkit import set_atoms, set_bonds
 from kinodata.types import NodeType
-import kinodata.configuration as configuration
 from kinodata.model.complex_transformer import ComplexTransformer, make_model
 from kinodata.data.dataset import (
-    apply_transform_instance_permament,
     ComplexInformation,
     _DATA,
 )
@@ -54,9 +51,9 @@ def patch_config(config: Config) -> Config:
 def load_data(multi_sdf_file: Path, remove_hydrogen: bool = True) -> list[HeteroData]:
     logging.info(f"Loading data for {multi_sdf_file}")
     md5 = hashlib.md5(multi_sdf_file.read_bytes()).hexdigest()
-    if (cached_data_list := PROCESSED / f"md5.pt").exists():
-        logging.info(f"Using cached processed data for md5 {md5}")
-        ...  # TODO load cached data
+    if (cached_data_list := PROCESSED / f"{md5}.pt").exists():
+        logging.info(f"Using cached data list for md5 {md5}")
+        return torch.load(cached_data_list)
     logging.info(f"Creating torch geometric HeteroData objects")
     df_ligands = PandasTools.LoadSDF(str(multi_sdf_file))
     data_list = []
@@ -114,7 +111,7 @@ def process_pyg(
 def load_model(
     path: Path,
     map_location: Any = None,
-):
+) -> tuple[ComplexTransformer, Config]:
     logging.info(f"Loading model from {args.model_path}")
     assert path.exists()
     ckpt_file = list(path.rglob("*.ckpt"))[0]
@@ -123,12 +120,8 @@ def load_model(
     config = patch_config(config)
     model = make_model(config)
     model.load_state_dict(ckpt["state_dict"])
+    model.eval()
     return model, config
-
-
-def process_predictions(
-    predict_output,
-) -> pd.DataFrame: ...  # TODO parse pl prediction outputs to data frame
 
 
 parser = ArgumentParser()
@@ -137,27 +130,36 @@ parser.add_argument("sdf_path", type=Path)
 parser.add_argument("output_path", type=Path)
 parser.add_argument("--device", type=str, default="cpu")
 parser.add_argument("--batch_size", type=int, default=32)
+parser.add_argument("--append", action="store_true")
 
 # usage example
-# predict.py models/scaffold
+# predict.py models/scaffold-k-fold/0/CGNN-3D data/raw/greg/combined_with_klifs.sdf data/processed/output.csv
 if __name__ == "__main__":
     args = parser.parse_args()
-    assert Path(args.output_path).suffix == "csv", "Can only write to csv file"
+    assert Path(args.output_path).suffix == ".csv", "Can only write to csv file"
     device = torch.device(args.device)
     model, config = load_model(args.model_path, map_location=device)
     data_list = load_data(
         args.sdf_path, remove_hydrogen=config.get("remove_hydrogen", True)
     )
-    trainer = pl.Trainer(
-        devices=device,
+    transform = TransformToComplexGraph(True)
+    logging.info("Applying ToComplex transform to data list")
+    data_list = [transform(data) for data in data_list]
+    predict_output = defaultdict(list)
+    pbar = tqdm(total=len(data_list), desc="Obtaining model predictions")
+    for batch in DataLoader(data_list, batch_size=args.batch_size):
+        batch = batch.to(device)
+        with torch.inference_mode():
+            out: torch.Tensor = model(batch)
+        predict_output["prediction"].extend(out.flatten().tolist())
+        predict_output["activities.activity_id"].extend(batch.ident)
+        pbar.update(batch.num_graphs)
+
+    df_predictions = pd.DataFrame(predict_output)
+    df_predictions["model"] = args.model_path.parts[-1]
+    df_predictions["split_type"] = config.get("split_type", "unknown")
+    df_predictions["split_fold"] = config.get("split_index", -1)
+    df_predictions["rmsd_cutoff"] = config.get("filter_rmsd_max_value", float("nan"))
+    df_predictions.to_csv(
+        args.output_path, index=False, mode="a" if args.append else "w"
     )
-    predict_output = trainer.predict(
-        model, DataLoader(data_list, batch_size=args.batch_size)
-    )
-    df_predictions = process_predictions(predict_output)
-    # TODO read this from config
-    df_predictions["model"] = ""
-    df_predictions["split_type"] = ""
-    df_predictions["split_fold"] = 0
-    df_predictions["rmsd_cutoff"] = 6.0
-    df_predictions.to_csv(args.output_path, index=False)
