@@ -45,7 +45,6 @@ class RegressionModel(pl.LightningModule):
         super().__init__()
         self.config = config
         self.save_hyperparameters(config)  # triggers wandb hook
-        self.define_metrics()
         self.set_criterion()
 
     def set_criterion(self):
