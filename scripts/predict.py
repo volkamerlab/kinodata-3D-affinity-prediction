@@ -10,8 +10,11 @@ import hashlib
 
 import torch
 from torch_geometric.data import HeteroData, InMemoryDataset
+from torch_geometric.loader import DataLoader
 from rdkit.Chem import PandasTools  # type: ignore
 from tqdm import tqdm
+import pytorch_lightning as pl
+import pandas as pd
 
 sys.path.append(".")
 sys.path.append("..")
@@ -123,18 +126,38 @@ def load_model(
     return model, config
 
 
+def process_predictions(
+    predict_output,
+) -> pd.DataFrame: ...  # TODO parse pl prediction outputs to data frame
+
+
 parser = ArgumentParser()
 parser.add_argument("model_path", type=Path)
 parser.add_argument("sdf_path", type=Path)
+parser.add_argument("output_path", type=Path)
 parser.add_argument("--device", type=str, default="cpu")
+parser.add_argument("--batch_size", type=int, default=32)
 
 # usage example
 # predict.py models/scaffold
 if __name__ == "__main__":
     args = parser.parse_args()
+    assert Path(args.output_path).suffix == "csv", "Can only write to csv file"
     device = torch.device(args.device)
     model, config = load_model(args.model_path, map_location=device)
     data_list = load_data(
         args.sdf_path, remove_hydrogen=config.get("remove_hydrogen", True)
     )
-    pass
+    trainer = pl.Trainer(
+        devices=device,
+    )
+    predict_output = trainer.predict(
+        model, DataLoader(data_list, batch_size=args.batch_size)
+    )
+    df_predictions = process_predictions(predict_output)
+    # TODO read this from config
+    df_predictions["model"] = ""
+    df_predictions["split_type"] = ""
+    df_predictions["split_fold"] = 0
+    df_predictions["rmsd_cutoff"] = 6.0
+    df_predictions.to_csv(args.output_path, index=False)
