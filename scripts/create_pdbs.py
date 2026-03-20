@@ -33,9 +33,7 @@ def join_pdbs_obabel(
     ligand_pdb_file: Path,
     out: Path,
 ):
-    raise RuntimeError(
-        "obabel is the most broken piece of shit software I've ever seen."
-    )
+    raise RuntimeError("obabel is broken af")
     pocket_klifs_structure_id = pocket_pdb_file.stem.split("_")[0]
     chembl_activity_id = ligand_pdb_file.stem.split("_")[0]
     complex_pdb_file = (

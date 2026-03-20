@@ -22,7 +22,6 @@ from .callbacks.crocodoc import (
 from .callbacks.integrated_gradients import IntegratedGradientsCallback
 from .callbacks.representation import StoreModelRepresentation
 import os.path as osp
-import gzip
 
 
 def log_large_table(df, name):
@@ -143,6 +142,7 @@ def train(
             df_["split"] = split_key
             df_["transform"] = str(transform) if transform else "none"
             predict_dfs.append(df_)
+
     prediction_df = pd.concat(predict_dfs)
     table = wandb.Table(dataframe=prediction_df)
     wandb.log({"all_predictions": table})

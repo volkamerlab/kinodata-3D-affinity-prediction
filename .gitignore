@@ -5,7 +5,9 @@ conda_hack.py
 
 # fast prototyping in notebooks
 dev.ipynb
-timecapsule
+
+# kincore
+Kincore-standalone2/
 
 # raw kinodata
 /data
@@ -23,6 +25,8 @@ wandb
 artifacts
 notebooks
 models
+crocodoc/
+predictions/
 
 # condor logs
 condor/*.log

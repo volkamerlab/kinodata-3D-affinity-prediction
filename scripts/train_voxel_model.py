@@ -1,6 +1,6 @@
 import torch
 
-from kinodata.training.predict import predict_df
+from kinodata.evaluation.predict import predict_df
 
 
 from argparse import ArgumentParser
@@ -224,7 +224,6 @@ def train(
     _, in_channels, grid_size, _, _ = batch[0].size()
 
     class DataModule(LightningDataModule):
-
         def _dataloader(self, data, **kwargs):
             if "persistent_workers" not in kwargs:
                 kwargs["persistent_workers"] = num_workers > 0

@@ -58,3 +58,5 @@ class COLS(StrEnum):
     UNIPROT_ID = "UniprotID"
     ALIGNMENT = "cosine_similarity"
     SMILES = "compound_structures.canonical_smiles"
+    ACTIVITY_VALUE = "activities.standard_value"
+    RESNR = "RESNR"

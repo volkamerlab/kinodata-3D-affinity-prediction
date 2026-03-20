@@ -83,7 +83,9 @@ def mol2_pocket_to_pyg(
     remove_hydrogens: bool = False,
     sanity_check_alignment: bool = True,
 ) -> HeteroData:
-    rdkit_mol = Chem.MolFromMol2File(str(path), sanitize=True, removeHs=False)
+    rdkit_mol = Chem.MolFromMol2File(
+        str(path), sanitize=True, removeHs=remove_hydrogens
+    )
     mol2_reader = PandasMol2()
     mol2_reader.read_mol2(path, columns)
     atom_df = mol2_reader.df

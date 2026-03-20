@@ -1,11 +1,11 @@
-import subprocess as sp
-from pathlib import Path
-from kinodata.data import RAW_DATA_DIR
-import os
-import shutil
 import logging
 import multiprocessing as mp
+import os
+import shutil
+import subprocess as sp
 from pathlib import Path
+
+from kinodata.data import RAW_DATA_DIR
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)

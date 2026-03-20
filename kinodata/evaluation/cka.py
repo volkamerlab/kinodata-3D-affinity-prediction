@@ -328,6 +328,49 @@ def partial_cka(
     return cka
 
 
+def residualize(x: torch.Tensor, y: torch.Tensor):
+    """
+    Compute residuals from regressing x onto each column of y.
+
+    For each column i of y, computes residuals r[:, i] = y[:, i] - x @ beta_i
+    where beta_i are the OLS coefficients from regressing y[:, i] onto x.
+
+    Args:
+        x (torch.Tensor): Predictor tensor of shape (n, p)
+        y (torch.Tensor): Target tensor of shape (n, q)
+
+    Returns:
+        torch.Tensor: Residuals tensor of shape (n, q)
+    """
+    # Add intercept term to x
+    n, p = x.shape
+    x_with_intercept = torch.cat(
+        [torch.ones(n, 1, device=x.device, dtype=x.dtype), x], dim=1
+    )
+
+    # Solve for coefficients using least squares: (X'X)^(-1) X'Y
+    # Using torch.linalg.lstsq for numerical stability
+    coeffs, _, _, _ = torch.linalg.lstsq(x_with_intercept, y)
+
+    # Compute predictions and residuals
+    y_pred = x_with_intercept @ coeffs
+    residuals = y - y_pred
+
+    return residuals
+
+
+def partial_cka2(
+    x: torch.Tensor,
+    y: torch.Tensor,
+    control: torch.Tensor,
+    kernel: Literal["linear", "rbf"] = "linear",
+    threshold: float = 1.0,
+):
+    xr = residualize(control, x)
+    yr = residualize(control, y)
+    return cka_base(xr, yr, kernel=kernel, threshold=threshold)
+
+
 def soft_partial_cka(
     x: torch.Tensor,
     y: torch.Tensor,

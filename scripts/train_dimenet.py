@@ -36,7 +36,7 @@ class FeatureSelection:
         return data
 
 
-DEBUG = False
+DEBUG = True
 
 
 def _debug_config(config):
@@ -46,10 +46,10 @@ def _debug_config(config):
     config["out_emb_channels"] = 16
     config["int_emb_size"] = 8
     config["max_num_neighbors"] = 8
-    config["epochs"] = 3
+    config["epochs"] = 5
     config["crocodoc_frequency"] = 0
-    config["run_crocodoc"] = True
-    config["store_model_representation"] = True
+    config["run_crocodoc"] = False
+    config["store_model_representation"] = False
     config["representation_alias"] = None
     return config
 
@@ -63,17 +63,17 @@ if __name__ == "__main__":
     config["node_types"] = [NodeType.Complex]
     config["atom_attr_size"] = AtomFeatures.size
 
-    config["run_crocodoc"] = True
+    config["run_crocodoc"] = False
     config["crocodoc_model"] = "best"
     config["mask_type"] = "atom_objects"
     config["crocodoc_start_epoch"] = 0
     config["crocodoc_frequency"] = 0
 
-    config["store_model_representation"] = True
+    config["store_model_representation"] = False
     config["representation_alias"] = None
 
     config["early_stopping"] = False
-    config["epochs"] = 200
+    config["epochs"] = 300
     config["num_workers"] = 0
     config["simplified_features"] = True
     config["pli_reference_path"] = (

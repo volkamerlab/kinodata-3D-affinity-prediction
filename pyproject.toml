@@ -5,14 +5,22 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "bcos>=0.1.2",
     "biopandas>=0.5.1",
     "biotite>=1.1.0",
     "black>=24.10.0",
+    "captum>=0.8.0",
     "docktgrid>=0.0.2",
+    "einops>=0.8.1",
+    "interpret>=0.6.10",
+    "ipywidgets>=8.1.7",
+    "jupyter>=1.1.1",
     "lightning>=2.5.0.post0",
     "matplotlib>=3.10.0",
     "notebook>=7.3.2",
     "pandas>=2.2.3",
+    "polars>=1.33.1",
+    "prolif==2.1.0a1",
     "rdkit>=2024.9.4",
     "resmo>=0.0.8",
     "scikit-learn>=1.6.1",
@@ -22,7 +30,9 @@ dependencies = [
     "torch-cluster>=1.6.3",
     "torch-geometric>=2.6.1",
     "torch-scatter>=2.1.2",
+    "torch-sparse>=0.6.18",
     "torchmetrics>=1.6.1",
+    "torchvision>=0.20.1",
     "tqdm>=4.67.1",
     "typer>=0.15.1",
     "wandb>=0.19.4",
@@ -31,3 +41,10 @@ dependencies = [
 
 [tool.uv]
 no-build-isolation-package = ["torch-scatter", "torch-cluster"]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel", "torch>=2.5.1"]
+build-backend = "setuptools.build_meta"
+
+[[tool.uv.index]]
+url = "https://us-central1-python.pkg.dev/pypi-packages-455608/cpu/simple"

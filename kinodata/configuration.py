@@ -234,7 +234,7 @@ register(
     min_lr=3e-6,
     clip_grad_value=10.0,
     dry_run=False,
-    early_stopping=True,
+    early_stopping=False,
 )
 
 

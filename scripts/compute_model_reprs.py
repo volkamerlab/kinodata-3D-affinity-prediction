@@ -21,7 +21,7 @@ from kinodata.wandb_utils import (
 from kinodata.model.complex_transformer import make_model as make_sparse_transformer
 from kinodata.model.dimenet import DimeNetWrapper
 from kinodata.model.regression import RegressionModel
-from kinodata.training.representation import reps_to_dataframe
+from kinodata.training.callbacks.representation import reps_to_dataframe
 from kinodata.data.data_module import make_kinodata_module
 from kinodata.data.dataset import apply_transform_instance_permament
 from kinodata.transform import TransformToComplexGraph

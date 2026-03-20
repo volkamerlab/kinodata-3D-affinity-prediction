@@ -142,4 +142,50 @@ def load_model_lazy(
     return model
 
 
+def _model_from_run(run):
+    config = load_wandb_config(run.json_config)
+    interaction_modes = config.get("interaction_modes", [])
+    if "dimenet" in run.tags:
+        return "DimeNet"
+    if "covalent" in interaction_modes and "structural" in interaction_modes:
+        return "CGNN-3D"
+    if "covalent" in interaction_modes:
+        return "CGNN"
+    return None
+
+
+def current_metric(run, key):
+    try:
+        return run.history(keys=[key]).tail(5)[key].mean()
+    except:
+        print(f"Failed getting {key}for {run.id}")
+        return float("nan")
+
+
+def run_ids_to_df(*run_ids):
+    if len(run_ids) == 0:
+        return None
+    if len(run_ids) == 1 and isinstance(run_ids[0], list):
+        run_ids = run_ids[0]
+    runs = [run_by_id(run_id) for run_id in run_ids]
+    run_df = pd.DataFrame(
+        {
+            "run": [run for run in runs],
+            "run_id": [run.id for run in runs],
+            "state": [run.state for run in runs],
+            "split_type": [run.config["split_type"] for run in runs],
+            "split_index": [run.config["split_index"] for run in runs],
+            "test/corr": [run.summary.get("test/corr", float("nan")) for run in runs],
+            "val/corr.max": [
+                run.summary.get("val/corr", float("nan")).get("max") for run in runs
+            ],
+            "val/corr": [current_metric(run, "val/corr") for run in runs],
+            "train/corr": [current_metric(run, "val/corr") for run in runs],
+            "epoch": [run.summary.get("epoch", float("nan")) for run in runs],
+            "model": [_model_from_run(run) for run in runs],
+        }
+    )
+    return run_df
+
+
 def load_wandb_table_as_pandas_data_frame(artifact_dir: Path): ...

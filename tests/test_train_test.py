@@ -2,14 +2,13 @@ import pandas as pd
 from kinodata.model.complex_transformer import make_model, ComplexTransformer
 from kinodata.data.dataset import KinodataDocked
 from kinodata.transform import TransformToComplexGraph
-from kinodata.training.predict import predict_df
+from kinodata.evaluation.predict import predict_df
 import kinodata.configuration as cfg
 
 from torch_geometric.loader import DataLoader
 
 
 def test_complex_transformer():
-
     cfg.register(
         "sparse_transformer",
         max_num_neighbors=16,
