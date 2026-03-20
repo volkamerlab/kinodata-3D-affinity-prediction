@@ -4,12 +4,11 @@ import typer
 import logging
 from typer import Option
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Optional
 import json
 from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import Compose
 from pytorch_lightning import Trainer
-import wandb
 
 from kinodata.data.featurization.atoms import AtomFeatures
 from kinodata.data.featurization.bonds import NUM_BOND_TYPES
@@ -18,7 +17,6 @@ from kinodata.transform.feature_mask import FeatureMask
 import kinodata.wandb_utils as wb
 from kinodata.data import KinodataDocked, Filtered
 from kinodata.configuration import Config
-from kinodata.data.data_module import create_dataset
 from kinodata.data.grouped_split import KinodataKFoldSplit
 from kinodata.transform.filter_metadata import FilterDockingRMSD
 from kinodata.transform import TransformToComplexGraph
