@@ -44,4 +44,9 @@ This will create two files
 These csv files can be processed further with the code in the `pliar` repository to obtain PLI-alignment R-AUROC scores.
 Re-running all model training and evaluation is not strictly necessary. Instead, you can also obtain pre-computed model predictions (including masked predictions) [from Zenodo](https://zenodo.org/records/19145842).
 
-The script `explain_paper_models.sh` contains all calls to `explain_model.sh` that are required to reproduce the explanations (masked predictions) for the models studied in the publication.
+The script `explain_paper_models.sh` generates all calls to `explain_model.sh` that are required to reproduce the explanations (masked predictions) for the models studied in the publication.
+
+### Verbosity option for entry point output
+In our experiments, both training and model evaluation where split across multiple jobs on an HTCondor cluster that executed on machines with NVIDIA A100 GPUs.
+You can also use the verbosity `-v` option of both `train_paper_models.sh` and `explain_paper_models.sh` to print the commands that would be executed without actually running them (dry-run mode).
+This enables you to reuse these entry points for execution on your compute infrastructure of choice (e.g. local machine, Slurm cluster, ...).
