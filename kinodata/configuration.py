@@ -202,7 +202,7 @@ register(
     num_residue_features=6,  # deprecated
     additional_atom_features=False,
     remove_hydrogen=True,
-    filter_rmsd_max_value=2.0,
+    filter_rmsd_max_value=6.0,
     split_type="scaffold-k-fold",
     split_index=0,
     k_fold=5,
@@ -210,6 +210,9 @@ register(
     perturb_pocket_positions=0.0,
     perturb_complex_positions=0.0,
     add_docking_scores=False,
+    store_predictions_locally="",
+    store_model_locally="",
+    store_config_locally="",
 )
 
 

@@ -1,4 +1,0 @@
-hidden_channels: 256
-num_layers: 4
-act: "silu"
-batch_size: 128

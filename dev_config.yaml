@@ -1,4 +1,0 @@
-hidden_channels: 42
-interaction_modes: ["covalent", "structural"]
-# interaction_modes: ["covalent"]
-filter_rmsd_max_value: 2.0

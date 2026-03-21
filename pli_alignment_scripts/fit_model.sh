@@ -1,0 +1,2 @@
+echo run scripts/$1.py --store_predictions_locally $2.csv --store_model_locally $2.pth --store_config_locally $2.json "${@:3}"
+# uv run scripts/$1.py --store_predictions_locally $2.csv --store_model_locally $2.pth --store_config_locally $2.json

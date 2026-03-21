@@ -1,27 +1,45 @@
+import os.path as osp
 from typing import Callable
+import json
+
 import pandas as pd
+import torch
+
+try:
+    import pathlib
+
+    torch.serialization.add_safe_globals(
+        [pathlib.PosixPath, pathlib.WindowsPath, pathlib.Path]
+    )
+    if hasattr(pathlib, "_local"):
+        torch.serialization.add_safe_globals(
+            [pathlib._local.PosixPath, pathlib._local.WindowsPath]
+        )
+except (ImportError, AttributeError):
+    pass
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import (
-    ModelCheckpoint,
-    LearningRateMonitor,
     EarlyStopping,
+    LearningRateMonitor,
+    ModelCheckpoint,
 )
 from pytorch_lightning.loggers.wandb import WandbLogger
+from torch_geometric.data.lightning import LightningDataset
+
+import kinodata.transform as T
 import wandb
 from kinodata.configuration import Config
 from kinodata.data.data_module import make_kinodata_module
-from torch_geometric.data.lightning import LightningDataset
 from kinodata.model.regression import RegressionModel, enable_target_normalization
-import kinodata.transform as T
+
 from ..evaluation.predict import predict_df
 from .callbacks.crocodoc import (
-    load_pli_reference,
     CrocodocCallback,
+    load_pli_reference,
     remove_augmentation_transforms_from_data_module,
 )
 from .callbacks.integrated_gradients import IntegratedGradientsCallback
 from .callbacks.representation import StoreModelRepresentation
-import os.path as osp
 
 
 def log_large_table(df, name):
@@ -122,7 +140,7 @@ def train(
         exit()
 
     trainer.fit(model, datamodule=data_module)
-    trainer.test(ckpt_path="best", datamodule=data_module)
+    trainer.test(datamodule=data_module)
 
     data_module = remove_augmentation_transforms_from_data_module(data_module)
     transforms_during_prediction = [None]
@@ -143,6 +161,13 @@ def train(
             df_["transform"] = str(transform) if transform else "none"
             predict_dfs.append(df_)
 
-    prediction_df = pd.concat(predict_dfs)
+    prediction_df: pd.DataFrame = pd.concat(predict_dfs)
+    if (prediction_path := config.get("store_predictions_locally", None)) is not None:
+        prediction_df.to_csv(prediction_path)
+    if (model_path := config.get("store_model_locally", None)) is not None:
+        torch.save(model.state_dict(), model_path)
+    if (config_path := config.get("store_config_locally", None)) is not None:
+        with open(config_path, "w") as json_file:
+            json.dump(config, json_file, default=str)
     table = wandb.Table(dataframe=prediction_df)
     wandb.log({"all_predictions": table})

@@ -28,7 +28,7 @@ dependencies = [
     "seaborn>=0.13.2",
     "torch>=2.5.1",
     "torch-cluster>=1.6.3",
-    "torch-geometric>=2.6.1",
+    "torch-geometric==2.6.1",
     "torch-scatter>=2.1.2",
     "torch-sparse>=0.6.18",
     "torchmetrics>=1.6.1",
@@ -40,7 +40,7 @@ dependencies = [
 ]
 
 [tool.uv]
-no-build-isolation-package = ["torch-scatter", "torch-cluster"]
+no-build-isolation-package = ["torch-scatter", "torch-cluster", "torch-sparse"]
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel", "torch>=2.5.1"]

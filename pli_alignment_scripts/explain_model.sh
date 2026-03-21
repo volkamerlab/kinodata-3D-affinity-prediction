@@ -1,0 +1,1 @@
+uv run scripts/crocodoc_any_model.py --on-train --on-val --model-type $1 --model-checkpoint-path $2.pth --model-train-config-path $2.json --outfile expl_$2.csv

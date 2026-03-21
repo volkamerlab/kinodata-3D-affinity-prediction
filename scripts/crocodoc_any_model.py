@@ -227,6 +227,9 @@ def main(
         None,
         help="Output file to save the predictions",
     ),
+    sample_dataset: Optional[int] = Option(
+        100, help="Only run on a small sample of data, useful for debugging."
+    ),
 ):
     if device.startswith("cuda") and not torch.cuda.is_available():
         logging.warning("CUDA is not available, switching to CPU.")
@@ -237,6 +240,8 @@ def main(
         case (None, _):
             outfile = Path(f"crocodoc_results_{wandb_run_id}.csv")
         case (_, None):
+            pass
+        case (_, _):
             pass
 
     model_train_config = get_train_config(
@@ -277,6 +282,9 @@ def main(
         key: _add_feature_selection_transform(model_train_config, dataset)
         for key, dataset in datasets.items()
     }
+    if sample_dataset:
+        logger.info("Subsampling dataset to %d samples" % int(sample_dataset))
+        datasets = {key: dataset[:sample_dataset] for key, dataset in datasets.items()}
 
     with (
         outfile.with_stem(f"{outfile.stem}_summary").with_suffix(".json").open("w") as f
@@ -343,11 +351,11 @@ def main(
         ref_pred["dataset"] = dataset_key
         _append_dataframe_to(
             data_frame=masked_pred,
-            file_path=outfile.with_stem(f"{outfile.stem}_masked"),
+            file_path=outfile.with_stem(f"{outfile.stem}.masked"),
         )
         _append_dataframe_to(
             data_frame=ref_pred,
-            file_path=outfile.with_stem(f"{outfile.stem}_ref"),
+            file_path=outfile.with_stem(f"{outfile.stem}.ref"),
         )
 
 
